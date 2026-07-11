@@ -1,6 +1,6 @@
 <div align="center">
 
-# WholeStack. Real Estate Wholesaling Platform (n8n Backend)
+# Real Estate Disposition. Wholesaling Buyer-Side Automation (n8n Backend)
 
 ### 10 production n8n workflows, 127 nodes. The complete deal-to-buyer engine behind an all-in-one wholesaling SaaS: intake, scoring, buyer matching, distribution, follow-up, and lifecycle management.
 
@@ -15,7 +15,7 @@
 
 ## What This Is
 
-WholeStack is an all-in-one real estate wholesaling platform. This repository is the **n8n automation backend**: 10 workflows that take a raw property deal, score it, match it to the right cash buyers, distribute it, and manage the full lifecycle from first ping to closed or expired.
+Real Estate Disposition is an all-in-one real estate wholesaling platform. This repository is the **n8n automation backend**: 10 workflows that take a raw property deal, score it, match it to the right cash buyers, distribute it, and manage the full lifecycle from first ping to closed or expired.
 
 The companion frontend dashboard lives here: **[bids-dashboard.vercel.app](https://bids-dashboard.vercel.app)** ([source](https://github.com/rafiulislam4246/bids-dashboard)).
 
@@ -109,7 +109,7 @@ Webhook fetches a deal, confirms it has a seller, and selects a status- and even
 ## Setup
 
 1. Import a workflow JSON into your n8n instance (Workflows → Import from File).
-2. Replace placeholders: `YOUR_CONVEX_DEPLOYMENT` (your Convex URL), `YOUR_N8N_HOST` (your n8n host), and set env vars `SLACK_WEBHOOK_WholeStack`, `RESEND_API_KEY`.
+2. Replace placeholders: `YOUR_CONVEX_DEPLOYMENT` (your Convex URL), `YOUR_N8N_HOST` (your n8n host), and set env vars `SLACK_WEBHOOK_Real Estate Disposition`, `RESEND_API_KEY`.
 3. Add your own n8n credentials for Close CRM (HTTP Basic) and Slack (credentials were stripped for publishing).
 4. Point the Convex HTTP endpoints at your own backend (schemas not included).
 
@@ -127,4 +127,4 @@ Built by **Rafiul Islam**. AI Voice Agent Systems Architect and Full-Stack Autom
 
 ## License
 
-Shared for portfolio and reference. The WholeStack product, brand, and backend (Convex schemas, CRM configuration, business logic) are proprietary.
+Shared for portfolio and reference. The Real Estate Disposition product, brand, and backend (Convex schemas, CRM configuration, business logic) are proprietary.

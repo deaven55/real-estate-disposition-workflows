@@ -1,0 +1,475 @@
+{
+  "name": "WholeStack WF-002: Intelligent Distribution",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Distribution Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-distribute-deal-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fetchDeal",
+      "name": "Fetch Deal from Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getDeal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId: $json.dealId }) }}"
+      }
+    },
+    {
+      "id": "ifActive",
+      "name": "IF Deal Active",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        690,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.data.status }}",
+              "rightValue": "active",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "respond400",
+      "name": "Respond 400 Not Active",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        910,
+        450
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Deal is not active', status: $json.data.status }) }}"
+      }
+    },
+    {
+      "id": "checkPriority",
+      "name": "Check Priority Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        910,
+        150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getMissedDealsByMarket",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ market: $('Fetch Deal from Convex').first().json.data.zip, strategy: $('Fetch Deal from Convex').first().json.data.bestStrategy, askingPrice: $('Fetch Deal from Convex').first().json.data.askingPrice, currentTime: Date.now() }) }}"
+      }
+    },
+    {
+      "id": "queryBuyers",
+      "name": "Query Buyers from Close CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1130,
+        150
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.close.com/api/v1/lead/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "lead_status:\"Potential\" AND name:\"[WholeStack]*\""
+            },
+            {
+              "name": "_fields",
+              "value": "id,display_name,contacts,custom,status_label"
+            },
+            {
+              "name": "_limit",
+              "value": "200"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "smartMatch",
+      "name": "Smart Match Buyers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        150
+      ],
+      "parameters": {
+        "jsCode": "var deal = $('Fetch Deal from Convex').first().json.data;\nvar leads = $('Query Buyers from Close CRM').first().json.data || [];\nvar priorityBuyers = $('Check Priority Queue').first().json.data || [];\n\n// PROTECTED STATUSES - NO SMS for these\nvar protectedStatuses = [\n  'human hand', 'hot lead', 'hot', 'warm lead',\n  'interested', 'not interested', 'dnc', 'dead',\n  'vetted buyer', 'vip'\n];\n\nvar priorityBuyerIds = [];\nfor (var p = 0; p < priorityBuyers.length; p++) {\n  priorityBuyerIds.push(priorityBuyers[p].buyerId);\n}\n\nvar excludedBuyerIds = deal.excludedBuyerIds || [];\nvar matchedBuyers = [];\n\nfor (var i = 0; i < leads.length; i++) {\n  var lead = leads[i];\n  var custom = lead.custom || {};\n  \n  // Check protected status\n  var statusLabel = (lead.status_label || '').toLowerCase().trim();\n  if (protectedStatuses.indexOf(statusLabel) !== -1) continue;\n  \n  var convexBuyerId = custom.cf_QaXxtdAmTEByJ8SOBFk4wizgJwrwZF7XtSufDkTCP2x;\n  if (excludedBuyerIds.indexOf(convexBuyerId) !== -1) continue;\n  \n  var marketsRaw = custom.cf_tNLNi0SXrw5kMhnWilHLQWkerkx6gGMwpuTH9p1j2XL || '';\n  var markets = marketsRaw.split(',').map(function(m) { return m.trim().toLowerCase(); });\n  var tier = custom.cf_OKjNsqdbMxMcThu43cIhnhwFoLeYs7iigX8Pqz6Y1ma || 'warm';\n  var priceMin = parseFloat(custom.cf_JmA0rE8IcwtfXnpqV42YC3JTD7JAe7UczFCLxwcE8sK) || 0;\n  var priceMax = parseFloat(custom.cf_0WXJcdwa56nB9MdVCvImVIUqpfU5VUmRjVxzKypGWy5) || 999999999;\n  var strategiesRaw = custom.cf_XXsQomvB9JAtMWCmCW5v9bOf0iZyM356VWWI4DGp5kr || '';\n  var strategies = strategiesRaw.split(',').map(function(s) { return s.trim(); });\n  var conditionsRaw = custom.cf_q1eGMfEgIdfL0zulAlCZ1GpeKIjkgM6gN1EaLfOn3LS || 'Light,Medium,Heavy';\n  var conditions = conditionsRaw.split(',').map(function(c) { return c.trim(); });\n  var propertyTypesRaw = custom.cf_kz6C7hpyZZRheIPhCqDXGnR8fZ9cRJ7RuqJtJs8jfOy || 'SFR,Duplex,Multi';\n  var propertyTypes = propertyTypesRaw.split(',').map(function(pt) { return pt.trim(); });\n  \n  var phone = null;\n  if (lead.contacts && lead.contacts.length > 0) {\n    var phones = lead.contacts[0].phones || [];\n    if (phones.length > 0) phone = phones[0].phone;\n  }\n  if (!phone) continue;\n  \n  var dealZip = deal.zip.toLowerCase();\n  var dealCity = deal.city.toLowerCase();\n  var marketMatch = false;\n  var marketMatchScore = 0;\n  \n  for (var m = 0; m < markets.length; m++) {\n    if (markets[m] === dealZip) { marketMatch = true; marketMatchScore = 1.0; break; }\n    if (markets[m] === dealCity) { marketMatch = true; marketMatchScore = 0.7; }\n  }\n  if (!marketMatch) continue;\n  \n  var priceBuffer = (priceMax - priceMin) * 0.1;\n  if (deal.askingPrice < priceMin - priceBuffer || deal.askingPrice > priceMax + priceBuffer) continue;\n  var priceMatchScore = (deal.askingPrice >= priceMin && deal.askingPrice <= priceMax) ? 1.0 : 0.5;\n  \n  if (conditions.indexOf(deal.repairScope) === -1) continue;\n  \n  var strategyMatchScore = strategies.indexOf(deal.bestStrategy) !== -1 ? 1.0 : 0.3;\n  var propertyTypeMatchScore = propertyTypes.indexOf(deal.propertyType) !== -1 ? 1.0 : 0.2;\n  var tierBonusMap = { 'hot': 1.0, 'warm': 0.6, 'cold': 0.3 };\n  var tierBonus = tierBonusMap[tier] || 0.5;\n  var priorityBonus = priorityBuyerIds.indexOf(convexBuyerId) !== -1 ? 0.2 : 0;\n  \n  var matchScore = marketMatchScore * 0.25 + priceMatchScore * 0.25 + strategyMatchScore * 0.15 + propertyTypeMatchScore * 0.10 + tierBonus * 0.10 + priorityBonus;\n  \n  matchedBuyers.push({\n    closeLeadId: lead.id,\n    convexBuyerId: convexBuyerId,\n    name: lead.display_name.replace('[WholeStack] ', ''),\n    phone: phone,\n    tier: tier,\n    matchScore: Math.round(matchScore * 100) / 100,\n    isPriority: priorityBuyerIds.indexOf(convexBuyerId) !== -1\n  });\n}\n\nvar tierOrder = { 'hot': 0, 'warm': 1, 'cold': 2 };\nmatchedBuyers.sort(function(a, b) {\n  if (a.isPriority !== b.isPriority) return a.isPriority ? -1 : 1;\n  if (tierOrder[a.tier] !== tierOrder[b.tier]) return tierOrder[a.tier] - tierOrder[b.tier];\n  return b.matchScore - a.matchScore;\n});\n\nreturn { json: { deal: deal, matchedBuyers: matchedBuyers, totalMatched: matchedBuyers.length } };"
+      }
+    },
+    {
+      "id": "applyLimits",
+      "name": "Apply Tier Limits",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1570,
+        150
+      ],
+      "parameters": {
+        "jsCode": "var data = $input.first().json;\nvar buyers = data.matchedBuyers;\n\nvar limits = { 'hot': 5, 'warm': 15, 'cold': 30 };\nvar counts = { 'hot': 0, 'warm': 0, 'cold': 0 };\nvar selected = [];\nvar disqualified = { total: 0, hot_limit: 0, warm_limit: 0, cold_limit: 0 };\n\nfor (var i = 0; i < buyers.length; i++) {\n  var buyer = buyers[i];\n  var tier = buyer.tier;\n  \n  if (counts[tier] < limits[tier]) {\n    counts[tier]++;\n    selected.push(buyer);\n  } else {\n    disqualified.total++;\n    disqualified[tier + '_limit']++;\n  }\n}\n\nreturn { json: { deal: data.deal, selectedBuyers: selected, counts: counts, disqualified: disqualified } };"
+      }
+    },
+    {
+      "id": "ifHasBuyers",
+      "name": "IF Has Buyers",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1790,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $json.selectedBuyers.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "slackNoBuyers",
+      "name": "Slack No Buyers Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2010,
+        300
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_WholeStack }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '⚠️ *No Matching Buyers*\\n\\nDeal: ' + $json.deal.address + ', ' + $json.deal.city + '\\nMarket: ' + $json.deal.zip + '\\nPrice: $' + $json.deal.askingPrice.toLocaleString() + '\\n\\nAction: Recruit buyers for this market or expand deal criteria.' }) }}"
+      }
+    },
+    {
+      "id": "respondNoBuyers",
+      "name": "Respond No Buyers",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2230,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, distributed: 0, message: 'No matching buyers found' }) }}"
+      }
+    },
+    {
+      "id": "prepareBuyers",
+      "name": "Prepare Buyers Array",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2010,
+        0
+      ],
+      "parameters": {
+        "jsCode": "var data = $input.first().json;\nvar buyers = data.selectedBuyers;\nvar deal = data.deal;\nvar counts = data.counts;\nvar disqualified = data.disqualified;\n\nvar results = [];\nfor (var i = 0; i < buyers.length; i++) {\n  var buyer = buyers[i];\n  \n  var templates = {\n    'hot': { id: 'P1', text: 'Got a deal in ' + deal.city + ' — you get first look. Interested?' },\n    'warm': { id: 'P2', text: 'Got a deal in ' + deal.city + '. Interested?' },\n    'cold': { id: 'P3', text: 'Deal in ' + deal.city + '. Want the details?' }\n  };\n  \n  var template;\n  if (buyer.isPriority) {\n    template = { id: 'PRIORITY', text: 'Got another one in ' + deal.city + ' — you get first look. Interested?' };\n  } else {\n    template = templates[buyer.tier] || templates['warm'];\n  }\n  \n  results.push({\n    json: {\n      buyer: buyer,\n      deal: deal,\n      templateId: template.id,\n      smsText: template.text,\n      counts: counts,\n      disqualified: disqualified\n    }\n  });\n}\n\nreturn results;"
+      }
+    },
+    {
+      "id": "sendSms",
+      "name": "Send Market Ping SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2230,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lead_id: $json.buyer.closeLeadId, local_phone: '+15555550100', remote_phone: $json.buyer.phone, text: $json.smsText, direction: 'outbound', status: 'outbox' }) }}"
+      },
+      "disabled": true
+    },
+    {
+      "id": "createDist",
+      "name": "Create Distribution Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2450,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/createDistribution",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId: $('Prepare Buyers Array').first().json.deal._id, buyerId: $('Prepare Buyers Array').first().json.buyer.convexBuyerId, status: 'ping_sent', round: $('Prepare Buyers Array').first().json.deal.currentRound || 1, templateId: $('Prepare Buyers Array').first().json.templateId, sentAt: Date.now(), nextFollowUp: Date.now() + (48 * 60 * 60 * 1000) }) }}"
+      }
+    },
+    {
+      "id": "wait",
+      "name": "Rate Limit Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2670,
+        0
+      ],
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "respondSuccess",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2890,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, distributed: $('Prepare Buyers Array').all().length, hot: $('Prepare Buyers Array').first().json.counts.hot, warm: $('Prepare Buyers Array').first().json.counts.warm, cold: $('Prepare Buyers Array').first().json.counts.cold, disqualified: $('Prepare Buyers Array').first().json.disqualified }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Distribution Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Deal from Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Deal from Convex": {
+      "main": [
+        [
+          {
+            "node": "IF Deal Active",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Deal Active": {
+      "main": [
+        [
+          {
+            "node": "Check Priority Queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400 Not Active",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Priority Queue": {
+      "main": [
+        [
+          {
+            "node": "Query Buyers from Close CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Buyers from Close CRM": {
+      "main": [
+        [
+          {
+            "node": "Smart Match Buyers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Smart Match Buyers": {
+      "main": [
+        [
+          {
+            "node": "Apply Tier Limits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Tier Limits": {
+      "main": [
+        [
+          {
+            "node": "IF Has Buyers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Buyers": {
+      "main": [
+        [
+          {
+            "node": "Prepare Buyers Array",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack No Buyers Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack No Buyers Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond No Buyers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Buyers Array": {
+      "main": [
+        [
+          {
+            "node": "Send Market Ping SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Market Ping SMS": {
+      "main": [
+        [
+          {
+            "node": "Create Distribution Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Distribution Record": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Wait": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

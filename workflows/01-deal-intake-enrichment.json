@@ -1,0 +1,301 @@
+{
+  "name": "WholeStack WF-001: Deal Intake & Enrichment",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "wholestack-deal-intake-v2",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate",
+      "name": "Validate Deal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Get input - handle both direct JSON and webhook body\nconst rawInput = $input.first().json;\nconst input = rawInput.body || rawInput;\nconst errors = [];\n\n// Sanitize string fields - trim whitespace and normalize\nconst stringFields = ['address', 'city', 'state', 'zip', 'propertyType', 'repairScope', 'source', 'driveLink'];\nfor (const field of stringFields) {\n  if (typeof input[field] === 'string') {\n    input[field] = input[field].trim();\n  }\n}\n\n// Uppercase state (e.g. 'oh' -> 'OH')\nif (typeof input.state === 'string') {\n  input.state = input.state.toUpperCase();\n}\n\n// Required fields\nconst required = ['address', 'city', 'state', 'zip', 'askingPrice', 'arv', 'repairEstimate', 'repairScope', 'propertyType', 'source'];\nfor (const field of required) {\n  if (!input[field] && input[field] !== 0) {\n    errors.push('Missing required field: ' + field);\n  }\n}\n\n// Type validations\nif (input.askingPrice && input.askingPrice <= 0) errors.push('askingPrice must be > 0');\nif (input.arv && input.askingPrice && input.arv <= input.askingPrice) errors.push('arv must be > askingPrice');\nif (input.repairEstimate && input.repairEstimate < 0) errors.push('repairEstimate must be >= 0');\n\nconst validPropertyTypes = ['SFR', 'Duplex', 'Multi', 'Land', 'Commercial'];\nif (input.propertyType && !validPropertyTypes.includes(input.propertyType)) {\n  errors.push('propertyType must be one of: ' + validPropertyTypes.join(', '));\n}\n\nconst validScopes = ['Light', 'Medium', 'Heavy', 'Gut'];\nif (input.repairScope && !validScopes.includes(input.repairScope)) {\n  errors.push('repairScope must be one of: ' + validScopes.join(', '));\n}\n\nif (errors.length > 0) {\n  return [{json: {valid: false, errors}}];\n}\n\nreturn [{json: {valid: true, deal: input}}];"
+      }
+    },
+    {
+      "id": "ifValid",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid-check",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "respond400",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        150
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, errors: $json.errors }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "normalizeAddress",
+      "name": "Normalize Address",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        -150
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const deal = $input.first().json.deal;\n\nfunction normalizeAddress(addr) {\n  var normalized = addr.toLowerCase().trim();\n  \n  // Standardize street suffixes\n  var replacements = {\n    ' st ': ' street ', ' st$': ' street',\n    ' ave ': ' avenue ', ' ave$': ' avenue',\n    ' dr ': ' drive ', ' dr$': ' drive',\n    ' rd ': ' road ', ' rd$': ' road',\n    ' blvd ': ' boulevard ', ' blvd$': ' boulevard',\n    ' ln ': ' lane ', ' ln$': ' lane',\n    ' ct ': ' court ', ' ct$': ' court',\n    ' cir ': ' circle ', ' cir$': ' circle',\n    ' pl ': ' place ', ' pl$': ' place'\n  };\n  \n  for (var abbr in replacements) {\n    normalized = normalized.replace(new RegExp(abbr, 'g'), replacements[abbr]);\n  }\n  \n  // Remove punctuation\n  normalized = normalized.replace(/[.,#]/g, '');\n  \n  // Remove unit/apt/suite\n  normalized = normalized.replace(/\\s+(apt|unit|suite|ste|#)\\s*\\S*/gi, '');\n  \n  // Collapse whitespace\n  normalized = normalized.replace(/\\s+/g, ' ').trim();\n  \n  return normalized;\n}\n\nvar addressNormalized = normalizeAddress(deal.address);\n\nreturn [{json: {...deal, addressNormalized: addressNormalized}}];"
+      }
+    },
+    {
+      "id": "calculateScore",
+      "name": "Calculate Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -150
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "var deal = $input.first().json;\n\n// Calculate margin\nvar margin = ((deal.arv - deal.askingPrice - deal.repairEstimate) / deal.arv) * 100;\n\n// Helper function\nfunction clamp(value, min, max) {\n  return Math.min(Math.max(value, min), max);\n}\n\n// Score components\nvar marginScore = clamp(margin / 40 * 100, 0, 100);\nvar demandScore = 50; // Default\n\nvar conditionScores = { Light: 90, Medium: 70, Heavy: 40, Gut: 20 };\nvar conditionScore = conditionScores[deal.repairScope] || 50;\n\nvar compConfidence = deal.compConfidence || 'Medium';\nvar compScores = { High: 100, Medium: 60, Low: 30 };\nvar compScore = compScores[compConfidence] || 60;\n\nvar domScore = 70;\nvar titleScore = 100;\n\n// Calculate overall deal score\nvar dealScore = Math.round(\n  marginScore * 0.30 +\n  demandScore * 0.20 +\n  domScore * 0.15 +\n  conditionScore * 0.15 +\n  compScore * 0.10 +\n  titleScore * 0.10\n);\n\n// Determine best strategy\nvar bestStrategy;\nif (margin >= 25 && ['Light', 'Medium'].indexOf(deal.repairScope) !== -1) {\n  bestStrategy = 'Flip';\n} else if (margin >= 20 && ['Medium', 'Heavy'].indexOf(deal.repairScope) !== -1) {\n  bestStrategy = 'BRRRR';\n} else if (margin >= 15) {\n  bestStrategy = 'Rental';\n} else {\n  bestStrategy = 'Wholesale';\n}\n\nreturn [{json: {\n  ...deal,\n  margin: Math.round(margin * 10) / 10,\n  dealScore: dealScore,\n  bestStrategy: bestStrategy,\n  compConfidence: compConfidence\n}}];"
+      }
+    },
+    {
+      "id": "storeDeal",
+      "name": "Store Deal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        -150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/createDeal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"property_address\": \"{{ $json.address }}, {{ $json.city }}, {{ $json.state }} {{ $json.zip }}\",\n  \"address_normalized\": \"{{ $json.addressNormalized }}\",\n  \"city\": \"{{ $json.city }}\",\n  \"state\": \"{{ $json.state }}\",\n  \"zip\": \"{{ $json.zip }}\",\n  \"property_type\": \"{{ $json.propertyType }}\",\n  \"beds\": {{ $json.beds || 0 }},\n  \"baths\": {{ $json.baths || 0 }},\n  \"sqft\": {{ $json.sqft || 0 }},\n  \"asking_price\": {{ $json.askingPrice }},\n  \"arv\": {{ $json.arv }},\n  \"repair_estimate\": {{ $json.repairEstimate }},\n  \"repair_scope\": \"{{ $json.repairScope }}\",\n  \"margin\": {{ $json.margin }},\n  \"deal_score\": {{ $json.dealScore }},\n  \"best_strategy\": \"{{ $json.bestStrategy }}\",\n  \"comp_confidence\": \"{{ $json.compConfidence }}\",\n  \"source_type\": \"{{ $json.source }}\",\n  \"photos\": {{ JSON.stringify($json.driveLink ? [$json.driveLink] : []) }}\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "triggerDistribution",
+      "name": "Trigger Distribution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1320,
+        -150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_N8N_HOST/webhook/wholestack-distribute-deal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"dealId\": \"{{ $('Store Deal').first().json.data._id }}\",\n  \"deal\": {{ JSON.stringify($('Calculate Score').first().json) }},\n  \"driveLink\": \"{{ $('Calculate Score').first().json.driveLink || '' }}\",\n  \"maxBuyers\": {{ $('Calculate Score').first().json.maxBuyers || 200 }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "respondSuccess",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        -150
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"dealId\": \"{{ $('Store Deal').first().json.data._id }}\",\n  \"dealScore\": {{ $('Calculate Score').first().json.dealScore }},\n  \"margin\": {{ $('Calculate Score').first().json.margin }},\n  \"bestStrategy\": \"{{ $('Calculate Score').first().json.bestStrategy }}\",\n  \"status\": \"ready\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "slackNotify",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        -150
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "your-slack-channel",
+          "mode": "name"
+        },
+        "messageType": "text",
+        "text": "=🏠 New WholeStack deal: {{ $('Calculate Score').first().json.address }} | Score: {{ $('Calculate Score').first().json.dealScore }}/100 | ${{ $('Calculate Score').first().json.askingPrice }} | {{ $('Calculate Score').first().json.margin }}% margin | {{ $('Calculate Score').first().json.bestStrategy }}",
+        "otherOptions": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Deal": {
+      "main": [
+        [
+          {
+            "node": "IF Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid": {
+      "main": [
+        [
+          {
+            "node": "Normalize Address",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Address": {
+      "main": [
+        [
+          {
+            "node": "Calculate Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Score": {
+      "main": [
+        [
+          {
+            "node": "Store Deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Deal": {
+      "main": [
+        [
+          {
+            "node": "Trigger Distribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Distribution": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Notify": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

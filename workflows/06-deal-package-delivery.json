@@ -1,0 +1,264 @@
+{
+  "name": "WholeStack WF-006: Deal Package Delivery",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Package Delivery Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-send-package",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fetchDeal",
+      "name": "Fetch Deal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getDeal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId: $json.dealId }) }}"
+      }
+    },
+    {
+      "id": "fetchBuyer",
+      "name": "Fetch Buyer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        690,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getBuyer",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ buyerId: $('Package Delivery Webhook').first().json.buyerId }) }}"
+      }
+    },
+    {
+      "id": "assemblePackage",
+      "name": "Assemble Deal Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        910,
+        300
+      ],
+      "parameters": {
+        "jsCode": "var deal = $('Fetch Deal').first().json.data;\nvar buyer = $('Fetch Buyer').first().json.data;\nvar email = $('Package Delivery Webhook').first().json.email;\nvar distributionId = $('Package Delivery Webhook').first().json.distributionId;\n\nfunction formatCurrency(num) {\n  return '$' + num.toLocaleString();\n}\n\nvar holdExpiresAt = deal.reservedUntil || (Date.now() + 12 * 60 * 60 * 1000);\nvar hoursRemaining = Math.max(0, Math.round((holdExpiresAt - Date.now()) / (60 * 60 * 1000)));\n\nvar emailText = 'DEAL PACKAGE: ' + deal.address + '\\n\\n' +\n  'HOLD EXPIRES: ' + new Date(holdExpiresAt).toLocaleString() + ' (' + hoursRemaining + ' hours)\\n\\n' +\n  'PROPERTY SUMMARY\\n' +\n  'Address: ' + deal.address + ', ' + deal.city + ', ' + deal.state + ' ' + deal.zip + '\\n' +\n  'Type: ' + deal.propertyType + '\\n' +\n  'Size: ' + (deal.beds || '?') + 'bd / ' + (deal.baths || '?') + 'ba | ' + (deal.sqft ? deal.sqft.toLocaleString() + ' sqft' : 'N/A') + '\\n' +\n  'Year Built: ' + (deal.yearBuilt || 'N/A') + '\\n\\n' +\n  'FINANCIALS\\n' +\n  'Asking Price: ' + formatCurrency(deal.askingPrice) + '\\n' +\n  'ARV: ' + formatCurrency(deal.arv) + '\\n' +\n  'Repair Estimate: ' + formatCurrency(deal.repairEstimate) + '\\n' +\n  'Margin: ' + deal.margin + '%\\n\\n' +\n  'DEAL ANALYSIS\\n' +\n  'Deal Score: ' + deal.dealScore + '/100\\n' +\n  'Best Strategy: ' + deal.bestStrategy + '\\n' +\n  'Repair Scope: ' + deal.repairScope + '\\n' +\n  'Comp Confidence: ' + deal.compConfidence + '\\n\\n' +\n  (deal.notes ? 'NOTES: ' + deal.notes + '\\n\\n' : '') +\n  'NEXT STEPS:\\n' +\n  '1. Review the numbers\\n' +\n  '2. Do your due diligence\\n' +\n  '3. Reply to make an offer\\n\\n' +\n  'Questions? Reply to this email or text me directly.\\n\\n' +\n  'Best,\\nPropOps Team';\n\nvar subject = 'PropOps Deal Package: ' + deal.address + ' - ' + formatCurrency(deal.askingPrice) + ' | ' + deal.margin + '% margin';\n\nreturn { json: { email: email, subject: subject, emailText: emailText, deal: deal, buyer: buyer, distributionId: distributionId } };"
+      }
+    },
+    {
+      "id": "sendEmail",
+      "name": "Send Deal Package Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1130,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.RESEND_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: 'user@example.com', to: $json.email, subject: $json.subject, text: $json.emailText }) }}"
+      }
+    },
+    {
+      "id": "updateDistStatus",
+      "name": "Update Distribution Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateDistributionStatus",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ distributionId: $('Assemble Deal Package').first().json.distributionId, status: 'package_sent', packageSentAt: Date.now() }) }}"
+      }
+    },
+    {
+      "id": "sendSmsConfirm",
+      "name": "Send SMS Confirmation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1570,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lead_id: $('Assemble Deal Package').first().json.buyer.closeLeadId, local_phone: '+15555550100', remote_phone: $('Assemble Deal Package').first().json.buyer.phone, text: 'Package sent to ' + $('Assemble Deal Package').first().json.email + '. Let me know if you have questions.', direction: 'outbound', status: 'outbox' }) }}"
+      }
+    },
+    {
+      "id": "slackNotify",
+      "name": "Slack Package Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1790,
+        300
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_WholeStack }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '📦 *Deal Package Sent*\\n\\nDeal: ' + $('Assemble Deal Package').first().json.deal.address + '\\nBuyer: ' + $('Assemble Deal Package').first().json.buyer.name + '\\nEmail: ' + $('Assemble Deal Package').first().json.email }) }}"
+      }
+    },
+    {
+      "id": "respondSuccess",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2010,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, dealId: $('Assemble Deal Package').first().json.deal._id, email: $('Assemble Deal Package').first().json.email, packageSentAt: Date.now() }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Package Delivery Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Deal": {
+      "main": [
+        [
+          {
+            "node": "Fetch Buyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Buyer": {
+      "main": [
+        [
+          {
+            "node": "Assemble Deal Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Deal Package": {
+      "main": [
+        [
+          {
+            "node": "Send Deal Package Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Deal Package Email": {
+      "main": [
+        [
+          {
+            "node": "Update Distribution Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Distribution Status": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Slack Package Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Package Sent": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

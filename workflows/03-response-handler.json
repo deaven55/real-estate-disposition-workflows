@@ -1,0 +1,628 @@
+{
+  "name": "WholeStack WF-003: Response Handler",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "wholestack-sms-response",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "parseMessage",
+      "name": "Parse Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse incoming SMS from Close CRM webhook\nvar rawInput = $input.first().json;\nvar data = rawInput.body || rawInput.data || rawInput;\n\n// Handle Close CRM webhook format\nvar phone = data.phone || data.from_number || '';\nvar message = data.body || data.text || data.message || '';\nvar leadId = data.lead_id || '';\nvar messageId = data.message_id || data.id || '';\n\nif (!phone || !message) {\n  return [{json: {valid: false, error: 'Missing phone or message'}}];\n}\n\nreturn [{json: {\n  valid: true,\n  phone: phone,\n  message: message,\n  leadId: leadId,\n  messageId: messageId,\n  timestamp: new Date().toISOString()\n}}];"
+      }
+    },
+    {
+      "id": "classifyIntent",
+      "name": "Classify Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "var data = $input.first().json;\nvar msg = data.message.toLowerCase().trim();\n\nfunction detectIntent(text) {\n  // DNC (highest priority)\n  var dncPatterns = ['stop', 'unsubscribe', 'remove me', 'opt out', 'take me off', \"don't text\", 'dont text'];\n  for (var i = 0; i < dncPatterns.length; i++) {\n    if (text.indexOf(dncPatterns[i]) !== -1) {\n      return { intent: 'dnc', confidence: 0.95 };\n    }\n  }\n  \n  // Positive\n  var yesPatterns = ['yes', 'yeah', 'yep', 'yea', 'interested', 'want it', 'send it', 'send info', 'send details', 'lock it', 'hold it', 'i want', \"i'll take\", 'im in'];\n  for (var i = 0; i < yesPatterns.length; i++) {\n    if (text.indexOf(yesPatterns[i]) !== -1) {\n      return { intent: 'interested', confidence: 0.90 };\n    }\n  }\n  \n  // Negative\n  var noPatterns = ['nah', 'nope', 'pass', 'not interested', 'not for me', 'skip', 'too high', 'too much'];\n  for (var i = 0; i < noPatterns.length; i++) {\n    if (text.indexOf(noPatterns[i]) !== -1) {\n      return { intent: 'pass', confidence: 0.85 };\n    }\n  }\n  // Specific \"no\" check\n  if (text === 'no' || text.indexOf('no ') === 0 || text.indexOf('no,') === 0 || text.indexOf('no.') === 0) {\n    return { intent: 'pass', confidence: 0.85 };\n  }\n  \n  // Feedback number response\n  if (/^[1-5]$/.test(text.trim())) {\n    return { intent: 'feedback_response', confidence: 0.95 };\n  }\n  \n  // Negotiation\n  if (/\\d{2,3}k|\\$[\\d,]+|would.*(take|accept)|counter|offer/i.test(text)) {\n    return { intent: 'negotiation', confidence: 0.80 };\n  }\n  \n  // Questions\n  if (text.indexOf('?') !== -1 || /^(what|how|where|when|who|is |are |does |can )/.test(text)) {\n    return { intent: 'question', confidence: 0.75 };\n  }\n  \n  // PAUSE\n  if (text.indexOf('pause') !== -1) {\n    return { intent: 'pause', confidence: 0.95 };\n  }\n  \n  // START (reactivate)\n  if (text.indexOf('start') !== -1 || text.indexOf('rejoin') !== -1) {\n    return { intent: 'reactivate', confidence: 0.90 };\n  }\n  \n  return { intent: 'unclear', confidence: 0.30 };\n}\n\nvar result = detectIntent(msg);\n\nreturn [{json: {\n  ...data,\n  intent: result.intent,\n  confidence: result.confidence\n}}];"
+      }
+    },
+    {
+      "id": "switchIntent",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "interested",
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "interested"
+                  }
+                ]
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "pass",
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "pass"
+                  }
+                ]
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "dnc",
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "dnc"
+                  }
+                ]
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "pause",
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "pause"
+                  }
+                ]
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "reactivate",
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "reactivate"
+                  }
+                ]
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "question",
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "question"
+                  }
+                ]
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "other",
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "handleInterested",
+      "name": "Handle Interested",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        920,
+        -400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"lead_id\": \"{{ $json.leadId }}\",\n  \"local_phone\": \"+15555550100\",\n  \"remote_phone\": \"{{ $json.phone }}\",\n  \"text\": \"Great! I'll send over the full deal package. What's the best email for you, or should I text the details?\",\n  \"direction\": \"outbound\",\n  \"status\": \"outbox\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "handlePass",
+      "name": "Handle Pass",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        -250
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Log the pass - no SMS response needed\nvar data = $input.first().json;\n\nreturn [{json: {\n  action: 'pass_logged',\n  phone: data.phone,\n  message: data.message,\n  leadId: data.leadId\n}}];"
+      }
+    },
+    {
+      "id": "handleDNC",
+      "name": "Handle DNC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        920,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"lead_id\": \"{{ $json.leadId }}\",\n  \"local_phone\": \"+15555550100\",\n  \"remote_phone\": \"{{ $json.phone }}\",\n  \"text\": \"Got it, you've been removed. Text START anytime to rejoin.\",\n  \"direction\": \"outbound\",\n  \"status\": \"outbox\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "handlePause",
+      "name": "Handle Pause",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        920,
+        50
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"lead_id\": \"{{ $json.leadId }}\",\n  \"local_phone\": \"+15555550100\",\n  \"remote_phone\": \"{{ $json.phone }}\",\n  \"text\": \"Paused! You won't get deals until you text START.\",\n  \"direction\": \"outbound\",\n  \"status\": \"outbox\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "handleReactivate",
+      "name": "Handle Reactivate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        920,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"lead_id\": \"{{ $json.leadId }}\",\n  \"local_phone\": \"+15555550100\",\n  \"remote_phone\": \"{{ $json.phone }}\",\n  \"text\": \"Welcome back! You're back on the list.\",\n  \"direction\": \"outbound\",\n  \"status\": \"outbox\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "handleQuestion",
+      "name": "Handle Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        920,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/task/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"lead_id\": \"{{ $json.leadId }}\",\n  \"text\": \"WholeStack Question: {{ $json.message }}\",\n  \"is_complete\": false\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "handleOther",
+      "name": "Handle Other",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        920,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/task/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"lead_id\": \"{{ $json.leadId }}\",\n  \"text\": \"WholeStack Review: {{ $json.intent }} - {{ $json.message }}\",\n  \"is_complete\": false\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "respondSuccess",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1620,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"intent\": \"{{ $('Classify Intent').first().json.intent }}\",\n  \"confidence\": {{ $('Classify Intent').first().json.confidence }},\n  \"action\": \"processed\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "passThrough",
+      "name": "Pass Through",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "slackNotify",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1400,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "your-slack-channel",
+          "mode": "name"
+        },
+        "messageType": "text",
+        "text": "=📱 WholeStack Response: {{ $('Classify Intent').first().json.intent }} from {{ $('Classify Intent').first().json.phone }} - '{{ $('Classify Intent').first().json.message }}'",
+        "otherOptions": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Message": {
+      "main": [
+        [
+          {
+            "node": "Classify Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Intent": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "Handle Interested",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Pass",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle DNC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Pause",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Reactivate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Question",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Other",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Interested": {
+      "main": [
+        [
+          {
+            "node": "Pass Through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Pass": {
+      "main": [
+        [
+          {
+            "node": "Pass Through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle DNC": {
+      "main": [
+        [
+          {
+            "node": "Pass Through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Pause": {
+      "main": [
+        [
+          {
+            "node": "Pass Through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Reactivate": {
+      "main": [
+        [
+          {
+            "node": "Pass Through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Question": {
+      "main": [
+        [
+          {
+            "node": "Pass Through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Other": {
+      "main": [
+        [
+          {
+            "node": "Pass Through",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass Through": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Notify": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

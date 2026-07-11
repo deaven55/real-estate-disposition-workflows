@@ -1,0 +1,497 @@
+{
+  "name": "WholeStack WF-007: Deal Lifecycle Manager",
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Daily 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "getExpiredDeals",
+      "name": "Get Deals Past Expiration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getActiveDeals",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'active' }) }}"
+      }
+    },
+    {
+      "id": "getExpiredHolds",
+      "name": "Get Expired Holds",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getExpiredHolds",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ current_time: Date.now() }) }}"
+      }
+    },
+    {
+      "id": "processExpiredDeals",
+      "name": "Process Expired Deals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        690,
+        200
+      ],
+      "parameters": {
+        "jsCode": "var deals = $input.first().json.data || [];\nvar now = Date.now();\n\nvar expiredDeals = deals.filter(function(deal) {\n  return deal.expiresAt && deal.expiresAt < now;\n});\n\nif (expiredDeals.length === 0) {\n  return { json: { expiredDeals: [], expiredCount: 0, hasExpired: false } };\n}\n\nvar results = [];\nfor (var i = 0; i < expiredDeals.length; i++) {\n  results.push({ json: { deal: expiredDeals[i] } });\n}\n\nreturn results;"
+      }
+    },
+    {
+      "id": "processExpiredHolds",
+      "name": "Process Expired Holds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        690,
+        400
+      ],
+      "parameters": {
+        "jsCode": "var deals = $input.first().json.data || [];\n\nif (deals.length === 0) {\n  return { json: { expiredHolds: [], count: 0, hasExpiredHolds: false } };\n}\n\nvar results = [];\nfor (var i = 0; i < deals.length; i++) {\n  var deal = deals[i];\n  var shouldRedistribute = (deal.currentRound || 1) < (deal.maxRounds || 3);\n  results.push({ json: { deal: deal, shouldRedistribute: shouldRedistribute, nextRound: (deal.currentRound || 1) + 1 } });\n}\n\nreturn results;"
+      }
+    },
+    {
+      "id": "ifHasExpiredDeals",
+      "name": "IF Has Expired Deals",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        910,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.deal }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ifHasExpiredHolds",
+      "name": "IF Has Expired Holds",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        910,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $json.deal }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "markDealExpired",
+      "name": "Mark Deal Expired",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1130,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateDealStatus",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ deal_id: $json.deal._id, status: 'expired' }) }}"
+      }
+    },
+    {
+      "id": "generatePostMortem",
+      "name": "Generate Post-Mortem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        100
+      ],
+      "parameters": {
+        "jsCode": "var deal = $('IF Has Expired Deals').first().json.deal;\n\n// Generate complete post-mortem with all required fields\nvar post_mortem = {\n  outcome: 'expired',\n  total_pings: 0,\n  total_interested: 0,\n  total_locked: 0,\n  total_passed: 0,\n  total_no_response: 0,\n  failure_reason: deal.deal_score < 50 ? 'low_deal_score' : 'no_buyer_interest',\n  days_to_outcome: Math.round((Date.now() - (deal.created_at || Date.now())) / (24 * 60 * 60 * 1000))\n};\n\nreturn { json: { deal_id: deal._id, post_mortem: post_mortem } };"
+      }
+    },
+    {
+      "id": "savePostMortem",
+      "name": "Save Post-Mortem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1570,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/saveDealPostMortem",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ deal_id: $json.deal_id, post_mortem: $json.post_mortem }) }}"
+      }
+    },
+    {
+      "id": "releaseHold",
+      "name": "Release Hold",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1130,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateDealStatus",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ deal_id: $json.deal._id, status: 'active', reserved_by: null, reserved_until: null }) }}"
+      }
+    },
+    {
+      "id": "updateDealRound",
+      "name": "Update Deal Round",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateDealRound",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ deal_id: $('IF Has Expired Holds').first().json.deal._id, current_round: $('IF Has Expired Holds').first().json.nextRound, last_round_exhausted_at: Date.now(), add_excluded_buyers: [] }) }}"
+      }
+    },
+    {
+      "id": "ifShouldRedist",
+      "name": "IF Should Re-Distribute",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1570,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond3",
+              "leftValue": "={{ $('IF Has Expired Holds').first().json.shouldRedistribute }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "triggerRedist",
+      "name": "Trigger Re-Distribution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1790,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_N8N_HOST/webhook/wholestack-distribute-deal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId: $('IF Has Expired Holds').first().json.deal._id }) }}"
+      }
+    },
+    {
+      "id": "slackSummary",
+      "name": "Slack Lifecycle Summary",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2010,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "your-slack-channel",
+          "mode": "name"
+        },
+        "messageType": "text",
+        "text": "=🔄 *Lifecycle Manager Summary*\n\nDeals expired: {{ $('Process Expired Deals').all().length - 1 }}\nHolds released: {{ $('Process Expired Holds').all().length - 1 }}",
+        "otherOptions": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Daily 9 AM": {
+      "main": [
+        [
+          {
+            "node": "Get Deals Past Expiration",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Expired Holds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Deals Past Expiration": {
+      "main": [
+        [
+          {
+            "node": "Process Expired Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Expired Holds": {
+      "main": [
+        [
+          {
+            "node": "Process Expired Holds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Expired Deals": {
+      "main": [
+        [
+          {
+            "node": "IF Has Expired Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Expired Holds": {
+      "main": [
+        [
+          {
+            "node": "IF Has Expired Holds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Expired Deals": {
+      "main": [
+        [
+          {
+            "node": "Mark Deal Expired",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack Lifecycle Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Expired Holds": {
+      "main": [
+        [
+          {
+            "node": "Release Hold",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack Lifecycle Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Deal Expired": {
+      "main": [
+        [
+          {
+            "node": "Generate Post-Mortem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Post-Mortem": {
+      "main": [
+        [
+          {
+            "node": "Save Post-Mortem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Hold": {
+      "main": [
+        [
+          {
+            "node": "Update Deal Round",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Deal Round": {
+      "main": [
+        [
+          {
+            "node": "IF Should Re-Distribute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Should Re-Distribute": {
+      "main": [
+        [
+          {
+            "node": "Trigger Re-Distribution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack Lifecycle Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Post-Mortem": {
+      "main": [
+        [
+          {
+            "node": "Slack Lifecycle Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Re-Distribution": {
+      "main": [
+        [
+          {
+            "node": "Slack Lifecycle Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

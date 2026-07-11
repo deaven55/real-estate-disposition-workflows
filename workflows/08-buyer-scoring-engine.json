@@ -1,0 +1,302 @@
+{
+  "name": "WholeStack WF-008: Buyer Scoring Engine",
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Daily 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "getActiveBuyers",
+      "name": "Get Active Buyers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getAllActiveBuyers",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ statuses: ['active', 'paused', 'inactive'] }) }}"
+      }
+    },
+    {
+      "id": "prepareBuyers",
+      "name": "Prepare Buyers Array",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        690,
+        300
+      ],
+      "parameters": {
+        "jsCode": "var buyers = $input.first().json.data || [];\nvar results = [];\nfor (var i = 0; i < buyers.length; i++) {\n  results.push({ json: buyers[i] });\n}\nreturn results;"
+      }
+    },
+    {
+      "id": "getDistributions",
+      "name": "Get Buyer Distributions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        910,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getDistributionsByBuyer",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ buyerId: $json._id }) }}"
+      }
+    },
+    {
+      "id": "calcScores",
+      "name": "Calculate Buyer Scores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        300
+      ],
+      "parameters": {
+        "jsCode": "var itemIndex = $itemIndex;\nvar allBuyers = $('Prepare Buyers Array').all();\nvar buyer = allBuyers[itemIndex].json;\nvar distributions = $input.first().json.data || [];\nvar stats = buyer.stats || {};\n\nvar dealsReceived30d = distributions.length;\nvar dealsResponded30d = distributions.filter(function(d) {\n  return ['interested', 'details_sent', 'locked', 'package_sent', 'under_contract', 'closed', 'passed'].indexOf(d.status) !== -1;\n}).length;\n\nvar engagement = dealsReceived30d > 0 \n  ? Math.round((dealsResponded30d / dealsReceived30d) * 100)\n  : 50;\n\nvar reliability = (stats.dealsInterested || 0) > 0\n  ? Math.round(((stats.dealsPurchased || 0) / stats.dealsInterested) * 100)\n  : 50;\n\nvar velocity = 50;\nif (stats.avgDaysToClose !== null && stats.avgDaysToClose !== undefined) {\n  velocity = Math.max(0, Math.round(100 - (stats.avgDaysToClose * 5)));\n}\n\nvar purchase = Math.min(100, Math.round(((stats.totalSpent || 0) / 10000) * 100));\n\nvar overall = Math.round(\n  engagement * 0.35 +\n  reliability * 0.25 +\n  velocity * 0.20 +\n  purchase * 0.20\n);\n\nvar currentTier = buyer.tier || 'warm';\nvar newTier = currentTier;\n\nif (engagement > 70 && reliability > 50) {\n  newTier = 'hot';\n} else if (engagement > 40 && engagement <= 70) {\n  newTier = 'warm';\n} else if (engagement <= 40 || (stats.consecutiveNoResponse || 0) > 5) {\n  newTier = 'cold';\n}\n\nvar tierChanged = newTier !== currentTier;\n\nreturn [{ json: { buyer: buyer, scores: { engagement: engagement, reliability: reliability, velocity: velocity, purchase: purchase, overall: overall }, currentTier: currentTier, newTier: newTier, tierChanged: tierChanged } }];"
+      }
+    },
+    {
+      "id": "updateScores",
+      "name": "Update Buyer Scores",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateBuyerScores",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ buyerId: $json.buyer._id, scores: $json.scores, tier: $json.newTier }) }}"
+      }
+    },
+    {
+      "id": "ifTierChanged",
+      "name": "IF Tier Changed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1570,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $('Calculate Buyer Scores').first().json.tierChanged }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "syncCloseTier",
+      "name": "Sync Tier to Close CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        200
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ 'https://api.close.com/api/v1/lead/' + $('Calculate Buyer Scores').first().json.buyer.closeLeadId + '/' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ custom: Object.assign({}, $('Get Lead Custom Fields').first().json.custom || {}, { cf_OKjNsqdbMxMcThu43cIhnhwFoLeYs7iigX8Pqz6Y1ma: $('Calculate Buyer Scores').first().json.newTier }) }) }}"
+      }
+    },
+    {
+      "id": "wait",
+      "name": "Rate Limit Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1790,
+        400
+      ],
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "getLeadForMerge",
+      "name": "Get Lead Custom Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.close.com/api/v1/lead/' + $('Calculate Buyer Scores').first().json.buyer.closeLeadId + '/' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Daily 9 AM": {
+      "main": [
+        [
+          {
+            "node": "Get Active Buyers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Buyers": {
+      "main": [
+        [
+          {
+            "node": "Prepare Buyers Array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Buyers Array": {
+      "main": [
+        [
+          {
+            "node": "Get Buyer Distributions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Buyer Distributions": {
+      "main": [
+        [
+          {
+            "node": "Calculate Buyer Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Buyer Scores": {
+      "main": [
+        [
+          {
+            "node": "Update Buyer Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Buyer Scores": {
+      "main": [
+        [
+          {
+            "node": "IF Tier Changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Tier Changed": {
+      "main": [
+        [
+          {
+            "node": "Get Lead Custom Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead Custom Fields": {
+      "main": [
+        [
+          {
+            "node": "Sync Tier to Close CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Tier to Close CRM": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

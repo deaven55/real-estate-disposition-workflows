@@ -1,0 +1,549 @@
+{
+  "name": "WholeStack WF-004: Follow-Up Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": null
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        256,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getDueFollowUps",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ current_time: Date.now(), max_follow_ups: 4, active_statuses: ['ping_sent', 'details_sent', 'locked'] }) }}",
+        "options": {}
+      },
+      "id": "getDue",
+      "name": "Get Due Follow-Ups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.data.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ifHasDue",
+      "name": "IF Has Due Follow-Ups",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        704,
+        304
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "noOp",
+      "name": "No Follow-Ups Due",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        912,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var distributions = $input.first().json.data || [];\nvar results = [];\n\nfor (var i = 0; i < distributions.length; i++) {\n  var dist = distributions[i];\n  var deal = dist.deal || {};\n  var buyer = dist.buyer || {};\n  \n  var skipStatuses = ['sold', 'expired', 'dead', 'under_contract'];\n  var shouldSkip = deal.status && skipStatuses.indexOf(deal.status) !== -1;\n  \n  if (!shouldSkip) {\n    results.push({ json: { distribution: dist, deal: deal, buyer: buyer } });\n  }\n}\n\nreturn results;"
+      },
+      "id": "prepareArray",
+      "name": "Prepare Distributions Array",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var distribution = $input.first().json.distribution;\nvar deal = $input.first().json.deal;\nvar buyer = $input.first().json.buyer;\n\nvar timezone = (buyer.preferences && buyer.preferences.timezone) || 'America/New_York';\n\nvar now = new Date();\nvar currentHour = now.getUTCHours();\n\nvar tzOffsets = {\n  'America/New_York': -4,\n  'America/Chicago': -5,\n  'America/Denver': -6,\n  'America/Los_Angeles': -7\n};\nvar offset = tzOffsets[timezone] || -4;\nvar localHour = (currentHour + offset + 24) % 24;\n\nvar isBusinessHours = localHour >= 9 && localHour < 20;\n\nreturn { json: { distribution: distribution, deal: deal, buyer: buyer, isBusinessHours: isBusinessHours } };"
+      },
+      "id": "checkBizHours",
+      "name": "Check Business Hours",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $json.isBusinessHours }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ifBizHours",
+      "name": "IF Within Business Hours",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateDistributionFollowUp",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ distributionId: $json.distribution._id, nextFollowUp: Date.now() + (12 * 60 * 60 * 1000) }) }}",
+        "options": {}
+      },
+      "id": "reschedule",
+      "name": "Reschedule to 9 AM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1584,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var dist = $json;\nvar status = dist.status;\nvar followUpCount = dist.follow_up_count || 0;\nvar buyerName = dist.buyer ? dist.buyer.display_name.split(' ')[0] : 'Investor';\nvar dealAddress = dist.deal ? dist.deal.property_address : 'the property';\nvar askingPrice = dist.deal ? dist.deal.asking_price : 0;\n\nvar template = '';\nvar isLastFollowUp = followUpCount >= 3;\n\nif (status === 'ping_sent') {\n  if (followUpCount === 0) {\n    template = buyerName + ', still interested in ' + dealAddress + '? Reply YES for full details. -Team';\n  } else if (followUpCount === 1) {\n    template = buyerName + ' - 2 other buyers looking at ' + dealAddress + '. Want details before they lock it? Reply YES. -Team';\n  } else if (followUpCount === 2) {\n    template = 'Hey ' + buyerName + ', getting offers on ' + dealAddress + '. Need your answer today. YES or PASS? -Team';\n  } else {\n    template = 'FINAL NOTICE ' + buyerName + ': ' + dealAddress + ' - passing to next buyer in 2 hours. Last chance to reply YES. -Team';\n  }\n} else if (status === 'details_sent') {\n  if (followUpCount === 0) {\n    template = buyerName + ', thoughts on ' + dealAddress + '? Reply LOCK to hold it for 24hrs. -Team';\n  } else if (followUpCount === 1) {\n    template = buyerName + ' - another buyer is reviewing ' + dealAddress + '. Lock it now or lose it? Reply LOCK. -Team';\n  } else if (followUpCount === 2) {\n    template = 'Hey ' + buyerName + ', need a decision on ' + dealAddress + ' today. LOCK or PASS? -Team';\n  } else {\n    template = 'FINAL: ' + dealAddress + ' goes to next buyer in 2 hours. Reply LOCK now or it\\'s gone. -Team';\n  }\n} else if (status === 'locked') {\n  if (followUpCount === 0) {\n    template = buyerName + ', you locked ' + dealAddress + '. Need your email to send the package! -Team';\n  } else if (followUpCount === 1) {\n    template = buyerName + ' - still need your email for the ' + dealAddress + ' package. Reply with your email address. -Team';\n  } else if (followUpCount === 2) {\n    template = 'Hey ' + buyerName + ', your hold on ' + dealAddress + ' expires soon. Send your email to get the deal package! -Team';\n  } else {\n    template = 'URGENT ' + buyerName + ': Hold expiring on ' + dealAddress + '. Reply with EMAIL now or we release it. -Team';\n  }\n}\n\nvar nextFollowUp = isLastFollowUp ? null : Date.now() + (4 * 60 * 60 * 1000);\n\nreturn {\n  json: {\n    ...dist,\n    smsText: template,\n    nextFollowUp: nextFollowUp,\n    isLastFollowUp: isLastFollowUp,\n    followUpNumber: followUpCount + 1\n  }\n};"
+      },
+      "id": "selectTemplate",
+      "name": "Select Follow-Up Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lead_id: $json.buyer.closeLeadId, local_phone: '+15555550100', remote_phone: $json.buyer.phone, text: $json.smsText, direction: 'outbound', status: 'outbox' }) }}",
+        "options": {}
+      },
+      "id": "sendSms",
+      "name": "Send Follow-Up SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1792,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateDistributionFollowUp",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ distributionId: $('Select Follow-Up Template').first().json.distribution._id, followUpCount: ($('Select Follow-Up Template').first().json.distribution.followUpCount || 0) + 1, lastFollowUp: Date.now(), nextFollowUp: $('Select Follow-Up Template').first().json.isLastFollowUp ? null : Date.now() + (48 * 60 * 60 * 1000) }) }}",
+        "options": {}
+      },
+      "id": "updateFollowUp",
+      "name": "Update Follow-Up Count",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2016,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond3",
+              "leftValue": "={{ $('Select Follow-Up Template').first().json.isLastFollowUp }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ifLastFollowUp",
+      "name": "IF Last Follow-Up",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateDistributionStatus",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ distributionId: $('Select Follow-Up Template').first().json.distribution._id, status: 'no_response' }) }}",
+        "options": {}
+      },
+      "id": "markExhausted",
+      "name": "Mark Distribution Exhausted",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2464,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "id": "wait",
+      "name": "Rate Limit Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2464,
+        160
+      ]
+    },
+    {
+      "id": "get-close-status",
+      "name": "Get Close Lead Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.close.com/api/v1/lead/{{ $json.buyer.closeLeadId }}/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-protected",
+      "name": "Check Protected Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1730,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Check if lead has protected status\nvar closeData = $json;\nvar templateData = $('Select Follow-Up Template').first().json;\nvar statusLabel = (closeData.status_label || '').toLowerCase().trim();\n\n// PROTECTED STATUSES - NO SMS for these\nvar protectedStatuses = [\n  'human hand', 'hot lead', 'hot', 'warm lead',\n  'interested', 'not interested', 'dnc', 'dead',\n  'vetted buyer', 'vip'\n];\n\nvar isProtected = protectedStatuses.indexOf(statusLabel) !== -1;\n\nreturn [{\n  json: {\n    ...templateData,\n    _closeStatus: statusLabel,\n    _isProtectedStatus: isProtected,\n    canSend: !isProtected\n  }\n}];"
+      }
+    },
+    {
+      "id": "is-protected",
+      "name": "Is Protected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1730,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "protected-check",
+              "leftValue": "={{ $json.canSend }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "skip-protected",
+      "name": "Skip Protected",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        200
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Due Follow-Ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Due Follow-Ups": {
+      "main": [
+        [
+          {
+            "node": "IF Has Due Follow-Ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Due Follow-Ups": {
+      "main": [
+        [
+          {
+            "node": "Prepare Distributions Array",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Follow-Ups Due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Distributions Array": {
+      "main": [
+        [
+          {
+            "node": "Check Business Hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Business Hours": {
+      "main": [
+        [
+          {
+            "node": "IF Within Business Hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Within Business Hours": {
+      "main": [
+        [
+          {
+            "node": "Select Follow-Up Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reschedule to 9 AM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Follow-Up Template": {
+      "main": [
+        [
+          {
+            "node": "Get Close Lead Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Close Lead Status": {
+      "main": [
+        [
+          {
+            "node": "Check Protected Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Protected Status": {
+      "main": [
+        [
+          {
+            "node": "Is Protected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Protected?": {
+      "main": [
+        [
+          {
+            "node": "Send Follow-Up SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Protected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Follow-Up SMS": {
+      "main": [
+        [
+          {
+            "node": "Update Follow-Up Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Follow-Up Count": {
+      "main": [
+        [
+          {
+            "node": "IF Last Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Last Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Mark Distribution Exhausted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Distribution Exhausted": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "active": false
+}

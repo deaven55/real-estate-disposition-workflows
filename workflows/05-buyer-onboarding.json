@@ -1,0 +1,436 @@
+{
+  "name": "WholeStack WF-005: Buyer Onboarding",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Buyer Onboarding Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-buyer-onboard-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "validate",
+      "name": "Validate Buyer Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "jsCode": "var buyer = $input.first().json;\nvar errors = [];\n\nif (!buyer.name || buyer.name.trim() === '') {\n  errors.push('name is required');\n}\nif (!buyer.phone) {\n  errors.push('phone is required');\n}\n\nif (!buyer.criteria) {\n  errors.push('criteria object is required');\n} else {\n  if (!buyer.criteria.markets || buyer.criteria.markets.length === 0) {\n    errors.push('criteria.markets must have at least 1 market');\n  }\n  if (!buyer.criteria.propertyTypes || buyer.criteria.propertyTypes.length === 0) {\n    errors.push('criteria.propertyTypes must have at least 1 type');\n  }\n  if (!buyer.criteria.strategies || buyer.criteria.strategies.length === 0) {\n    errors.push('criteria.strategies must have at least 1 strategy');\n  }\n  if (!buyer.criteria.priceMin || buyer.criteria.priceMin <= 0) {\n    errors.push('criteria.priceMin must be > 0');\n  }\n  if (!buyer.criteria.priceMax || buyer.criteria.priceMax <= buyer.criteria.priceMin) {\n    errors.push('criteria.priceMax must be > priceMin');\n  }\n  if (!buyer.criteria.monthlyCapacity || buyer.criteria.monthlyCapacity <= 0) {\n    errors.push('criteria.monthlyCapacity must be > 0');\n  }\n  \n  var validStrategies = ['Flip', 'BRRRR', 'Rental', 'Wholesale'];\n  if (buyer.criteria.strategies) {\n    for (var i = 0; i < buyer.criteria.strategies.length; i++) {\n      if (validStrategies.indexOf(buyer.criteria.strategies[i]) === -1) {\n        errors.push('Invalid strategy: ' + buyer.criteria.strategies[i]);\n      }\n    }\n  }\n  \n  var validPropertyTypes = ['SFR', 'Duplex', 'Multi', 'Land', 'Commercial'];\n  if (buyer.criteria.propertyTypes) {\n    for (var i = 0; i < buyer.criteria.propertyTypes.length; i++) {\n      if (validPropertyTypes.indexOf(buyer.criteria.propertyTypes[i]) === -1) {\n        errors.push('Invalid propertyType: ' + buyer.criteria.propertyTypes[i]);\n      }\n    }\n  }\n}\n\nreturn {\n  json: {\n    valid: errors.length === 0,\n    errors: errors,\n    buyer: buyer\n  }\n};"
+      }
+    },
+    {
+      "id": "ifValid",
+      "name": "IF Valid Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        690,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "respond400",
+      "name": "Respond 400 Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        910,
+        450
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({ success: false, errors: $json.errors }) }}"
+      }
+    },
+    {
+      "id": "normalizePhone",
+      "name": "Normalize Phone to E164",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        910,
+        150
+      ],
+      "parameters": {
+        "jsCode": "var buyer = $input.first().json.buyer;\nvar phone = buyer.phone;\n\nvar digits = phone.replace(/\\D/g, '');\n\nif (digits.length === 10) {\n  digits = '1' + digits;\n}\n\nif (digits.length === 11 && digits[0] === '1') {\n  phone = '+' + digits;\n} else {\n  phone = '+' + digits;\n}\n\nreturn {\n  json: {\n    buyer: buyer,\n    normalizedPhone: phone\n  }\n};"
+      }
+    },
+    {
+      "id": "checkDupe",
+      "name": "Check Duplicate Buyer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1130,
+        150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getBuyerByPhone",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.normalizedPhone }) }}"
+      }
+    },
+    {
+      "id": "ifDupe",
+      "name": "IF Buyer Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1350,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $json.data }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "handleExisting",
+      "name": "Handle Existing Buyer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1570,
+        0
+      ],
+      "parameters": {
+        "jsCode": "var existingBuyer = $input.first().json.data;\nvar response = null;\n\nswitch (existingBuyer.status) {\n  case 'dnc':\n    response = {\n      statusCode: 403,\n      body: { success: false, error: 'Buyer is on DNC list. They must text START to reactivate.', buyerId: existingBuyer._id, status: 'dnc' }\n    };\n    break;\n  case 'pending_optin':\n    response = {\n      statusCode: 200,\n      body: { success: true, buyerId: existingBuyer._id, status: 'pending_optin', note: 'Opt-in SMS resent. Buyer must reply YES.' },\n      resendOptin: true,\n      closeLeadId: existingBuyer.closeLeadId\n    };\n    break;\n  case 'inactive':\n  case 'dormant':\n    response = {\n      statusCode: 200,\n      body: { success: true, buyerId: existingBuyer._id, status: 'pending_optin', note: 'Buyer reactivated. Opt-in SMS sent.' },\n      resendOptin: true,\n      closeLeadId: existingBuyer.closeLeadId\n    };\n    break;\n  default:\n    response = {\n      statusCode: 200,\n      body: { success: true, buyerId: existingBuyer._id, status: existingBuyer.status, note: 'Criteria updated for existing buyer.' }\n    };\n}\n\nreturn { json: response };"
+      }
+    },
+    {
+      "id": "respondExisting",
+      "name": "Respond Existing Buyer",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1790,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": "={{ $json.statusCode }}",
+        "responseBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "createBuyer",
+      "name": "Create Buyer in Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1570,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/createBuyer",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Normalize Phone to E164').first().json.buyer.name, phone: $('Normalize Phone to E164').first().json.normalizedPhone, email: $('Normalize Phone to E164').first().json.buyer.email || null, company: $('Normalize Phone to E164').first().json.buyer.company || null, source: $('Normalize Phone to E164').first().json.buyer.source || 'website', referredBy: $('Normalize Phone to E164').first().json.buyer.referredBy || null, criteria: { markets: $('Normalize Phone to E164').first().json.buyer.criteria.markets, propertyTypes: $('Normalize Phone to E164').first().json.buyer.criteria.propertyTypes, priceMin: $('Normalize Phone to E164').first().json.buyer.criteria.priceMin, priceMax: $('Normalize Phone to E164').first().json.buyer.criteria.priceMax, arvMin: $('Normalize Phone to E164').first().json.buyer.criteria.arvMin || null, strategies: $('Normalize Phone to E164').first().json.buyer.criteria.strategies, fundingType: $('Normalize Phone to E164').first().json.buyer.criteria.fundingType || 'Cash', monthlyCapacity: $('Normalize Phone to E164').first().json.buyer.criteria.monthlyCapacity, conditionAccepted: $('Normalize Phone to E164').first().json.buyer.criteria.conditionAccepted || ['Light', 'Medium', 'Heavy'] }, preferences: { preferredChannel: 'sms', bestContactTime: null, bestContactDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], timezone: $('Normalize Phone to E164').first().json.buyer.preferences?.timezone || 'America/New_York', voiceOptIn: $('Normalize Phone to E164').first().json.buyer.voiceOptIn || false } }) }}"
+      }
+    },
+    {
+      "id": "createCloseLead",
+      "name": "Create Close CRM Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1790,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/lead/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: '[WholeStack] ' + $('Normalize Phone to E164').first().json.buyer.name, status_label: 'Potential', contacts: [{ name: $('Normalize Phone to E164').first().json.buyer.name, phones: [{ phone: $('Normalize Phone to E164').first().json.normalizedPhone, type: 'mobile' }], emails: $('Normalize Phone to E164').first().json.buyer.email ? [{ email: $('Normalize Phone to E164').first().json.buyer.email, type: 'work' }] : [] }], custom: { cf_QaXxtdAmTEByJ8SOBFk4wizgJwrwZF7XtSufDkTCP2x: $('Create Buyer in Convex').first().json.data._id, cf_tNLNi0SXrw5kMhnWilHLQWkerkx6gGMwpuTH9p1j2XL: $('Normalize Phone to E164').first().json.buyer.criteria.markets.join(','), cf_OKjNsqdbMxMcThu43cIhnhwFoLeYs7iigX8Pqz6Y1ma: 'warm', cf_VFuXiSLbhAQIp4448PknymYFsHUx6P1rJpcvMimLz3j: $('Normalize Phone to E164').first().json.buyer.source || 'website', cf_JmA0rE8IcwtfXnpqV42YC3JTD7JAe7UczFCLxwcE8sK: String($('Normalize Phone to E164').first().json.buyer.criteria.priceMin), cf_0WXJcdwa56nB9MdVCvImVIUqpfU5VUmRjVxzKypGWy5: String($('Normalize Phone to E164').first().json.buyer.criteria.priceMax), cf_XXsQomvB9JAtMWCmCW5v9bOf0iZyM356VWWI4DGp5kr: $('Normalize Phone to E164').first().json.buyer.criteria.strategies.join(','), cf_kz6C7hpyZZRheIPhCqDXGnR8fZ9cRJ7RuqJtJs8jfOy: $('Normalize Phone to E164').first().json.buyer.criteria.propertyTypes.join(','), cf_q1eGMfEgIdfL0zulAlCZ1GpeKIjkgM6gN1EaLfOn3LS: ($('Normalize Phone to E164').first().json.buyer.criteria.conditionAccepted || ['Light', 'Medium', 'Heavy']).join(',') } }) }}"
+      }
+    },
+    {
+      "id": "linkCloseId",
+      "name": "Link Close Lead to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2010,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateBuyerStatus",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ buyerId: $('Create Buyer in Convex').first().json.data._id, closeLeadId: $('Create Close CRM Lead').first().json.id }) }}"
+      }
+    },
+    {
+      "id": "sendOptinSms",
+      "name": "Send Opt-In SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2230,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lead_id: $('Create Close CRM Lead').first().json.id, local_phone: '+15555550100', remote_phone: $('Normalize Phone to E164').first().json.normalizedPhone, text: 'You have been added to PropOps deal alerts. Msg frequency varies. Msg & data rates may apply.\\n\\nReply YES to start getting deals.\\nReply STOP anytime to opt out.', direction: 'outbound', status: 'outbox' }) }}"
+      }
+    },
+    {
+      "id": "slackNotify",
+      "name": "Slack New Buyer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2450,
+        300
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_WholeStack }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '👤 *New Buyer Registered*\\n\\n' + $('Normalize Phone to E164').first().json.buyer.name + '\\nMarkets: ' + $('Normalize Phone to E164').first().json.buyer.criteria.markets.join(', ') + '\\nPrice Range: $' + $('Normalize Phone to E164').first().json.buyer.criteria.priceMin.toLocaleString() + ' - $' + $('Normalize Phone to E164').first().json.buyer.criteria.priceMax.toLocaleString() + '\\nStrategies: ' + $('Normalize Phone to E164').first().json.buyer.criteria.strategies.join(', ') + '\\nSource: ' + ($('Normalize Phone to E164').first().json.buyer.source || 'website') + '\\n\\nStatus: pending_optin (awaiting YES)' }) }}"
+      }
+    },
+    {
+      "id": "respond201",
+      "name": "Respond 201 Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2670,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 201,
+        "responseBody": "={{ JSON.stringify({ success: true, buyerId: $('Create Buyer in Convex').first().json.data._id, closeLeadId: $('Create Close CRM Lead').first().json.id, status: 'pending_optin', tier: 'warm', note: 'Opt-in SMS sent. Buyer must reply YES before receiving deals.' }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Buyer Onboarding Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Buyer Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Buyer Input": {
+      "main": [
+        [
+          {
+            "node": "IF Valid Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize Phone to E164",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400 Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Phone to E164": {
+      "main": [
+        [
+          {
+            "node": "Check Duplicate Buyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Duplicate Buyer": {
+      "main": [
+        [
+          {
+            "node": "IF Buyer Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Buyer Exists": {
+      "main": [
+        [
+          {
+            "node": "Handle Existing Buyer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Buyer in Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Existing Buyer": {
+      "main": [
+        [
+          {
+            "node": "Respond Existing Buyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Buyer in Convex": {
+      "main": [
+        [
+          {
+            "node": "Create Close CRM Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Close CRM Lead": {
+      "main": [
+        [
+          {
+            "node": "Link Close Lead to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link Close Lead to Convex": {
+      "main": [
+        [
+          {
+            "node": "Send Opt-In SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Opt-In SMS": {
+      "main": [
+        [
+          {
+            "node": "Slack New Buyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack New Buyer": {
+      "main": [
+        [
+          {
+            "node": "Respond 201 Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

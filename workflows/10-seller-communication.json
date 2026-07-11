@@ -1,0 +1,434 @@
+{
+  "name": "WholeStack WF-010: Seller Communication",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Seller Notify Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-seller-notify",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fetchDeal",
+      "name": "Fetch Deal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getDeal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId: $json.body.dealId }) }}"
+      }
+    },
+    {
+      "id": "ifHasSeller",
+      "name": "IF Has Seller",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        690,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.data.sellerId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "respondNoSeller",
+      "name": "Respond No Seller",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        910,
+        450
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, skipped: true, reason: 'no_seller' }) }}"
+      }
+    },
+    {
+      "id": "fetchSeller",
+      "name": "Fetch Seller",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        910,
+        150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getSeller",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sellerId: $('Fetch Deal').first().json.data.sellerId }) }}"
+      }
+    },
+    {
+      "id": "selectTemplate",
+      "name": "Select SMS Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        150
+      ],
+      "parameters": {
+        "jsCode": "var deal = $('Fetch Deal').first().json.data;\nvar seller = $input.first().json.data;\nvar newStatus = $('Seller Notify Webhook').first().json.newStatus;\nvar event = $('Seller Notify Webhook').first().json.event;\nvar context = $('Seller Notify Webhook').first().json.context || {};\n\nif (seller.status === 'dnc') {\n  return { json: { shouldSend: false, reason: 'seller_dnc' } };\n}\n\nvar templates = {\n  'active': 'Your property at ' + deal.address + ' is live with our buyers. I will keep you posted.',\n  'first_interest': 'Got interest on ' + deal.address + '. Working on it.',\n  'reserved': 'Buyer locked in on ' + deal.address + '. Getting next steps together.',\n  'package_sent': 'Full package sent to the buyer on ' + deal.address + '. I will follow up.',\n  'under_contract': 'Contract signed on ' + deal.address + '. Closing process started.',\n  'expired': 'No bites yet on ' + deal.address + '. Want to adjust the price?',\n  'sold': 'Closed on ' + deal.address + '. Assignment fee: $' + ((context.assignmentFee || deal.assignmentFee || 0).toLocaleString()) + '. Thanks for the deal!'\n};\n\nvar templateKey = event === 'first_interest' ? 'first_interest' : newStatus;\nvar smsText = templates[templateKey] || templates['active'];\n\nreturn { json: { shouldSend: true, seller: seller, deal: deal, smsText: smsText } };"
+      }
+    },
+    {
+      "id": "ifShouldSend",
+      "name": "IF Should Send SMS",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1350,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $json.shouldSend }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "respondDnc",
+      "name": "Respond Seller DNC",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1570,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, skipped: true, reason: 'seller_dnc' }) }}"
+      }
+    },
+    {
+      "id": "sendSms",
+      "name": "Send Seller SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1570,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.close.com/api/v1/activity/sms/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lead_id: $json.seller.closeLeadId || null, local_phone: '+15555550100', remote_phone: $json.seller.phone, text: $json.smsText, direction: 'outbound', status: 'outbox' }) }}"
+      },
+      "disabled": false
+    },
+    {
+      "id": "updateSellerContact",
+      "name": "Update Seller Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1790,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/updateSellerStatus",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sellerId: $('Select SMS Template').first().json.seller._id, lastContacted: Date.now() }) }}"
+      }
+    },
+    {
+      "id": "respondSuccess",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2010,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, sellerId: $('Select SMS Template').first().json.seller._id, smsSent: true }) }}"
+      }
+    },
+    {
+      "id": "get-close-status",
+      "name": "Get Close Lead Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1460,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.close.com/api/v1/lead/{{ $json.seller.closeLeadId }}/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "check-protected",
+      "name": "Check Protected Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1510,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Check if seller lead has protected status\nvar closeData = $json;\nvar templateData = $('Select SMS Template').first().json;\nvar statusLabel = (closeData.status_label || '').toLowerCase().trim();\n\n// PROTECTED STATUSES - NO SMS for these\nvar protectedStatuses = [\n  'human hand', 'hot lead', 'hot', 'warm lead',\n  'interested', 'not interested', 'dnc', 'dead',\n  'vetted buyer', 'vip'\n];\n\nvar isProtected = protectedStatuses.indexOf(statusLabel) !== -1;\n\nreturn [{\n  json: {\n    ...templateData,\n    _closeStatus: statusLabel,\n    _isProtectedStatus: isProtected,\n    canSend: !isProtected\n  }\n}];"
+      }
+    },
+    {
+      "id": "is-protected",
+      "name": "Is Protected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1510,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "protected-check",
+              "leftValue": "={{ $json.canSend }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Seller Notify Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Deal": {
+      "main": [
+        [
+          {
+            "node": "IF Has Seller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Seller": {
+      "main": [
+        [
+          {
+            "node": "Fetch Seller",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond No Seller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Seller": {
+      "main": [
+        [
+          {
+            "node": "Select SMS Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select SMS Template": {
+      "main": [
+        [
+          {
+            "node": "IF Should Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Should Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Get Close Lead Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Seller DNC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Close Lead Status": {
+      "main": [
+        [
+          {
+            "node": "Check Protected Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Protected Status": {
+      "main": [
+        [
+          {
+            "node": "Is Protected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Protected?": {
+      "main": [
+        [
+          {
+            "node": "Send Seller SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Seller DNC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Seller SMS": {
+      "main": [
+        [
+          {
+            "node": "Update Seller Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Seller Contact": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

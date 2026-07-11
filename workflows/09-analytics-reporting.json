@@ -1,0 +1,185 @@
+{
+  "name": "WholeStack WF-009: Analytics & Reporting",
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Daily 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "getDeals",
+      "name": "Get Deals This Week",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getActiveDeals",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'all' }) }}"
+      }
+    },
+    {
+      "id": "getDistributions",
+      "name": "Get All Distributions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getExhaustedDistributions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ since: Date.now() - (7 * 24 * 60 * 60 * 1000) }) }}"
+      }
+    },
+    {
+      "id": "getMarkets",
+      "name": "Get Market Intelligence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        690,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getMarketIntelligence",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}"
+      }
+    },
+    {
+      "id": "calcMetrics",
+      "name": "Calculate Analytics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        910,
+        300
+      ],
+      "parameters": {
+        "jsCode": "var deals = $('Get Deals This Week').first().json.data || [];\nvar markets = $('Get Market Intelligence').first().json.data || [];\nvar now = Date.now();\nvar weekAgo = now - (7 * 24 * 60 * 60 * 1000);\n\nvar thisWeekDeals = deals.filter(function(d) {\n  return d.createdAt && d.createdAt >= weekAgo;\n});\n\nvar dealsByStatus = {};\nfor (var i = 0; i < thisWeekDeals.length; i++) {\n  var status = thisWeekDeals[i].status || 'unknown';\n  dealsByStatus[status] = (dealsByStatus[status] || 0) + 1;\n}\n\nvar avgScore = 0;\nif (thisWeekDeals.length > 0) {\n  var totalScore = 0;\n  for (var i = 0; i < thisWeekDeals.length; i++) {\n    totalScore += thisWeekDeals[i].dealScore || 0;\n  }\n  avgScore = Math.round(totalScore / thisWeekDeals.length);\n}\n\nvar hotMarkets = markets.filter(function(m) { return m.health === 'hot'; });\nvar coldMarkets = markets.filter(function(m) { return m.health === 'cold'; });\nvar deadMarkets = markets.filter(function(m) { return m.health === 'dead'; });\n\nvar report = '📊 *WholeStack Weekly Report*\\n\\n' +\n  '*Deal Flow This Week*\\n' +\n  '• Submitted: ' + thisWeekDeals.length + '\\n' +\n  '• Active: ' + (dealsByStatus['active'] || 0) + '\\n' +\n  '• Reserved: ' + (dealsByStatus['reserved'] || 0) + '\\n' +\n  '• Under Contract: ' + (dealsByStatus['under_contract'] || 0) + '\\n' +\n  '• Sold: ' + (dealsByStatus['sold'] || 0) + '\\n' +\n  '• Expired: ' + (dealsByStatus['expired'] || 0) + '\\n\\n' +\n  '*Avg Deal Score:* ' + avgScore + '\\n\\n' +\n  '*Market Health*\\n' +\n  '🔥 Hot: ' + hotMarkets.length + ' markets\\n' +\n  '❄️ Cold: ' + coldMarkets.length + ' markets\\n' +\n  '💀 Dead: ' + deadMarkets.length + ' markets';\n\nreturn { json: { report: report } };"
+      }
+    },
+    {
+      "id": "slackReport",
+      "name": "Send Slack Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1130,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "your-slack-channel",
+          "mode": "name"
+        },
+        "messageType": "text",
+        "text": "={{ $json.report }}",
+        "otherOptions": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Daily 9 AM": {
+      "main": [
+        [
+          {
+            "node": "Get Deals This Week",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get All Distributions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Deals This Week": {
+      "main": [
+        [
+          {
+            "node": "Get Market Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Distributions": {
+      "main": [
+        [
+          {
+            "node": "Get Market Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Market Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Calculate Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Analytics": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

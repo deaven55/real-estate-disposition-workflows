@@ -121,7 +121,7 @@ Built by **Rafiul Islam**. AI Voice Agent Systems Architect and Full-Stack Autom
 
 - Portfolio: [rafiul-dev.vercel.app](https://rafiul-dev.vercel.app)
 - Frontend dashboard: [bids-dashboard.vercel.app](https://bids-dashboard.vercel.app)
-- Part of 500+ production workflows across 15+ products. Backend architecture walkthroughs available on request.
+- Part of 200+ production workflows across 15+ products. Backend architecture walkthroughs available on request.
 
 ---
 

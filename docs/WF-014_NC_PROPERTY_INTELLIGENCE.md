@@ -10,7 +10,7 @@ The collector is evidence-first. It does not calculate ARV, MAO, repairs, or dea
 
 ## State/county targeting
 
-The workflow is **not locked to Catawba County**. The request must provide `state` and `county`. Known counties can use a curated source registry; any other state/county can enter the source-discovery path, which uses the configured Perplexity provider to identify official government/public-record URLs before Firecrawl collection. Discovered sources are still treated as unverified evidence until the underlying record is validated.
+The workflow is **not locked to Catawba County**. The request can provide `state` and `county`, but county is now optional. If county is omitted, WF-014 resolves the county from the supplied property address using the configured property-research provider. State can also be inferred from supported ZIP prefixes when state is omitted. Known counties can use a curated source registry; any other state/county can enter the source-discovery path, which uses the configured Perplexity provider to identify official government/public-record URLs before Firecrawl collection. Discovered sources are still treated as unverified evidence until the underlying record is validated.
 
 ### Current curated county: Catawba County, NC
 

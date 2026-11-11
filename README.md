@@ -223,3 +223,10 @@ WF-014 stores provider output as evidence in InsulaCRM. It does not treat a land
 ### Canonical property intelligence reconciliation
 
 WF-014 now calls InsulaCRM's property-intelligence reconciliation endpoint after aggregating source evidence. This writes evidence-backed owner, parcel, assessment, tax, acreage, zoning, sale, permit, and other stable property facts into the canonical Property record while retaining per-field provenance. Source precedence is deterministic and stronger existing provenance is preserved. WF-012 is then called with the original aggregated evidence bundle for evidence-first AI deal analysis.
+
+
+### WF-017 Deal Ranking Engine
+
+- `workflows/17-deal-ranking-engine.json` ranks acquisition opportunities through the canonical InsulaCRM ranking endpoint.
+- Supports ARV, repairs, offer spread, motivation, comps, buyer demand, property completeness, distress signals, and risk flags.
+- Jurisdiction-agnostic; no county/state is hardcoded.

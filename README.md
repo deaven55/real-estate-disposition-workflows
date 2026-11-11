@@ -217,4 +217,4 @@ Required env vars:
 - `PERPLEXITY_API_URL` (optional)
 - `PERPLEXITY_PROPERTY_MODEL` (optional)
 
-WF-014 stores provider output as evidence in InsulaCRM. It does not treat a landing page or scraped text as a verified property fact and does not calculate ARV/MAO itself. WF-014 is intentionally provider-neutral: it collects and stores source evidence but does not calculate ARV/MAO. The next hardening step is stable county dataset/API parsing plus a controlled handoff into WF-012 for evidence-first AI analysis.
+WF-014 stores provider output as evidence in InsulaCRM. It does not treat a landing page or scraped text as a verified property fact and does not calculate ARV/MAO itself. WF-014 is intentionally provider-neutral: it collects source evidence, then extracts evidence-constrained structured property facts such as owner, parcel ID, assessed value, acreage, building size, sales history, tax status, permits, zoning, and legal description. Fields not explicitly supported by source text remain null. WF-014 does not calculate ARV/MAO. The next hardening step is stable county dataset/API parsing plus a controlled handoff into WF-012 for evidence-first AI analysis.

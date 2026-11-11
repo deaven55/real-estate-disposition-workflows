@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst dealId = body.dealId ?? body.deal_id;\nconst address = String(body.address ?? '').trim();\nconst city = String(body.city ?? '').trim();\nconst state = String(body.state ?? 'NC').trim().toUpperCase();\nconst zip = String(body.zip ?? '').trim();\nconst county = String(body.county ?? '').trim();\nif (!dealId || !address || !city || state !== 'NC') return [{json:{valid:false,error:'dealId, address, city and NC state are required'}}];\nconst fullAddress = [address,city,state,zip].filter(Boolean).join(', ');\nreturn [{json:{valid:true,dealId,address,city,state,zip,county,fullAddress,requestedAt:new Date().toISOString()}}];"
+        "jsCode": "const body = $json.body ?? $json;\nconst dealId = body.dealId ?? body.deal_id;\nconst address = String(body.address ?? '').trim();\nconst city = String(body.city ?? '').trim();\nlet state = String(body.state ?? '').trim().toUpperCase();\nlet zip = String(body.zip ?? '').trim();\nlet county = String(body.county ?? '').trim();\nif (!dealId || !address || !city) return [{json:{valid:false,error:'dealId, address and city are required'}}];\nif (!state && zip.length >= 5) {\n  const zipState = {\n    '286':'NC','280':'NC','281':'NC','282':'NC','283':'NC','284':'NC','285':'NC','278':'NC','275':'NC','276':'NC',\n    '100':'NY','101':'NY','102':'NY','103':'NY','104':'NY','105':'NY','106':'NY','107':'NY','108':'NY','109':'NY','110':'NY',\n    '300':'GA','301':'GA','302':'GA','303':'GA','304':'GA','305':'GA','306':'GA','307':'GA','308':'GA','309':'GA','310':'GA',\n    '750':'TX','751':'TX','752':'TX','753':'TX','754':'TX','755':'TX','756':'TX','757':'TX','758':'TX','759':'TX','760':'TX'\n  };\n  state = zipState[zip.slice(0,3)] || '';\n}\nconst stateAliases = {'NORTH CAROLINA':'NC','SOUTH CAROLINA':'SC','GEORGIA':'GA','FLORIDA':'FL','VIRGINIA':'VA','TENNESSEE':'TN','NEW YORK':'NY','TEXAS':'TX'};\nstate = stateAliases[state] || state;\nif (!state) return [{json:{valid:false,error:'State is required when it cannot be resolved from the ZIP code'}}];\nconst fullAddress = [address,city,state,zip].filter(Boolean).join(', ');\nreturn [{json:{valid:true,dealId,address,city,state,zip,county,fullAddress,requestedAt:new Date().toISOString(),county_resolution_needed:!county}}];"
       },
       "id": "wf014-prepare",
       "name": "Prepare Property Request",
@@ -274,6 +274,112 @@
         -120,
         -20
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERPLEXITY_API_URL || 'https://api.perplexity.ai/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.PERPLEXITY_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({model:$env.PERPLEXITY_PROPERTY_MODEL || 'sonar',messages:[{role:'system',content:'Resolve the county for a US property address. Use authoritative sources where possible. Return JSON only: {county, state, confidence, source_citations:[{url,title}]} . Do not guess.'},{role:'user',content:'Resolve the county for this property: ' + $json.fullAddress}],temperature:0.1}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "wf014-county-resolver",
+      "name": "Resolve County When Missing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -120,
+        220
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Prepare Property Request').item.json;\nlet text=$json.output_text ?? $json.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nif(typeof text!=='string') text=JSON.stringify(text);\ntext=text.replace(/^\\`\\`\\`json\\s*/,'').replace(/\\s*\\`\\`\\`$/,'');\nlet county='', confidence=0, citations=[];\ntry { const parsed=JSON.parse(text); county=String(parsed.county||'').trim(); confidence=Number(parsed.confidence||0); citations=parsed.source_citations||[]; } catch {}\nif(!county) return [{json:{...base,valid:false,error:'Unable to resolve county from the supplied address',county_resolution_confidence:confidence}}];\nreturn [{json:{...base,county,county_resolution_confidence:confidence,county_resolution_sources:citations,county_resolution_needed:false}}];"
+      },
+      "id": "wf014-county-normalize",
+      "name": "Normalize County Resolution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.county_resolution_needed }}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "wf014-county-if",
+      "name": "County Supplied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:$json}];"
+      },
+      "id": "wf014-county-pass",
+      "name": "Use Supplied County",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:$json}];"
+      },
+      "id": "wf014-county-join",
+      "name": "Continue With Resolved County",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const state=$json.state; const county=$json.county; if(!state||!county) return [{json:{...$json,valid:false,error:'State/county resolution incomplete'}}]; return [{json:$json}];"
+      },
+      "id": "wf014-state-county-ready",
+      "name": "Validate State and County",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        120
+      ]
     }
   ],
   "connections": {
@@ -303,7 +409,7 @@
       "main": [
         [
           {
-            "node": "Build State/County Source Targets",
+            "node": "Resolve State/County Inputs",
             "type": "main",
             "index": 0
           }
@@ -428,6 +534,90 @@
         [
           {
             "node": "Split Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve State/County Inputs": {
+      "main": [
+        [
+          {
+            "node": "County Supplied?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "County Supplied?": {
+      "main": [
+        [
+          {
+            "node": "Use Supplied County",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resolve County When Missing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Supplied County": {
+      "main": [
+        [
+          {
+            "node": "Continue With Resolved County",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve County When Missing": {
+      "main": [
+        [
+          {
+            "node": "Normalize County Resolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize County Resolution": {
+      "main": [
+        [
+          {
+            "node": "Continue With Resolved County",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue With Resolved County": {
+      "main": [
+        [
+          {
+            "node": "Validate State and County",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate State and County": {
+      "main": [
+        [
+          {
+            "node": "Build State/County Source Targets",
             "type": "main",
             "index": 0
           }

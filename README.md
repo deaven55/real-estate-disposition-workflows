@@ -194,11 +194,11 @@ The adapter converts the results into the provider-neutral evidence schema and s
 This keeps external providers replaceable and makes every analysis traceable back to collected evidence.
 
 
-### WF-014 — NC Property Intelligence Collector
+### WF-014 — State/County Property Intelligence Collector
 
-`workflows/14-nc-property-intelligence-collector.json` adds county-targeted public-source collection.
+`workflows/14-nc-property-intelligence-collector.json` adds state/county-targeted public-source collection. The search contract is state-agnostic: the caller supplies a US state and optionally a county. If county is omitted, the workflow resolves it from the property address before source selection.
 
-The first enabled county adapter is **Catawba County, NC** and targets official starting points for:
+The first curated county adapter is **Catawba County, NC** and targets official starting points for:
 - parcel/GIS records
 - real-estate tax records
 - delinquent-tax searches
@@ -206,12 +206,15 @@ The first enabled county adapter is **Catawba County, NC** and targets official 
 - county GIS datasets
 - land records
 
-The source registry is maintained separately in `config/nc-property-sources.json` so additional NC counties can be enabled without rewriting the workflow.
+The curated registry is maintained in `config/nc-property-sources.json`. Unknown state/county combinations fall back to official-source discovery through the configured research provider, so the workflow is not limited to North Carolina.
 
 Required env vars:
 - `INSULA_CRM_BASE_URL`
 - `INSULA_CRM_API_KEY`
 - `FIRECRAWL_API_KEY`
 - `FIRECRAWL_API_URL` (optional)
+- `PERPLEXITY_API_KEY` (required for county resolution/discovery when county is not supplied or not curated)
+- `PERPLEXITY_API_URL` (optional)
+- `PERPLEXITY_PROPERTY_MODEL` (optional)
 
-WF-014 stores provider output as evidence in InsulaCRM. It does not treat a landing page or scraped text as a verified property fact and does not calculate ARV/MAO itself. The next production-hardening step is stable county dataset/API parsing and automatic handoff from WF-014 into WF-012 for evidence-first AI analysis.
+WF-014 stores provider output as evidence in InsulaCRM. It does not treat a landing page or scraped text as a verified property fact and does not calculate ARV/MAO itself. WF-014 is intentionally provider-neutral: it collects and stores source evidence but does not calculate ARV/MAO. The next hardening step is stable county dataset/API parsing plus a controlled handoff into WF-012 for evidence-first AI analysis.

@@ -143,57 +143,6 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $json.dealId + '/evidence' }}",
-        "sendHeaders": true,
-        "headerParametersUi": {
-          "parameter": [
-            {
-              "name": "X-API-Key",
-              "value": "={{ $env.INSULA_CRM_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Idempotency-Key",
-              "value": "=property_intelligence:nc_collector:{{$json.evidence.source}}:{{$json.evidence.source_record_id}}:v1"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "json",
-        "bodyParametersJson": "={{ JSON.stringify($json.evidence) }}",
-        "options": {
-          "timeout": 30000
-        }
-      },
-      "id": "wf014-store",
-      "name": "Store Evidence in InsulaCRM",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        540,
-        -20
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const base = $('Normalize Evidence').item.json; return [{json:{dealId:base.dealId,evidence_source:base.evidence.source,stored:true}}];"
-      },
-      "id": "wf014-result",
-      "name": "Build Collector Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        760,
-        -20
-      ]
-    },
-    {
-      "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { ok: true, dealId: $json.dealId, source: $json.evidence_source, stored: $json.stored, next: 'Run WF-012 to build the evidence-first analysis context.' } }}",
         "options": {}
@@ -400,7 +349,7 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "bodyParametersJson": "={{ JSON.stringify({model:$env.OPENAI_PROPERTY_EXTRACTION_MODEL || $env.OPENAI_DEAL_ANALYSIS_MODEL || 'gpt-5-mini',input:[{role:'system',content:[{type:'input_text',text:'Extract property facts from the supplied public-record page text. Use ONLY facts explicitly present in the text. Never infer or guess. For every field not explicitly supported, return null. Return JSON only with: owner_name, mailing_address, property_address, parcel_id, property_type, assessed_value, land_value, building_value, acreage, lot_sqft, year_built, building_sqft, bedrooms, bathrooms, sale_date, sale_price, tax_amount, tax_status, delinquent_tax_amount, permit_records, zoning, legal_description, confidence, missing_fields, source_quotes. source_quotes must contain short exact snippets supporting extracted facts.'}]},{role:'user',content:[{type:'input_text',text:'Property context: '+JSON.stringify($json.extraction_context)+'\\n\\nSource text:\\n'+JSON.stringify($json.evidence.payload.content)}]}],text:{format:{type:'json_object'}},temperature:0.1}) }}",
+        "bodyParametersJson": "={{ JSON.stringify({ model: $env.OPENAI_PROPERTY_EXTRACTION_MODEL || $env.OPENAI_DEAL_ANALYSIS_MODEL || 'gpt-5-mini', messages: [{ role:'system', content:'Extract only property facts explicitly present in the supplied source text. Never infer, guess, or fill missing values. Use null for unsupported fields. source_quotes must contain short exact snippets supporting extracted facts. Return the requested JSON object.' }, { role:'user', content:[{type:'input_text',text:'Property context: '+JSON.stringify($json.extraction_context)+'\\\\n\\\\nSource text:\\\\n'+JSON.stringify($json.evidence.payload.content)}]}], text:{format:{type:'json_schema',name:'property_facts',strict:true,schema:{type:'object',properties:{\"owner_name\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"mailing_address\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"property_address\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"parcel_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"property_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"assessed_value\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"land_value\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"building_value\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"acreage\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"lot_sqft\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"year_built\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"building_sqft\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"bedrooms\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"bathrooms\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"sale_date\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"sale_price\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"tax_amount\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"tax_status\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"delinquent_tax_amount\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"permit_records\":{\"anyOf\":[{\"type\":\"array\",\"items\":{\"type\":\"string\"}},{\"type\":\"null\"}]},\"zoning\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"legal_description\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"missing_fields\":{\"anyOf\":[{\"type\":\"array\",\"items\":{\"type\":\"string\"}},{\"type\":\"null\"}]},\"source_quotes\":{\"anyOf\":[{\"type\":\"array\",\"items\":{\"type\":\"string\"}},{\"type\":\"null\"}]}},required:[\"owner_name\",\"mailing_address\",\"property_address\",\"parcel_id\",\"property_type\",\"assessed_value\",\"land_value\",\"building_value\",\"acreage\",\"lot_sqft\",\"year_built\",\"building_sqft\",\"bedrooms\",\"bathrooms\",\"sale_date\",\"sale_price\",\"tax_amount\",\"tax_status\",\"delinquent_tax_amount\",\"permit_records\",\"zoning\",\"legal_description\",\"confidence\",\"missing_fields\",\"source_quotes\"],additionalProperties:false}}}}) }}",
         "options": {
           "timeout": 90000
         }
@@ -425,6 +374,69 @@
       "typeVersion": 2,
       "position": [
         220,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items=$input.all(); if(!items.length) return [];\nconst first=items[0].json;\nconst evidence=items.map(i=>i.json.evidence).filter(Boolean);\nreturn [{json:{\n  dealId:first.dealId,\n  evidence,\n  analysisContext:{\n    property_request:{\n      address:first.evidence?.payload?.address || null,\n      county:first.evidence?.payload?.county || null\n    },\n    evidence_count:evidence.length\n  }\n}}}];"
+      },
+      "id": "wf014-aggregate",
+      "name": "Aggregate Evidence Bundle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_INTERNAL_BASE_URL + '/webhook/wholestack-property-intelligence-v1' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "=property_intelligence:wf014:{{$json.dealId}}:v1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({dealId:$json.dealId,evidence:$json.evidence,analysisContext:$json.analysisContext}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "wf014-call-wf012",
+      "name": "Call WF-012 Evidence Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        620
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, dealId: $('Aggregate Evidence Bundle').first().json.dealId, evidence_count: $('Aggregate Evidence Bundle').first().json.evidence.length, pipeline: 'WF-012 evidence persistence + WF-011 AI deal analysis', result: $json } }}",
+        "options": {}
+      },
+      "id": "wf014-response-v2",
+      "name": "Respond Pipeline Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        940,
         620
       ]
     }
@@ -508,28 +520,6 @@
         [
           {
             "node": "Extract Structured Property Facts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Store Evidence in InsulaCRM": {
-      "main": [
-        [
-          {
-            "node": "Build Collector Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Collector Result": {
-      "main": [
-        [
-          {
-            "node": "Respond Success",
             "type": "main",
             "index": 0
           }
@@ -686,7 +676,29 @@
       "main": [
         [
           {
-            "node": "Store Evidence in InsulaCRM",
+            "node": "Aggregate Evidence Bundle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Evidence Bundle": {
+      "main": [
+        [
+          {
+            "node": "Call WF-012 Evidence Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF-012 Evidence Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Respond Pipeline Result",
             "type": "main",
             "index": 0
           }

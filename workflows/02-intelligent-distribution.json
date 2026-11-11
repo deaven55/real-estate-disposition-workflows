@@ -359,13 +359,13 @@
             },
             {
               "name": "Idempotency-Key",
-              "value": "={{ 'disposition:deal-buyer-match:' + ($json.buyer.insulaBuyerId || $json.buyer.convexBuyerId) + ':' + ($json.deal._id || $json.deal.id) + ':v1' }}"
+              "value": "{{ 'disposition:deal-buyer-match:' + ($('Prepare Buyers Array').first().json.buyer.insulaBuyerId || $('Prepare Buyers Array').first().json.buyer.convexBuyerId) + ':' + ($('Prepare Buyers Array').first().json.deal._id || $('Prepare Buyers Array').first().json.deal.id) + ':v1' }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ buyer_id: $json.buyer.insulaBuyerId, match_score: Math.round($json.buyer.matchScore * 100), status: 'matched', outreach_status: 'pending', buyer_notes: 'Recommended by Intelligent Distribution' }) }}",
+        "jsonBody": "{{ JSON.stringify({ buyer_id: $('Prepare Buyers Array').first().json.buyer.insulaBuyerId, match_score: Math.round($('Prepare Buyers Array').first().json.buyer.matchScore * 100), status: 'matched', outreach_status: 'pending', buyer_notes: 'Recommended by Intelligent Distribution' }) }}",
         "options": {
           "timeout": 30000
         }

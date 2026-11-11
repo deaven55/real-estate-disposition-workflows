@@ -179,6 +179,44 @@
         "genericAuthType": "httpBasicAuth"
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/buyers/' + $('Calculate Buyer Scores').first().json.buyer.insulaBuyerId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'disposition:buyer-score:' + ($('Calculate Buyer Scores').first().json.buyer.insulaBuyerId || $('Calculate Buyer Scores').first().json.buyer._id) + ':' + $('Calculate Buyer Scores').first().json.newTier + ':v1' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ buyer_score: $('Calculate Buyer Scores').first().json.scores.overall, buyer_tier: $('Calculate Buyer Scores').first().json.newTier }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "sync-buyer-score-to-insula",
+      "name": "Sync Buyer Score to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        300
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -241,7 +279,7 @@
       "main": [
         [
           {
-            "node": "IF Tier Changed",
+            "node": "Sync Buyer Score to InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -282,6 +320,17 @@
         [
           {
             "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Buyer Score to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "IF Tier Changed",
             "type": "main",
             "index": 0
           }

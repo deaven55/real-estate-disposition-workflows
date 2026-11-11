@@ -1,28 +1,448 @@
 {
   "name": "WF-014 NC Property Intelligence Collector",
   "nodes": [
-    {"parameters":{"httpMethod":"POST","path":"wholestack-nc-property-intelligence-v1","responseMode":"lastNode","options":{}},"id":"wf014-webhook","name":"Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[-1000,0],"webhookId":"wholestack-nc-property-intelligence-v1"},
-    {"parameters":{"jsCode":"const body = $json.body ?? $json;\nconst dealId = body.dealId ?? body.deal_id;\nconst address = String(body.address ?? '').trim();\nconst city = String(body.city ?? '').trim();\nconst state = String(body.state ?? 'NC').trim().toUpperCase();\nconst zip = String(body.zip ?? '').trim();\nconst county = String(body.county ?? '').trim();\nif (!dealId || !address || !city || state !== 'NC') return [{json:{valid:false,error:'dealId, address, city and NC state are required'}}];\nconst fullAddress = [address,city,state,zip].filter(Boolean).join(', ');\nreturn [{json:{valid:true,dealId,address,city,state,zip,county,fullAddress,requestedAt:new Date().toISOString()}}];"},"id":"wf014-prepare","name":"Prepare Property Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[-780,0]},
-    {"parameters":{"conditions":{"boolean":[{"value1":"={{ $json.valid }}","operation":"isTrue"}]}},"id":"wf014-valid","name":"IF Valid","type":"n8n-nodes-base.if","typeVersion":2,"position":[-560,0]},
-    {"parameters":{"respondWith":"json","responseBody":"={{ { ok: false, error: $json.error } }}","options":{"responseCode":400}},"id":"wf014-bad","name":"Respond 400","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[-340,180]},
-    {"parameters":{"jsCode":"const registry = { Catawba: [\n{id:'catawba_gis',type:'parcel_gis',evidenceType:'property_record',url:'https://gis.catawbacountync.gov/parcel/'},\n{id:'catawba_tax_real_estate',type:'tax_search',evidenceType:'tax_record',url:'https://taxbill.catawbacountync.gov/ITSPublicCT/RealEstateSearch'},\n{id:'catawba_tax_delinquent',type:'delinquent_tax_search',evidenceType:'tax_delinquency',url:'https://taxbill.catawbacountync.gov/ITSPublicCT/'},\n{id:'catawba_permits',type:'permit_search',evidenceType:'permit_record',url:'https://epermits.catawbacountync.gov/'},\n{id:'catawba_gis_datasets',type:'open_data',evidenceType:'county_dataset',url:'https://catawbacountync.gov/online-services/datasets/'},\n{id:'catawba_register_of_deeds',type:'land_records',evidenceType:'land_record',url:'https://catawbacountync.gov/county-services/register-of-deeds/'} ] };\nconst sources = registry[$json.county] ?? [];\nreturn [{json:{...$json,sources:sources.filter(s => s.enabled !== false).map(s => ({...s,query:encodeURIComponent($json.fullAddress)}))}}];"},"id":"wf014-sources","name":"Build County Source Targets","type":"n8n-nodes-base.code","typeVersion":2,"position":[-340,-20]},
-    {"parameters":{"jsCode":"return ($json.sources ?? []).map(source => ({json:{...$json,source}}));"},"id":"wf014-split","name":"Split Source Targets","type":"n8n-nodes-base.code","typeVersion":2,"position":[-120,-20]},
-    {"parameters":{"method":"POST","url":"={{ $env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev/v2/scrape' }}","sendHeaders":true,"headerParametersUi":{"parameter":[{"name":"Authorization","value":"=Bearer {{$env.FIRECRAWL_API_KEY}}"},{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"contentType":"json","bodyParametersJson":"={{ JSON.stringify({ url: $json.source.url, formats: ['markdown'], onlyMainContent: true }) }}","options":{"timeout":60000}},"id":"wf014-firecrawl","name":"Collect County Source","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[100,-20],"onError":"continueRegularOutput"},
-    {"parameters":{"jsCode":"const src = $('Split Source Targets').item.json.source;\nconst base = $('Split Source Targets').item.json;\nconst raw = $json.data ?? $json;\nconst markdown = typeof raw === 'string' ? raw : (raw.markdown ?? raw.content ?? JSON.stringify(raw));\nreturn [{json:{dealId:base.dealId,evidence:{evidence_type:src.evidenceType,source:src.id,source_record_id:src.id + ':' + base.dealId,observed_at:new Date().toISOString(),confidence:0.65,payload:{address:base.fullAddress,county:base.county,source_url:src.url,source_type:src.type,collected_at:new Date().toISOString(),content:markdown}}}}];"},"id":"wf014-normalize","name":"Normalize Evidence","type":"n8n-nodes-base.code","typeVersion":2,"position":[320,-20]},
-    {"parameters":{"method":"POST","url":"={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $json.dealId + '/evidence' }}","sendHeaders":true,"headerParametersUi":{"parameter":[{"name":"X-API-Key","value":"={{ $env.INSULA_CRM_API_KEY }}"},{"name":"Content-Type","value":"application/json"},{"name":"Idempotency-Key","value":"=property_intelligence:nc_collector:{{$json.evidence.source}}:{{$json.evidence.source_record_id}}:v1"}]},"sendBody":true,"contentType":"json","bodyParametersJson":"={{ JSON.stringify($json.evidence) }}","options":{"timeout":30000}},"id":"wf014-store","name":"Store Evidence in InsulaCRM","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[540,-20],"onError":"continueRegularOutput"},
-    {"parameters":{"jsCode":"const base = $('Normalize Evidence').item.json; return [{json:{dealId:base.dealId,evidence_source:base.evidence.source,stored:true}}];"},"id":"wf014-result","name":"Build Collector Result","type":"n8n-nodes-base.code","typeVersion":2,"position":[760,-20]},
-    {"parameters":{"respondWith":"json","responseBody":"={{ { ok: true, dealId: $json.dealId, source: $json.evidence_source, stored: $json.stored, next: 'Run WF-012 to build the evidence-first analysis context.' } }}","options":{}},"id":"wf014-response","name":"Respond Success","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[980,-20]}
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-nc-property-intelligence-v1",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf014-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        0
+      ],
+      "webhookId": "wholestack-nc-property-intelligence-v1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst dealId = body.dealId ?? body.deal_id;\nconst address = String(body.address ?? '').trim();\nconst city = String(body.city ?? '').trim();\nconst state = String(body.state ?? 'NC').trim().toUpperCase();\nconst zip = String(body.zip ?? '').trim();\nconst county = String(body.county ?? '').trim();\nif (!dealId || !address || !city || state !== 'NC') return [{json:{valid:false,error:'dealId, address, city and NC state are required'}}];\nconst fullAddress = [address,city,state,zip].filter(Boolean).join(', ');\nreturn [{json:{valid:true,dealId,address,city,state,zip,county,fullAddress,requestedAt:new Date().toISOString()}}];"
+      },
+      "id": "wf014-prepare",
+      "name": "Prepare Property Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "wf014-valid",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error: $json.error } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "wf014-bad",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const registry = {\n  NC: {\n    Catawba: [\n      {id:'catawba_gis',type:'parcel_gis',evidenceType:'property_record',url:'https://gis.catawbacountync.gov/parcel/'},\n      {id:'catawba_tax_real_estate',type:'tax_search',evidenceType:'tax_record',url:'https://taxbill.catawbacountync.gov/ITSPublicCT/RealEstateSearch'},\n      {id:'catawba_tax_delinquent',type:'delinquent_tax_search',evidenceType:'tax_delinquency',url:'https://taxbill.catawbacountync.gov/ITSPublicCT/'},\n      {id:'catawba_permits',type:'permit_search',evidenceType:'permit_record',url:'https://epermits.catawbacountync.gov/'},\n      {id:'catawba_gis_datasets',type:'open_data',evidenceType:'county_dataset',url:'https://catawbacountync.gov/online-services/datasets/'},\n      {id:'catawba_register_of_deeds',type:'land_records',evidenceType:'land_record',url:'https://catawbacountync.gov/county-services/register-of-deeds/'}\n    ]\n  }\n};\nconst state = String($json.state || '').trim().toUpperCase();\nconst county = String($json.county || '').trim();\nconst known = registry[state]?.[county] || [];\nreturn [{json:{\n  ...$json,\n  source_mode: known.length ? 'registry' : 'discovery',\n  sources: known.map(s => ({...s, query: encodeURIComponent($json.fullAddress)})),\n  source_discovery_query: known.length ? null :\n    `Find the official county government/public-record sources for ${county} County, ${state} for this property address: ${$json.fullAddress}. Return only official government domains and categorize sources as parcel/GIS, assessment/tax, delinquent tax, permits, land records, and public datasets when available.`\n}}];"
+      },
+      "id": "wf014-sources",
+      "name": "Build State/County Source Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -340,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return ($json.sources ?? []).map(source => ({json:{...$json,source}}));"
+      },
+      "id": "wf014-split",
+      "name": "Split Source Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev/v2/scrape' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.FIRECRAWL_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ url: $json.source.url, formats: ['markdown'], onlyMainContent: true }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "wf014-firecrawl",
+      "name": "Collect County Source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        100,
+        -20
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = $('Split Source Targets').item.json.source;\nconst base = $('Split Source Targets').item.json;\nconst raw = $json.data ?? $json;\nconst markdown = typeof raw === 'string' ? raw : (raw.markdown ?? raw.content ?? JSON.stringify(raw));\nreturn [{json:{dealId:base.dealId,evidence:{evidence_type:src.evidenceType,source:src.id,source_record_id:src.id + ':' + base.dealId,observed_at:new Date().toISOString(),confidence:0.65,payload:{address:base.fullAddress,county:base.county,source_url:src.url,source_type:src.type,collected_at:new Date().toISOString(),content:markdown}}}}];"
+      },
+      "id": "wf014-normalize",
+      "name": "Normalize Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $json.dealId + '/evidence' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "=property_intelligence:nc_collector:{{$json.evidence.source}}:{{$json.evidence.source_record_id}}:v1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify($json.evidence) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf014-store",
+      "name": "Store Evidence in InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        -20
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Normalize Evidence').item.json; return [{json:{dealId:base.dealId,evidence_source:base.evidence.source,stored:true}}];"
+      },
+      "id": "wf014-result",
+      "name": "Build Collector Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, dealId: $json.dealId, source: $json.evidence_source, stored: $json.stored, next: 'Run WF-012 to build the evidence-first analysis context.' } }}",
+        "options": {}
+      },
+      "id": "wf014-response",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        980,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERPLEXITY_API_URL || 'https://api.perplexity.ai/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.PERPLEXITY_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ model: $env.PERPLEXITY_PROPERTY_MODEL || 'sonar', messages: [{ role:'system', content:'Identify only official government/public-record source URLs for the requested state and county. Do not invent URLs. Return compact JSON: {sources:[{id,type,evidenceType,url,notes}]}.' }, { role:'user', content: $json.source_discovery_query }], temperature: 0.1 }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "wf014-discovery",
+      "name": "Discover County Sources When Needed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        -180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Build State/County Source Targets').item.json;\nconst known = base.sources || [];\nif (known.length) return [{json:{...base, sources:known}}];\nconst raw = $json;\nlet text = raw.output_text ?? raw.choices?.[0]?.message?.content ?? raw.data?.choices?.[0]?.message?.content ?? '';\nif (typeof text !== 'string') text = JSON.stringify(text);\ntext = text.replace(/^\\`\\`\\`json\\s*/,'').replace(/\\s*\\`\\`\\`$/,'');\nlet discovered = [];\ntry { discovered = JSON.parse(text).sources || []; } catch {}\nreturn [{json:{...base, sources:discovered.filter(s => s && s.url).map(s => ({...s, query:encodeURIComponent(base.fullAddress)}))}}];"
+      },
+      "id": "wf014-discovered-normalize",
+      "name": "Normalize Discovered Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.source_mode }}",
+              "operation": "equals",
+              "value2": "discovery"
+            }
+          ]
+        }
+      },
+      "id": "wf014-source-mode",
+      "name": "Registry or Discovery",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -20
+      ]
+    }
   ],
-  "connections":{
-    "Webhook":{"main":[[{"node":"Prepare Property Request","type":"main","index":0}]]},
-    "Prepare Property Request":{"main":[[{"node":"IF Valid","type":"main","index":0}]]},
-    "IF Valid":{"main":[[{"node":"Build County Source Targets","type":"main","index":0}],[{"node":"Respond 400","type":"main","index":0}]]},
-    "Build County Source Targets":{"main":[[{"node":"Split Source Targets","type":"main","index":0}]]},
-    "Split Source Targets":{"main":[[{"node":"Collect County Source","type":"main","index":0}]]},
-    "Collect County Source":{"main":[[{"node":"Normalize Evidence","type":"main","index":0}]]},
-    "Normalize Evidence":{"main":[[{"node":"Store Evidence in InsulaCRM","type":"main","index":0}]]},
-    "Store Evidence in InsulaCRM":{"main":[[{"node":"Build Collector Result","type":"main","index":0}]]},
-    "Build Collector Result":{"main":[[{"node":"Respond Success","type":"main","index":0}]]}
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Property Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Property Request": {
+      "main": [
+        [
+          {
+            "node": "IF Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid": {
+      "main": [
+        [
+          {
+            "node": "Build State/County Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build County Source Targets": {
+      "main": [
+        [
+          {
+            "node": "Split Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Source Targets": {
+      "main": [
+        [
+          {
+            "node": "Collect County Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect County Source": {
+      "main": [
+        [
+          {
+            "node": "Normalize Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Evidence": {
+      "main": [
+        [
+          {
+            "node": "Store Evidence in InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Evidence in InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Build Collector Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Collector Result": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build State/County Source Targets": {
+      "main": [
+        [
+          {
+            "node": "Registry or Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registry or Discovery": {
+      "main": [
+        [
+          {
+            "node": "Discover County Sources When Needed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discover County Sources When Needed": {
+      "main": [
+        [
+          {
+            "node": "Normalize Discovered Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Discovered Sources": {
+      "main": [
+        [
+          {
+            "node": "Split Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "pinData":{},"settings":{"executionOrder":"v1"},"active":false,"versionId":"wf014-v1","meta":{"templateCredsSetupCompleted":true},"tags":[]
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "wf014-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
 }

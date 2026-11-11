@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "description": "Provider-neutral NC property intelligence source registry.",
+  "counties": {
+    "Catawba": {
+      "state": "NC",
+      "sources": [
+        {"id":"catawba_gis","type":"parcel_gis","evidence_type":"property_record","url":"https://gis.catawbacountync.gov/parcel/"},
+        {"id":"catawba_tax_real_estate","type":"tax_search","evidence_type":"tax_record","url":"https://taxbill.catawbacountync.gov/ITSPublicCT/RealEstateSearch"},
+        {"id":"catawba_tax_delinquent","type":"delinquent_tax_search","evidence_type":"tax_delinquency","url":"https://taxbill.catawbacountync.gov/ITSPublicCT/"},
+        {"id":"catawba_permits","type":"permit_search","evidence_type":"permit_record","url":"https://epermits.catawbacountync.gov/"},
+        {"id":"catawba_gis_datasets","type":"open_data","evidence_type":"county_dataset","url":"https://catawbacountync.gov/online-services/datasets/"},
+        {"id":"catawba_register_of_deeds","type":"land_records","evidence_type":"land_record","url":"https://catawbacountync.gov/county-services/register-of-deeds/"}
+      ]
+    },
+    "Caldwell": {"state":"NC","sources":[{"id":"caldwell_gis","type":"parcel_gis","evidence_type":"property_record","url":"https://www.caldwellcountync.org/","enabled":false}]},
+    "Mecklenburg": {"state":"NC","sources":[{"id":"mecklenburg_gis","type":"parcel_gis","evidence_type":"property_record","url":"https://property.spatialest.com/nc/mecklenburg/","enabled":false}]},
+    "Wake": {"state":"NC","sources":[{"id":"wake_gis","type":"parcel_gis","evidence_type":"property_record","url":"https://maps.raleighnc.gov/iMAPS/","enabled":false}]},
+    "New Hanover": {"state":"NC","sources":[{"id":"new_hanover_gis","type":"parcel_gis","evidence_type":"property_record","url":"https://maps.nhcgov.com/","enabled":false}]}
+  }
+}

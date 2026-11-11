@@ -230,3 +230,11 @@ WF-014 now calls InsulaCRM's property-intelligence reconciliation endpoint after
 - `workflows/17-deal-ranking-engine.json` ranks acquisition opportunities through the canonical InsulaCRM ranking endpoint.
 - Supports ARV, repairs, offer spread, motivation, comps, buyer demand, property completeness, distress signals, and risk flags.
 - Jurisdiction-agnostic; no county/state is hardcoded.
+
+
+### WF-018 Jurisdiction Compliance Gate
+
+- `workflows/18-jurisdiction-compliance-gate.json` checks the transaction jurisdiction before automated acquisition/disposition activity.
+- Unknown states return REVIEW rather than being assumed compliant.
+- North Carolina uses a conservative review profile reflecting current Chapter 93A/NCREC guidance.
+- This is an operational control, not legal advice.

@@ -126,7 +126,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const raw=$input.first().json; let text=raw.output_text||''; if(!text&&Array.isArray(raw.output)){for(const item of raw.output)for(const c of (item.content||[]))if(c.type==='output_text')text+=c.text||'';} if(!text)return [{json:{valid:false,error:'AI response contained no output text'}}]; try{return [{json:{valid:true,analysis:JSON.parse(text)}}];}catch(e){return [{json:{valid:false,error:'AI output was not valid JSON'}}];}"
+        "jsCode": "const raw=$input.first().json; let text=raw.output_text||''; if(!text&&Array.isArray(raw.output)){for(const item of raw.output)for(const c of (item.content||[]))if(c.type==='output_text')text+=c.text||'';} if(!text)return [{json:{valid:false,error:'AI response contained no output text'}}]; try{return [{json:{valid:true,analysis:JSON.parse(text),dealId:$(\"Prepare Analysis Context\").first().json.deal.dealId,purchasePrice:$(\"Prepare Analysis Context\").first().json.deal.purchasePrice||$(\"Prepare Analysis Context\").first().json.deal.askingPrice}}];}catch(e){return [{json:{valid:false,error:'AI output was not valid JSON'}}];}"
       }
     },
     {

@@ -454,10 +454,6 @@
             {
               "name": "Content-Type",
               "value": "application/json"
-            },
-            {
-              "name": "Idempotency-Key",
-              "value": "=property_intelligence:reconcile:{{$json.dealId}}:v1"
             }
           ]
         },

@@ -265,6 +265,44 @@
         220
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "id": "sync-deal-analysis-to-insula",
+      "name": "Sync Deal Analysis to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $('Sync Deal to InsulaCRM').first().json.deal_id + '/analysis' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'disposition:deal-analysis:' + (($('Store Deal').first().json.data._id || 'unknown')) + ':v1' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ arv: Number($('Calculate Score').first().json.arv || 0), repair_estimate: Number($('Calculate Score').first().json.repairEstimate || 0), purchase_price: Number($('Calculate Score').first().json.askingPrice || 0), assignment_fee_target: Number($('Calculate Score').first().json.assignmentFeeTarget || 10000), arv_confidence: ({High:90,Medium:65,Low:35}[$('Calculate Score').first().json.compConfidence] || 50), repair_confidence: ({Light:85,Medium:70,Heavy:55,Gut:40}[$('Calculate Score').first().json.repairScope] || 50), exit_strategy: $('Calculate Score').first().json.bestStrategy, methodology: 'wholestack_deal_intake_v1', source: $('Calculate Score').first().json.source || 'n8n_deal_intake', comp_summary: {confidence: $('Calculate Score').first().json.compConfidence, supplied_arv: $('Calculate Score').first().json.arv}, repair_scope: {level: $('Calculate Score').first().json.repairScope, estimate: $('Calculate Score').first().json.repairEstimate}, assumptions: {rule: '70_percent_rule', demand_score: 50, dom_score: 70, title_score: 100}, risk_flags: [] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -382,6 +420,17 @@
       ]
     },
     "Sync Deal to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Sync Deal Analysis to InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Deal Analysis to InsulaCRM": {
       "main": [
         [
           {

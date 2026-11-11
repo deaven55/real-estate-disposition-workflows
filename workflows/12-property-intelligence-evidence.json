@@ -194,7 +194,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({success:true,dealId:$json.dealId,analysis:$json}) }}",
+        "responseBody": "{{ JSON.stringify({success:true,dealId:$(\"Build Evidence-First Analysis Context\").first().json.dealId,analysis:$json}) }}",
         "options": {
           "responseCode": 200
         }

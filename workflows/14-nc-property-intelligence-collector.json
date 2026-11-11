@@ -130,7 +130,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const src = $('Split Source Targets').item.json.source;\nconst base = $('Split Source Targets').item.json;\nconst raw = $json.data ?? $json;\nconst markdown = typeof raw === 'string' ? raw : (raw.markdown ?? raw.content ?? JSON.stringify(raw));\nreturn [{json:{dealId:base.dealId,evidence:{evidence_type:src.evidenceType,source:src.id,source_record_id:src.id + ':' + base.dealId,observed_at:new Date().toISOString(),confidence:0.65,payload:{address:base.fullAddress,county:base.county,source_url:src.url,source_type:src.type,collected_at:new Date().toISOString(),content:markdown}}}}];"
+        "jsCode": "const src = $('Split Source Targets').item.json.source;\nconst base = $('Split Source Targets').item.json;\nconst raw = $json.data ?? $json;\nconst markdown = typeof raw === 'string' ? raw : (raw.markdown ?? raw.content ?? JSON.stringify(raw));\nreturn [{json:{\n  dealId:base.dealId,\n  extraction_context:{\n    address:base.fullAddress,\n    state:base.state,\n    county:base.county,\n    source_id:src.id,\n    source_type:src.type,\n    source_url:src.url\n  },\n  evidence:{\n    evidence_type:src.evidenceType,\n    source:src.id,\n    source_record_id:src.id + ':' + base.dealId,\n    observed_at:new Date().toISOString(),\n    confidence:0.65,\n    payload:{\n      address:base.fullAddress,\n      county:base.county,\n      source_url:src.url,\n      source_type:src.type,\n      collected_at:new Date().toISOString(),\n      content:markdown\n    }\n  }\n}}];"
       },
       "id": "wf014-normalize",
       "name": "Normalize Evidence",
@@ -380,6 +380,53 @@
         520,
         120
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({model:$env.OPENAI_PROPERTY_EXTRACTION_MODEL || $env.OPENAI_DEAL_ANALYSIS_MODEL || 'gpt-5-mini',input:[{role:'system',content:[{type:'input_text',text:'Extract property facts from the supplied public-record page text. Use ONLY facts explicitly present in the text. Never infer or guess. For every field not explicitly supported, return null. Return JSON only with: owner_name, mailing_address, property_address, parcel_id, property_type, assessed_value, land_value, building_value, acreage, lot_sqft, year_built, building_sqft, bedrooms, bathrooms, sale_date, sale_price, tax_amount, tax_status, delinquent_tax_amount, permit_records, zoning, legal_description, confidence, missing_fields, source_quotes. source_quotes must contain short exact snippets supporting extracted facts.'}]},{role:'user',content:[{type:'input_text',text:'Property context: '+JSON.stringify($json.extraction_context)+'\\n\\nSource text:\\n'+JSON.stringify($json.evidence.payload.content)}]}],text:{format:{type:'json_object'}},temperature:0.1}) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "wf014-property-extractor",
+      "name": "Extract Structured Property Facts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -20,
+        620
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Normalize Evidence').item.json;\nlet text=$json.output_text ?? $json.choices?.[0]?.message?.content ?? $json.data?.output_text ?? '';\nif(typeof text!=='string') text=JSON.stringify(text);\ntext=text.replace(/^\\`\\`\\`json\\s*/,'').replace(/\\s*\\`\\`\\`$/,'');\nlet facts={};\ntry { facts=JSON.parse(text); } catch {}\nconst evidence={...base.evidence,payload:{...base.evidence.payload,structured_facts:facts,extraction_method:'evidence_constrained_llm',extraction_model:$env.OPENAI_PROPERTY_EXTRACTION_MODEL || $env.OPENAI_DEAL_ANALYSIS_MODEL || 'gpt-5-mini'}};\nreturn [{json:{dealId:base.dealId,evidence}}];"
+      },
+      "id": "wf014-structured-evidence",
+      "name": "Build Structured Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        620
+      ]
     }
   ],
   "connections": {
@@ -460,7 +507,7 @@
       "main": [
         [
           {
-            "node": "Store Evidence in InsulaCRM",
+            "node": "Extract Structured Property Facts",
             "type": "main",
             "index": 0
           }
@@ -618,6 +665,28 @@
         [
           {
             "node": "Build State/County Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Structured Property Facts": {
+      "main": [
+        [
+          {
+            "node": "Build Structured Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Structured Evidence": {
+      "main": [
+        [
+          {
+            "node": "Store Evidence in InsulaCRM",
             "type": "main",
             "index": 0
           }

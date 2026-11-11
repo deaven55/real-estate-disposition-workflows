@@ -8,7 +8,11 @@ Property/deal address → county source registry → Firecrawl → normalized ev
 
 The collector is evidence-first. It does not calculate ARV, MAO, repairs, or deal score.
 
-## Current county: Catawba County, NC
+## State/county targeting
+
+The workflow is **not locked to Catawba County**. The request must provide `state` and `county`. Known counties can use a curated source registry; any other state/county can enter the source-discovery path, which uses the configured Perplexity provider to identify official government/public-record URLs before Firecrawl collection. Discovered sources are still treated as unverified evidence until the underlying record is validated.
+
+### Current curated county: Catawba County, NC
 
 The first adapter targets official county starting points for GIS/parcel data, real-estate tax records, delinquent-tax searches, permits/inspections, county GIS datasets, and land records.
 
@@ -19,7 +23,7 @@ The county GIS department documents real-estate maps, sale analysis, parcel/deed
 - INSULA_CRM_BASE_URL
 - INSULA_CRM_API_KEY
 - FIRECRAWL_API_KEY
-- FIRECRAWL_API_URL (optional)
+- FIRECRAWL_API_URL (optional)\n- PERPLEXITY_API_KEY (required for counties/states not yet in the curated registry)\n- PERPLEXITY_API_URL (optional)\n- PERPLEXITY_PROPERTY_MODEL (optional)
 
 ## Request
 

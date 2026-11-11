@@ -143,3 +143,8 @@ Planned integration order:
 6. Response/Follow-Up/Lifecycle/Seller Communication → InsulaCRM activities and deal state.
 
 The source workflows are preserved during migration; Close CRM/Convex remain transport/staging dependencies until each replacement is independently verified.
+
+
+## AI deal analysis
+
+WF-011 (`workflows/11-ai-deal-analysis.json`) provides a reusable AI analysis endpoint. It accepts a canonical deal context, asks the configured OpenAI model to analyze only supplied evidence, validates the JSON response, and writes the result to InsulaCRM's tenant-scoped deal-analysis API. Configure `OPENAI_API_KEY`, optionally `OPENAI_DEAL_ANALYSIS_MODEL`, `INSULA_CRM_BASE_URL`, and `INSULA_CRM_API_KEY`. This workflow deliberately does not invent comps or market facts; a later property-intelligence adapter can supply verified comp/recon evidence.

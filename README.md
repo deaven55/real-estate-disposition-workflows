@@ -238,3 +238,8 @@ WF-014 now calls InsulaCRM's property-intelligence reconciliation endpoint after
 - Unknown states return REVIEW rather than being assumed compliant.
 - North Carolina uses a conservative review profile reflecting current Chapter 93A/NCREC guidance.
 - This is an operational control, not legal advice.
+
+
+### Deal Priority Queue API
+
+The unified dashboard read model is now provided by InsulaCRM at `GET /api/v1/deal-queue`. It is tenant-scoped and supports state, county, city, stage, ranking grade/score, underwriting decision, ARV availability, buyer-match availability, compliance status, and queue sorting. Each item includes seller, canonical property intelligence, ARV/repairs/offer underwriting, ranking, buyer demand, compliance, and explicit missing-data/work-queue actions. Unknown jurisdictions remain REVIEW; current North Carolina automation is conservatively blocked pending jurisdiction clearance. This endpoint is a read model and does not replace canonical CRM records.

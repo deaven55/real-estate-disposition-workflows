@@ -169,3 +169,26 @@ Required env vars:
 - `N8N_INTERNAL_BASE_URL`
 
 WF-012 intentionally does not invent comps or query an unconfigured provider. External data-provider adapters can be added later without changing the CRM evidence contract.
+
+
+### WF-013 — Property Recon Provider Adapter
+
+`workflows/13-property-recon-provider.json` adds the first real external-evidence adapter layer.
+
+It accepts:
+- deal ID
+- address/city/state/ZIP
+- optional property URLs
+- optional notes
+
+It can use:
+- `PERPLEXITY_API_KEY` for property/market research
+- `PERPLEXITY_API_URL` (optional override)
+- `PERPLEXITY_PROPERTY_MODEL` (optional override)
+- `FIRECRAWL_API_KEY` for supplied property/public-record/listing pages
+- `FIRECRAWL_API_URL` (optional override)
+- `N8N_INTERNAL_BASE_URL`
+
+The adapter converts the results into the provider-neutral evidence schema and sends them to WF-012. It does not write AI conclusions directly into the CRM; evidence is stored first, then WF-011 performs the evidence-constrained analysis.
+
+This keeps external providers replaceable and makes every analysis traceable back to collected evidence.

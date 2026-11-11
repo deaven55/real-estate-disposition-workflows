@@ -130,7 +130,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({success:true,dealId:$(\'Prepare Underwriting Request\').first().json.dealId,result:$json}) }}",
+        "responseBody": "={{ JSON.stringify({success:true,dealId:$('Prepare Underwriting Request').first().json.dealId,result:$json}) }}",
         "options": {
           "responseCode": 200
         }

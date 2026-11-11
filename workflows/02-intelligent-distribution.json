@@ -56,7 +56,7 @@
           "conditions": [
             {
               "id": "cond1",
-              "leftValue": "={{ $json.data.status }}",
+              "leftValue": "={{ $('Fetch Deal from Convex').first().json.data.status }}",
               "rightValue": "active",
               "operator": {
                 "type": "string",
@@ -345,7 +345,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $('Fetch Deal from Convex').first().json.data.insulaDealId + '/matches' }}",
+        "url": "{{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + (($('Lookup Deal in InsulaCRM').first().json.data && $('Lookup Deal in InsulaCRM').first().json.data[0] ? $('Lookup Deal in InsulaCRM').first().json.data[0].id : 0)) + '/matches' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -445,7 +445,7 @@
       "main": [
         [
           {
-            "node": "IF Deal Active",
+            "node": "Lookup Deal in InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -603,6 +603,17 @@
         [
           {
             "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Deal in InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "IF Deal Active",
             "type": "main",
             "index": 0
           }

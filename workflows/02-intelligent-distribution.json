@@ -101,7 +101,7 @@
     },
     {
       "id": "queryBuyers",
-      "name": "Query Buyers from Close CRM",
+      "name": "Legacy Close Buyer Query (Fallback)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -142,7 +142,7 @@
         150
       ],
       "parameters": {
-        "jsCode": "var deal = $('Fetch Deal from Convex').first().json.data;\nvar leads = $('Query Buyers from Close CRM').first().json.data || [];\nvar priorityBuyers = $('Check Priority Queue').first().json.data || [];\n\n// PROTECTED STATUSES - NO SMS for these\nvar protectedStatuses = [\n  'human hand', 'hot lead', 'hot', 'warm lead',\n  'interested', 'not interested', 'dnc', 'dead',\n  'vetted buyer', 'vip'\n];\n\nvar priorityBuyerIds = [];\nfor (var p = 0; p < priorityBuyers.length; p++) {\n  priorityBuyerIds.push(priorityBuyers[p].buyerId);\n}\n\nvar excludedBuyerIds = deal.excludedBuyerIds || [];\nvar matchedBuyers = [];\n\nfor (var i = 0; i < leads.length; i++) {\n  var lead = leads[i];\n  var custom = lead.custom || {};\n  \n  // Check protected status\n  var statusLabel = (lead.status_label || '').toLowerCase().trim();\n  if (protectedStatuses.indexOf(statusLabel) !== -1) continue;\n  \n  var convexBuyerId = custom.cf_QaXxtdAmTEByJ8SOBFk4wizgJwrwZF7XtSufDkTCP2x;\n  if (excludedBuyerIds.indexOf(convexBuyerId) !== -1) continue;\n  \n  var marketsRaw = custom.cf_tNLNi0SXrw5kMhnWilHLQWkerkx6gGMwpuTH9p1j2XL || '';\n  var markets = marketsRaw.split(',').map(function(m) { return m.trim().toLowerCase(); });\n  var tier = custom.cf_OKjNsqdbMxMcThu43cIhnhwFoLeYs7iigX8Pqz6Y1ma || 'warm';\n  var priceMin = parseFloat(custom.cf_JmA0rE8IcwtfXnpqV42YC3JTD7JAe7UczFCLxwcE8sK) || 0;\n  var priceMax = parseFloat(custom.cf_0WXJcdwa56nB9MdVCvImVIUqpfU5VUmRjVxzKypGWy5) || 999999999;\n  var strategiesRaw = custom.cf_XXsQomvB9JAtMWCmCW5v9bOf0iZyM356VWWI4DGp5kr || '';\n  var strategies = strategiesRaw.split(',').map(function(s) { return s.trim(); });\n  var conditionsRaw = custom.cf_q1eGMfEgIdfL0zulAlCZ1GpeKIjkgM6gN1EaLfOn3LS || 'Light,Medium,Heavy';\n  var conditions = conditionsRaw.split(',').map(function(c) { return c.trim(); });\n  var propertyTypesRaw = custom.cf_kz6C7hpyZZRheIPhCqDXGnR8fZ9cRJ7RuqJtJs8jfOy || 'SFR,Duplex,Multi';\n  var propertyTypes = propertyTypesRaw.split(',').map(function(pt) { return pt.trim(); });\n  \n  var phone = null;\n  if (lead.contacts && lead.contacts.length > 0) {\n    var phones = lead.contacts[0].phones || [];\n    if (phones.length > 0) phone = phones[0].phone;\n  }\n  if (!phone) continue;\n  \n  var dealZip = deal.zip.toLowerCase();\n  var dealCity = deal.city.toLowerCase();\n  var marketMatch = false;\n  var marketMatchScore = 0;\n  \n  for (var m = 0; m < markets.length; m++) {\n    if (markets[m] === dealZip) { marketMatch = true; marketMatchScore = 1.0; break; }\n    if (markets[m] === dealCity) { marketMatch = true; marketMatchScore = 0.7; }\n  }\n  if (!marketMatch) continue;\n  \n  var priceBuffer = (priceMax - priceMin) * 0.1;\n  if (deal.askingPrice < priceMin - priceBuffer || deal.askingPrice > priceMax + priceBuffer) continue;\n  var priceMatchScore = (deal.askingPrice >= priceMin && deal.askingPrice <= priceMax) ? 1.0 : 0.5;\n  \n  if (conditions.indexOf(deal.repairScope) === -1) continue;\n  \n  var strategyMatchScore = strategies.indexOf(deal.bestStrategy) !== -1 ? 1.0 : 0.3;\n  var propertyTypeMatchScore = propertyTypes.indexOf(deal.propertyType) !== -1 ? 1.0 : 0.2;\n  var tierBonusMap = { 'hot': 1.0, 'warm': 0.6, 'cold': 0.3 };\n  var tierBonus = tierBonusMap[tier] || 0.5;\n  var priorityBonus = priorityBuyerIds.indexOf(convexBuyerId) !== -1 ? 0.2 : 0;\n  \n  var matchScore = marketMatchScore * 0.25 + priceMatchScore * 0.25 + strategyMatchScore * 0.15 + propertyTypeMatchScore * 0.10 + tierBonus * 0.10 + priorityBonus;\n  \n  matchedBuyers.push({\n    closeLeadId: lead.id,\n    convexBuyerId: convexBuyerId,\n    name: lead.display_name.replace('[WholeStack] ', ''),\n    phone: phone,\n    tier: tier,\n    matchScore: Math.round(matchScore * 100) / 100,\n    isPriority: priorityBuyerIds.indexOf(convexBuyerId) !== -1\n  });\n}\n\nvar tierOrder = { 'hot': 0, 'warm': 1, 'cold': 2 };\nmatchedBuyers.sort(function(a, b) {\n  if (a.isPriority !== b.isPriority) return a.isPriority ? -1 : 1;\n  if (tierOrder[a.tier] !== tierOrder[b.tier]) return tierOrder[a.tier] - tierOrder[b.tier];\n  return b.matchScore - a.matchScore;\n});\n\nreturn { json: { deal: deal, matchedBuyers: matchedBuyers, totalMatched: matchedBuyers.length } };"
+        "jsCode": "var deal = $('Fetch Deal from Convex').first().json.data;\nvar source = $('Fetch Buyers from InsulaCRM').first().json;\nvar buyers = source.data || source || [];\nvar priorityBuyers = $('Check Priority Queue').first().json.data || [];\nvar protectedStatuses = ['human hand','hot lead','hot','warm lead','interested','not interested','dnc','dead','vetted buyer','vip'];\nvar priorityBuyerIds = priorityBuyers.map(function(p){ return p.buyerId; });\nvar excludedBuyerIds = deal.excludedBuyerIds || [];\nvar matchedBuyers = [];\n\nfor (var i=0;i<buyers.length;i++) {\n  var buyer=buyers[i];\n  var statusLabel=(buyer.status || buyer.buyer_tier || 'warm').toLowerCase().trim();\n  if (protectedStatuses.indexOf(statusLabel)!==-1) continue;\n  var buyerId=buyer.id || buyer.external_id;\n  if (excludedBuyerIds.indexOf(buyerId)!==-1) continue;\n\n  var markets=[].concat(buyer.preferred_zip_codes || [], buyer.preferred_states || []).map(function(v){ return String(v).toLowerCase().trim(); });\n  var priceMin=Number(buyer.min_purchase_price || 0);\n  var priceMax=Number(buyer.max_purchase_price || 999999999);\n  var strategies=buyer.preferred_strategies || [];\n  var conditions=buyer.preferred_conditions || ['Light','Medium','Heavy'];\n  var propertyTypes=buyer.preferred_property_types || ['SFR','Duplex','Multi'];\n  var phone=buyer.phone;\n  if(!phone) continue;\n\n  var dealZip=String(deal.zip||'').toLowerCase();\n  var dealState=String(deal.state||'').toLowerCase();\n  var dealCity=String(deal.city||'').toLowerCase();\n  var marketMatch=false, marketMatchScore=0;\n  for(var m=0;m<markets.length;m++){\n    if(markets[m]===dealZip){marketMatch=true;marketMatchScore=1;break;}\n    if(markets[m]===dealState){marketMatch=true;marketMatchScore=0.8;}\n    if(markets[m]===dealCity){marketMatch=true;marketMatchScore=0.7;}\n  }\n  if(!marketMatch) continue;\n\n  var priceBuffer=(priceMax-priceMin)*0.1;\n  if(deal.askingPrice < priceMin-priceBuffer || deal.askingPrice > priceMax+priceBuffer) continue;\n  var priceMatchScore=(deal.askingPrice>=priceMin && deal.askingPrice<=priceMax)?1:0.5;\n  if(conditions.length && conditions.indexOf(deal.repairScope)===-1) continue;\n  var strategyMatchScore=strategies.length ? (strategies.indexOf(deal.bestStrategy)!==-1?1:0.3) : 0.5;\n  var propertyTypeMatchScore=propertyTypes.indexOf(deal.propertyType)!==-1?1:0.2;\n  var tier=buyer.buyer_tier || 'warm';\n  var tierBonusMap={'hot':1,'warm':0.6,'cold':0.3};\n  var tierBonus=tierBonusMap[tier]||0.5;\n  var priorityBonus=priorityBuyerIds.indexOf(buyerId)!==-1?0.2:0;\n\n  var matchScore=marketMatchScore*0.25+priceMatchScore*0.25+strategyMatchScore*0.15+propertyTypeMatchScore*0.10+tierBonus*0.10+priorityBonus;\n  matchedBuyers.push({\n    closeLeadId: buyer.external_source==='close' ? buyer.external_id : null,\n    convexBuyerId: buyer.external_id || buyer.id,\n    insulaBuyerId: buyer.id,\n    name: buyer.full_name || ((buyer.first_name||'')+' '+(buyer.last_name||'')).trim(),\n    phone: phone,\n    tier: tier,\n    matchScore: Math.round(matchScore*100)/100,\n    isPriority: priorityBuyers.indexOf(buyerId)!==-1\n  });\n}\nvar tierOrder={'hot':0,'warm':1,'cold':2};\nmatchedBuyers.sort(function(a,b){\n  if(a.isPriority!==b.isPriority) return a.isPriority?-1:1;\n  if(tierOrder[a.tier]!==tierOrder[b.tier]) return tierOrder[a.tier]-tierOrder[b.tier];\n  return b.matchScore-a.matchScore;\n});\nreturn {json:{deal:deal,matchedBuyers:matchedBuyers,totalMatched:matchedBuyers.length}};"
       }
     },
     {
@@ -301,6 +301,132 @@
         "responseCode": 200,
         "responseBody": "={{ JSON.stringify({ success: true, distributed: $('Prepare Buyers Array').all().length, hot: $('Prepare Buyers Array').first().json.counts.hot, warm: $('Prepare Buyers Array').first().json.counts.warm, cold: $('Prepare Buyers Array').first().json.counts.cold, disqualified: $('Prepare Buyers Array').first().json.disqualified }) }}"
       }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/buyers' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "per_page",
+              "value": "200"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-buyers-from-insula",
+      "name": "Fetch Buyers from InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $('Fetch Deal from Convex').first().json.data.insulaDealId + '/matches' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'disposition:deal-buyer-match:' + ($json.buyer.insulaBuyerId || $json.buyer.convexBuyerId) + ':' + ($json.deal._id || $json.deal.id) + ':v1' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ buyer_id: $json.buyer.insulaBuyerId, match_score: Math.round($json.buyer.matchScore * 100), status: 'matched', outreach_status: 'pending', buyer_notes: 'Recommended by Intelligent Distribution' }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "sync-buyer-match-to-insula",
+      "name": "Sync Buyer Match to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2040,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "external_id",
+              "value": "={{ $('Fetch Deal from Convex').first().json.data._id }}"
+            },
+            {
+              "name": "external_source",
+              "value": "convex_disposition_intake"
+            },
+            {
+              "name": "per_page",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "lookup-insula-deal",
+      "name": "Lookup Deal in InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        300
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -348,7 +474,7 @@
       "main": [
         [
           {
-            "node": "Query Buyers from Close CRM",
+            "node": "Fetch Buyers from InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -443,7 +569,7 @@
       "main": [
         [
           {
-            "node": "Rate Limit Wait",
+            "node": "Sync Buyer Match to InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -455,6 +581,28 @@
         [
           {
             "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Buyers from InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Smart Match Buyers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Buyer Match to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Wait",
             "type": "main",
             "index": 0
           }

@@ -148,3 +148,24 @@ The source workflows are preserved during migration; Close CRM/Convex remain tra
 ## AI deal analysis
 
 WF-011 (`workflows/11-ai-deal-analysis.json`) provides a reusable AI analysis endpoint. It accepts a canonical deal context, asks the configured OpenAI model to analyze only supplied evidence, validates the JSON response, and writes the result to InsulaCRM's tenant-scoped deal-analysis API. Configure `OPENAI_API_KEY`, optionally `OPENAI_DEAL_ANALYSIS_MODEL`, `INSULA_CRM_BASE_URL`, and `INSULA_CRM_API_KEY`. This workflow deliberately does not invent comps or market facts; a later property-intelligence adapter can supply verified comp/recon evidence.
+
+
+### WF-012 — Property Intelligence Evidence Pipeline
+
+`workflows/12-property-intelligence-evidence.json` is the evidence-first bridge between property intelligence and AI deal analysis.
+
+Flow:
+1. Receive a deal ID plus an evidence bundle.
+2. Fetch the canonical deal from InsulaCRM.
+3. Normalize evidence into a provider-neutral schema.
+4. Persist each evidence item to InsulaCRM with deterministic idempotency.
+5. Build an evidence-first analysis context.
+6. Call WF-011 AI Deal Analysis.
+7. Return the resulting analysis.
+
+Required env vars:
+- `INSULA_CRM_BASE_URL`
+- `INSULA_CRM_API_KEY`
+- `N8N_INTERNAL_BASE_URL`
+
+WF-012 intentionally does not invent comps or query an unconfigured provider. External data-provider adapters can be added later without changing the CRM evidence contract.

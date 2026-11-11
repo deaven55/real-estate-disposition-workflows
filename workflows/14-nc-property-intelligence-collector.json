@@ -410,7 +410,7 @@
         },
         "sendBody": true,
         "contentType": "json",
-        "bodyParametersJson": "={{ JSON.stringify({dealId:$json.dealId,evidence:$json.evidence,analysisContext:$json.analysisContext}) }}",
+        "bodyParametersJson": "{{ JSON.stringify({dealId:$('Aggregate Evidence Bundle').first().json.dealId,evidence:$('Aggregate Evidence Bundle').first().json.evidence,analysisContext:$('Aggregate Evidence Bundle').first().json.analysisContext}) }}",
         "options": {
           "timeout": 120000
         }
@@ -420,7 +420,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        700,
+        920,
         620
       ],
       "onError": "continueRegularOutput"
@@ -436,9 +436,47 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        940,
+        1160,
         620
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $json.dealId + '/property-intelligence/reconcile' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "=property_intelligence:reconcile:{{$json.dealId}}:v1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({evidence:$json.evidence}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "wf014-reconcile",
+      "name": "Reconcile Canonical Property",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        540
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -687,7 +725,7 @@
       "main": [
         [
           {
-            "node": "Call WF-012 Evidence Pipeline",
+            "node": "Reconcile Canonical Property",
             "type": "main",
             "index": 0
           }
@@ -699,6 +737,17 @@
         [
           {
             "node": "Respond Pipeline Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconcile Canonical Property": {
+      "main": [
+        [
+          {
+            "node": "Call WF-012 Evidence Pipeline",
             "type": "main",
             "index": 0
           }

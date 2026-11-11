@@ -183,7 +183,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/buyers/' + $('Calculate Buyer Scores').first().json.buyer.insulaBuyerId }}",
+        "url": "{{ $env.INSULA_CRM_BASE_URL + '/api/v1/buyers/' + (($('Lookup Buyer in InsulaCRM').first().json.data && $('Lookup Buyer in InsulaCRM').first().json.data[0] ? $('Lookup Buyer in InsulaCRM').first().json.data[0].id : 0)) }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -215,6 +215,54 @@
       "position": [
         1800,
         300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/buyers' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "external_id",
+              "value": "={{ $('Calculate Buyer Scores').first().json.buyer._id }}"
+            },
+            {
+              "name": "external_source",
+              "value": "convex_buyer_onboarding"
+            },
+            {
+              "name": "per_page",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "lookup-buyer-in-insula",
+      "name": "Lookup Buyer in InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        220
       ],
       "onError": "continueRegularOutput"
     }
@@ -279,7 +327,7 @@
       "main": [
         [
           {
-            "node": "Sync Buyer Score to InsulaCRM",
+            "node": "Lookup Buyer in InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -331,6 +379,17 @@
         [
           {
             "node": "IF Tier Changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Buyer in InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Sync Buyer Score to InsulaCRM",
             "type": "main",
             "index": 0
           }

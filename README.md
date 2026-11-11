@@ -192,3 +192,26 @@ It can use:
 The adapter converts the results into the provider-neutral evidence schema and sends them to WF-012. It does not write AI conclusions directly into the CRM; evidence is stored first, then WF-011 performs the evidence-constrained analysis.
 
 This keeps external providers replaceable and makes every analysis traceable back to collected evidence.
+
+
+### WF-014 — NC Property Intelligence Collector
+
+`workflows/14-nc-property-intelligence-collector.json` adds county-targeted public-source collection.
+
+The first enabled county adapter is **Catawba County, NC** and targets official starting points for:
+- parcel/GIS records
+- real-estate tax records
+- delinquent-tax searches
+- permits/inspections
+- county GIS datasets
+- land records
+
+The source registry is maintained separately in `config/nc-property-sources.json` so additional NC counties can be enabled without rewriting the workflow.
+
+Required env vars:
+- `INSULA_CRM_BASE_URL`
+- `INSULA_CRM_API_KEY`
+- `FIRECRAWL_API_KEY`
+- `FIRECRAWL_API_URL` (optional)
+
+WF-014 stores provider output as evidence in InsulaCRM. It does not treat a landing page or scraped text as a verified property fact and does not calculate ARV/MAO itself. The next production-hardening step is stable county dataset/API parsing and automatic handoff from WF-014 into WF-012 for evidence-first AI analysis.

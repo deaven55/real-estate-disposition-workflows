@@ -243,3 +243,13 @@ WF-014 now calls InsulaCRM's property-intelligence reconciliation endpoint after
 ### Deal Priority Queue API
 
 The unified dashboard read model is now provided by InsulaCRM at `GET /api/v1/deal-queue`. It is tenant-scoped and supports state, county, city, stage, ranking grade/score, underwriting decision, ARV availability, buyer-match availability, compliance status, and queue sorting. Each item includes seller, canonical property intelligence, ARV/repairs/offer underwriting, ranking, buyer demand, compliance, and explicit missing-data/work-queue actions. Unknown jurisdictions remain REVIEW; current North Carolina automation is conservatively blocked pending jurisdiction clearance. This endpoint is a read model and does not replace canonical CRM records.
+
+
+### WF-019 — Acquisition-to-Underwriting Orchestrator
+
+- `workflows/19-acquisition-to-underwriting-orchestrator.json` is the unified pipeline entry point.
+- Accepts a state/county/property request and runs WF-014 → WF-015 → WF-016 → WF-017 → WF-018 in sequence.
+- Preserves each stage result and returns one consolidated pipeline response.
+- State/county are dynamic; Catawba County is not hardcoded as the operating boundary.
+- WF-018 remains the downstream automation control signal; REVIEW does not become an automatic seller/buyer action.
+- n8n execution is still required before production activation.

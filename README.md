@@ -128,3 +128,18 @@ Built by **Rafiul Islam**. AI Voice Agent Systems Architect and Full-Stack Autom
 ## License
 
 Shared for portfolio and reference. The Real Estate Disposition product, brand, and backend (Convex schemas, CRM configuration, business logic) are proprietary.
+
+
+## InsulaCRM Integration Status
+
+InsulaCRM is the canonical seller/property/deal/buyer CRM for the unified wholesaling OS. The disposition workflows remain reference automation until their exact workflow files and backend contracts are imported into the integration branch. Do not introduce a second permanent CRM database; disposition automations should write through InsulaCRM API v1 using tenant-scoped API keys and deterministic idempotency keys.
+
+Planned integration order:
+1. Deal Intake & Enrichment → InsulaCRM deal/property identity.
+2. Intelligent Distribution → InsulaCRM buyer/deal relationships.
+3. Buyer Onboarding → InsulaCRM buyer identity and buy box.
+4. Buyer Scoring → InsulaCRM buyer score/tier.
+5. Deal Package Delivery → InsulaCRM deal activity.
+6. Response/Follow-Up/Lifecycle/Seller Communication → InsulaCRM activities and deal state.
+
+The source workflows are preserved during migration; Close CRM/Convex remain transport/staging dependencies until each replacement is independently verified.

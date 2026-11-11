@@ -218,3 +218,8 @@ Required env vars:
 - `PERPLEXITY_PROPERTY_MODEL` (optional)
 
 WF-014 stores provider output as evidence in InsulaCRM. It does not treat a landing page or scraped text as a verified property fact and does not calculate ARV/MAO itself. WF-014 is intentionally provider-neutral: it collects source evidence, then extracts evidence-constrained structured property facts such as owner, parcel ID, assessed value, acreage, building size, sales history, tax status, permits, zoning, and legal description. Fields not explicitly supported by source text remain null. WF-014 does not calculate ARV/MAO. WF-014 now aggregates all collected source evidence, extracts evidence-constrained structured facts with OpenAI Structured Outputs, and hands the single bundle to WF-012. WF-012 remains the canonical evidence persistence + AI-analysis bridge, preventing duplicate evidence writes from the collector. The next hardening step is stable county dataset/API parsing and canonical property-field reconciliation across multiple sources.
+
+
+### Canonical property intelligence reconciliation
+
+WF-014 now calls InsulaCRM's property-intelligence reconciliation endpoint after aggregating source evidence. This writes evidence-backed owner, parcel, assessment, tax, acreage, zoning, sale, permit, and other stable property facts into the canonical Property record while retaining per-field provenance. Source precedence is deterministic and stronger existing provenance is preserved. WF-012 is then called with the original aggregated evidence bundle for evidence-first AI deal analysis.

@@ -59,7 +59,7 @@ jobs:
             for (const node of workflow.nodes || []) {
               if (node.type !== 'n8n-nodes-base.code') continue;
               try {
-                new Function(node.parameters?.jsCode || '');
+                new Function(`async function __validate(){\n${node.parameters?.jsCode || ''}\n}`);
               } catch (err) {
                 failures.push(`${file}: Code node "${node.name}" has invalid JavaScript — ${err.message}`);
               }

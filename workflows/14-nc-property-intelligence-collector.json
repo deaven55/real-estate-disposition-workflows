@@ -380,7 +380,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const items=$input.all(); if(!items.length) return [];\nconst first=items[0].json;\nconst evidence=items.map(i=>i.json.evidence).filter(Boolean);\nreturn [{json:{\n  dealId:first.dealId,\n  evidence,\n  analysisContext:{\n    property_request:{\n      address:first.evidence?.payload?.address || null,\n      county:first.evidence?.payload?.county || null\n    },\n    evidence_count:evidence.length\n  }\n}}}];"
+        "jsCode": "const items=$input.all(); if(!items.length) return [];\nconst first=items[0].json;\nconst evidence=items.map(i=>i.json.evidence).filter(Boolean);\nreturn [{json:{\n  dealId:first.dealId,\n  evidence,\n  analysisContext:{\n    property_request:{\n      address:first.evidence?.payload?.address || null,\n      county:first.evidence?.payload?.county || null\n    },\n    evidence_count:evidence.length\n  }\n}}];"
       },
       "id": "wf014-aggregate",
       "name": "Aggregate Evidence Bundle",

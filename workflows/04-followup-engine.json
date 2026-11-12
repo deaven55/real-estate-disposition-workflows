@@ -349,6 +349,21 @@
         200
       ],
       "parameters": {}
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data=$input.first().json;\nconst base=$env.INSULA_CRM_BASE_URL;\ntry {\n  const buyerLookup=await this.helpers.httpRequest({\n    method:'GET',url:base+'/api/v1/buyers',\n    qs:{external_id:data.buyer && (data.buyer._id || data.buyer.id),external_source:'convex_buyer_onboarding',per_page:1},\n    headers:{'X-API-Key':$env.INSULA_CRM_API_KEY}\n  });\n  const dealLookup=await this.helpers.httpRequest({\n    method:'GET',url:base+'/api/v1/deals',\n    qs:{external_id:data.deal && (data.deal._id || data.deal.id),external_source:'convex_disposition_intake',per_page:1},\n    headers:{'X-API-Key':$env.INSULA_CRM_API_KEY}\n  });\n  const buyer=buyerLookup?.data?.[0], deal=dealLookup?.data?.[0];\n  if(buyer && deal){\n    await this.helpers.httpRequest({\n      method:'POST',\n      url:base+'/api/v1/deals/'+deal.id+'/matches',\n      headers:{\n        'X-API-Key':$env.INSULA_CRM_API_KEY,\n        'Content-Type':'application/json',\n        'Idempotency-Key':'disposition:followup:'+data.distribution._id+':'+(data.followUpNumber||1)+':v1'\n      },\n      body:{\n        buyer_id:buyer.id,\n        status:data.isLastFollowUp?'no_response':'matched',\n        outreach_status:'follow_up_sent',\n        last_contacted_at:new Date().toISOString(),\n        buyer_notes:'Automated follow-up #' + (data.followUpNumber||1)\n      },\n      json:true\n    });\n  }\n} catch(error) {\n  console.log('InsulaCRM follow-up sync failed:',error.message);\n}\nreturn [{json:data}];"
+      },
+      "id": "sync-followup-to-insula",
+      "name": "Sync Follow-Up to InsulaCRM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        300
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -487,7 +502,7 @@
       "main": [
         [
           {
-            "node": "Update Follow-Up Count",
+            "node": "Sync Follow-Up to InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -528,6 +543,17 @@
         [
           {
             "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Follow-Up to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Update Follow-Up Count",
             "type": "main",
             "index": 0
           }

@@ -1,0 +1,91 @@
+{
+  "name": "WholeStack WF-018: Jurisdiction Compliance Gate",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0,0],
+      "parameters": {
+        "path": "wholestack-jurisdiction-compliance-v1",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "prepare",
+      "name": "Prepare Compliance Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240,0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input=$input.first().json.body||$input.first().json; const missing=['dealId'].filter(k=>!input[k]); return [{json:{valid:missing.length===0,errors:missing,dealId:input.dealId,activity:input.activity||'acquisition',state:input.state}}];"
+      }
+    },
+    {
+      "id": "if",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [460,0],
+      "parameters": {
+        "conditions": {
+          "options":{"version":2,"caseSensitive":true,"typeValidation":"strict","leftValue":""},
+          "combinator":"and",
+          "conditions":[{"id":"valid","leftValue":"={{ $json.valid }}","rightValue":"","operator":{"type":"boolean","operation":"true","singleValue":true}}]
+        },
+        "options":{}
+      }
+    },
+    {
+      "id":"bad",
+      "name":"Respond 400",
+      "type":"n8n-nodes-base.respondToWebhook",
+      "typeVersion":1.1,
+      "position":[680,220],
+      "parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify({success:false,errors:$json.errors}) }}","options":{"responseCode":400}}
+    },
+    {
+      "id":"call",
+      "name":"Check Jurisdiction Compliance",
+      "type":"n8n-nodes-base.httpRequest",
+      "typeVersion":4.4,
+      "position":[700,-80],
+      "parameters":{
+        "method":"POST",
+        "url":"={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $json.dealId + '/compliance/check' }}",
+        "sendHeaders":true,
+        "headerParameters":{"parameters":[
+          {"name":"X-API-Key","value":"={{ $env.INSULA_CRM_API_KEY }}"},
+          {"name":"Content-Type","value":"application/json"}
+        ]},
+        "sendBody":true,
+        "specifyBody":"json",
+        "jsonBody":"={{ JSON.stringify({activity:$json.activity,state:$json.state}) }}",
+        "options":{"timeout":60000}
+      }
+    },
+    {
+      "id":"response",
+      "name":"Respond Compliance Result",
+      "type":"n8n-nodes-base.respondToWebhook",
+      "typeVersion":1.1,
+      "position":[940,-80],
+      "parameters":{
+        "respondWith":"json",
+        "responseBody":"={{ JSON.stringify({success:true,dealId:$('Prepare Compliance Request').first().json.dealId,result:$json}) }}",
+        "options":{"responseCode":200}
+      }
+    }
+  ],
+  "connections":{
+    "Webhook":{"main":[[{"node":"Prepare Compliance Request","type":"main","index":0}]]},
+    "Prepare Compliance Request":{"main":[[{"node":"IF Valid","type":"main","index":0}]]},
+    "IF Valid":{"main":[[{"node":"Check Jurisdiction Compliance","type":"main","index":0}],[{"node":"Respond 400","type":"main","index":0}]]},
+    "Check Jurisdiction Compliance":{"main":[[{"node":"Respond Compliance Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","callerPolicy":"workflowsFromSameOwner","availableInMCP":false}
+}

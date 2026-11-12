@@ -275,6 +275,21 @@
         },
         "options": {}
       }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data=$input.first().json;\nconst base=$env.INSULA_CRM_BASE_URL;\ntry {\n  const lookup=await this.helpers.httpRequest({\n    method:'GET',url:base+'/api/v1/leads',\n    qs:{phone:data.seller.phone,per_page:1},\n    headers:{'X-API-Key':$env.INSULA_CRM_API_KEY}\n  });\n  const lead=lookup?.data?.[0];\n  if(lead){\n    await this.helpers.httpRequest({\n      method:'POST',url:base+'/api/v1/activities',\n      headers:{\n        'X-API-Key':$env.INSULA_CRM_API_KEY,\n        'Content-Type':'application/json',\n        'Idempotency-Key':'disposition:seller-notify:'+($('Seller Notify Webhook').first().json.event||'event')+':'+($('Seller Notify Webhook').first().json.dealId||lead.id)+':v1'\n      },\n      body:{\n        lead_id:lead.id,\n        type:'stage_change',\n        subject:'Seller disposition update: '+($('Seller Notify Webhook').first().json.event||'status update'),\n        body:data.smsText,\n        logged_at:new Date().toISOString()\n      },\n      json:true\n    });\n  }\n} catch(error){ console.log('InsulaCRM seller communication sync failed:',error.message); }\nreturn [{json:data}];"
+      },
+      "id": "sync-seller-communication-to-insula",
+      "name": "Sync Seller Communication to InsulaCRM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        300
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -333,7 +348,7 @@
       "main": [
         [
           {
-            "node": "IF Should Send SMS",
+            "node": "Sync Seller Communication to InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -414,6 +429,17 @@
         [
           {
             "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Seller Communication to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "IF Should Send SMS",
             "type": "main",
             "index": 0
           }

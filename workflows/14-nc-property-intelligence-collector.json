@@ -1,0 +1,771 @@
+{
+  "name": "WF-014 State/County Property Intelligence Collector",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-nc-property-intelligence-v1",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf014-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        0
+      ],
+      "webhookId": "wholestack-nc-property-intelligence-v1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst dealId = body.dealId ?? body.deal_id;\nconst address = String(body.address ?? '').trim();\nconst city = String(body.city ?? '').trim();\nlet state = String(body.state ?? '').trim().toUpperCase();\nconst zip = String(body.zip ?? '').trim();\nconst county = String(body.county ?? '').trim();\nif (!dealId || !address || !city || !state) {\n  return [{json:{valid:false,error:'dealId, address, city, and state are required'}}];\n}\nconst stateAliases = {\n  'ALABAMA':'AL','ALASKA':'AK','ARIZONA':'AZ','ARKANSAS':'AR','CALIFORNIA':'CA','COLORADO':'CO',\n  'CONNECTICUT':'CT','DELAWARE':'DE','FLORIDA':'FL','GEORGIA':'GA','HAWAII':'HI','IDAHO':'ID',\n  'ILLINOIS':'IL','INDIANA':'IN','IOWA':'IA','KANSAS':'KS','KENTUCKY':'KY','LOUISIANA':'LA',\n  'MAINE':'ME','MARYLAND':'MD','MASSACHUSETTS':'MA','MICHIGAN':'MI','MINNESOTA':'MN','MISSISSIPPI':'MS',\n  'MISSOURI':'MO','MONTANA':'MT','NEBRASKA':'NE','NEVADA':'NV','NEW HAMPSHIRE':'NH','NEW JERSEY':'NJ',\n  'NEW MEXICO':'NM','NEW YORK':'NY','NORTH CAROLINA':'NC','NORTH DAKOTA':'ND','OHIO':'OH','OKLAHOMA':'OK',\n  'OREGON':'OR','PENNSYLVANIA':'PA','RHODE ISLAND':'RI','SOUTH CAROLINA':'SC','SOUTH DAKOTA':'SD',\n  'TENNESSEE':'TN','TEXAS':'TX','UTAH':'UT','VERMONT':'VT','VIRGINIA':'VA','WASHINGTON':'WA',\n  'WEST VIRGINIA':'WV','WISCONSIN':'WI','WYOMING':'WY','DISTRICT OF COLUMBIA':'DC'\n};\nstate = stateAliases[state] || state;\nif (!/^[A-Z]{2}$/.test(state)) {\n  return [{json:{valid:false,error:'State must be a two-letter US postal abbreviation or full state name'}}];\n}\nconst fullAddress = [address,city,state,zip].filter(Boolean).join(', ');\nreturn [{json:{valid:true,dealId,address,city,state,zip,county,fullAddress,requestedAt:new Date().toISOString(),county_resolution_needed:!county}}];"
+      },
+      "id": "wf014-prepare",
+      "name": "Prepare Property Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "wf014-valid",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error: $json.error } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "wf014-bad",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Validate State and County').item.json;\nconst raw = $json;\nlet registry = raw.data ?? raw;\nif (typeof registry === 'string') { try { registry = JSON.parse(registry); } catch { registry = {}; } }\nconst state = String(base.state || '').trim().toUpperCase();\nconst county = String(base.county || '').trim();\nconst stateEntries = registry.states?.[state] || {};\nconst countyEntry = stateEntries[county] || stateEntries[Object.keys(stateEntries).find(k => k.toLowerCase() === county.toLowerCase())] || null;\nconst known = Array.isArray(countyEntry?.sources) ? countyEntry.sources : [];\nreturn [{json:{...base,source_registry_version:registry.version||null,source_mode:known.length ? 'registry' : 'discovery',sources:known.map(s=>({...s,evidenceType:s.evidenceType||s.evidence_type,query:encodeURIComponent(base.fullAddress)})),source_discovery_query:known.length ? null : `Find the official county government/public-record sources for ${county} County, ${state} for this property address: ${base.fullAddress}. Return only official government domains and categorize sources as parcel/GIS, assessment/tax, delinquent tax, permits, land records, and public datasets when available.`}}];"
+      },
+      "id": "wf014-sources",
+      "name": "Build State/County Source Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -340,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return ($json.sources ?? []).map(source => ({json:{...$json,source}}));"
+      },
+      "id": "wf014-split",
+      "name": "Split Source Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev/v2/scrape' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.FIRECRAWL_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ url: $json.source.url, formats: ['markdown'], onlyMainContent: true }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "wf014-firecrawl",
+      "name": "Collect County Source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        100,
+        -20
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = $('Split Source Targets').item.json.source;\nconst base = $('Split Source Targets').item.json;\nconst raw = $json.data ?? $json;\nconst markdown = typeof raw === 'string' ? raw : (raw.markdown ?? raw.content ?? JSON.stringify(raw));\nreturn [{json:{\n  dealId:base.dealId,\n  extraction_context:{\n    address:base.fullAddress,\n    state:base.state,\n    county:base.county,\n    source_id:src.id,\n    source_type:src.type,\n    source_url:src.url\n  },\n  evidence:{\n    evidence_type:src.evidenceType,\n    source:src.id,\n    source_record_id:src.id + ':' + base.dealId,\n    observed_at:new Date().toISOString(),\n    confidence:0.65,\n    payload:{\n      address:base.fullAddress,\n      county:base.county,\n      source_url:src.url,\n      source_type:src.type,\n      collected_at:new Date().toISOString(),\n      content:markdown\n    }\n  }\n}}];"
+      },
+      "id": "wf014-normalize",
+      "name": "Normalize Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, dealId: $json.dealId, source: $json.evidence_source, stored: $json.stored, next: 'Run WF-012 to build the evidence-first analysis context.' } }}",
+        "options": {}
+      },
+      "id": "wf014-response",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        980,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERPLEXITY_API_URL || 'https://api.perplexity.ai/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.PERPLEXITY_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ model: $env.PERPLEXITY_PROPERTY_MODEL || 'sonar', messages: [{ role:'system', content:'Identify only official government/public-record source URLs for the requested state and county. Do not invent URLs. Return compact JSON: {sources:[{id,type,evidenceType,url,notes}]}.' }, { role:'user', content: $json.source_discovery_query }], temperature: 0.1 }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "wf014-discovery",
+      "name": "Discover County Sources When Needed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        -180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Build State/County Source Targets').item.json;\nconst known = base.sources || [];\nif (known.length) return [{json:{...base, sources:known}}];\nconst raw = $json;\nlet text = raw.output_text ?? raw.choices?.[0]?.message?.content ?? raw.data?.choices?.[0]?.message?.content ?? '';\nif (typeof text !== 'string') text = JSON.stringify(text);\ntext = text.replace(/^\\`\\`\\`json\\s*/,'').replace(/\\s*\\`\\`\\`$/,'');\nlet discovered = [];\ntry { discovered = JSON.parse(text).sources || []; } catch {}\nreturn [{json:{...base, sources:discovered.filter(s => s && s.url).map(s => ({...s, query:encodeURIComponent(base.fullAddress)}))}}];"
+      },
+      "id": "wf014-discovered-normalize",
+      "name": "Normalize Discovered Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.source_mode }}",
+              "operation": "equals",
+              "value2": "discovery"
+            }
+          ]
+        }
+      },
+      "id": "wf014-source-mode",
+      "name": "Registry or Discovery",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERPLEXITY_API_URL || 'https://api.perplexity.ai/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.PERPLEXITY_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({model:$env.PERPLEXITY_PROPERTY_MODEL || 'sonar',messages:[{role:'system',content:'Resolve the county for a US property address. Use authoritative sources where possible. Return JSON only: {county, state, confidence, source_citations:[{url,title}]} . Do not guess.'},{role:'user',content:'Resolve the county for this property: ' + $json.fullAddress}],temperature:0.1}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "wf014-county-resolver",
+      "name": "Resolve County When Missing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -120,
+        220
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Prepare Property Request').item.json;\nlet text=$json.output_text ?? $json.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nif(typeof text!=='string') text=JSON.stringify(text);\ntext=text.replace(/^\\`\\`\\`json\\s*/,'').replace(/\\s*\\`\\`\\`$/,'');\nlet county='', confidence=0, citations=[];\ntry { const parsed=JSON.parse(text); county=String(parsed.county||'').trim(); confidence=Number(parsed.confidence||0); citations=parsed.source_citations||[]; } catch {}\nif(!county) return [{json:{...base,valid:false,error:'Unable to resolve county from the supplied address',county_resolution_confidence:confidence}}];\nreturn [{json:{...base,county,county_resolution_confidence:confidence,county_resolution_sources:citations,county_resolution_needed:false}}];"
+      },
+      "id": "wf014-county-normalize",
+      "name": "Normalize County Resolution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.county_resolution_needed }}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "wf014-county-if",
+      "name": "County Supplied?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:$json}];"
+      },
+      "id": "wf014-county-pass",
+      "name": "Use Supplied County",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:$json}];"
+      },
+      "id": "wf014-county-join",
+      "name": "Continue With Resolved County",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const state=$json.state; const county=$json.county; if(!state||!county) return [{json:{...$json,valid:false,error:'State/county resolution incomplete'}}]; return [{json:$json}];"
+      },
+      "id": "wf014-state-county-ready",
+      "name": "Validate State and County",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ model: $env.OPENAI_PROPERTY_EXTRACTION_MODEL || $env.OPENAI_DEAL_ANALYSIS_MODEL || 'gpt-5-mini', messages: [{ role:'system', content:'Extract only property facts explicitly present in the supplied source text. Never infer, guess, or fill missing values. Use null for unsupported fields. source_quotes must contain short exact snippets supporting extracted facts. Return the requested JSON object.' }, { role:'user', content:[{type:'input_text',text:'Property context: '+JSON.stringify($json.extraction_context)+'\\\\n\\\\nSource text:\\\\n'+JSON.stringify($json.evidence.payload.content)}]}], text:{format:{type:'json_schema',name:'property_facts',strict:true,schema:{type:'object',properties:{\"county\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"owner_name\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"mailing_address\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"property_address\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"parcel_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"property_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"assessed_value\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"land_value\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"building_value\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"acreage\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"lot_sqft\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"year_built\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"building_sqft\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"bedrooms\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"bathrooms\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"sale_date\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"sale_price\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"tax_amount\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"tax_status\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"delinquent_tax_amount\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"permit_records\":{\"anyOf\":[{\"type\":\"array\",\"items\":{\"type\":\"string\"}},{\"type\":\"null\"}]},\"zoning\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"legal_description\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"anyOf\":[{\"type\":\"number\"},{\"type\":\"null\"}]},\"missing_fields\":{\"anyOf\":[{\"type\":\"array\",\"items\":{\"type\":\"string\"}},{\"type\":\"null\"}]},\"source_quotes\":{\"anyOf\":[{\"type\":\"array\",\"items\":{\"type\":\"string\"}},{\"type\":\"null\"}]}},required:[\"county\",\"owner_name\",\"mailing_address\",\"property_address\",\"parcel_id\",\"property_type\",\"assessed_value\",\"land_value\",\"building_value\",\"acreage\",\"lot_sqft\",\"year_built\",\"building_sqft\",\"bedrooms\",\"bathrooms\",\"sale_date\",\"sale_price\",\"tax_amount\",\"tax_status\",\"delinquent_tax_amount\",\"permit_records\",\"zoning\",\"legal_description\",\"confidence\",\"missing_fields\",\"source_quotes\"],additionalProperties:false}}}}) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "wf014-property-extractor",
+      "name": "Extract Structured Property Facts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -20,
+        620
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Normalize Evidence').item.json;\nlet text=$json.output_text ?? $json.choices?.[0]?.message?.content ?? $json.data?.output_text ?? '';\nif(typeof text!=='string') text=JSON.stringify(text);\ntext=text.replace(/^\\`\\`\\`json\\s*/,'').replace(/\\s*\\`\\`\\`$/,'');\nlet facts={};\ntry { facts=JSON.parse(text); } catch {}\nconst evidence={...base.evidence,payload:{...base.evidence.payload,structured_facts:facts,extraction_method:'evidence_constrained_llm',extraction_model:$env.OPENAI_PROPERTY_EXTRACTION_MODEL || $env.OPENAI_DEAL_ANALYSIS_MODEL || 'gpt-5-mini'}};\nreturn [{json:{dealId:base.dealId,evidence}}];"
+      },
+      "id": "wf014-structured-evidence",
+      "name": "Build Structured Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items=$input.all(); if(!items.length) return [];\nconst first=items[0].json;\nconst evidence=items.map(i=>i.json.evidence).filter(Boolean);\nreturn [{json:{\n  dealId:first.dealId,\n  evidence,\n  analysisContext:{\n    property_request:{\n      address:first.evidence?.payload?.address || null,\n      county:first.evidence?.payload?.county || null\n    },\n    evidence_count:evidence.length\n  }\n}}];"
+      },
+      "id": "wf014-aggregate",
+      "name": "Aggregate Evidence Bundle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_INTERNAL_BASE_URL + '/webhook/wholestack-property-intelligence-v1' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "=property_intelligence:wf014:{{$json.dealId}}:v1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "{{ JSON.stringify({dealId:$('Aggregate Evidence Bundle').first().json.dealId,evidence:$('Aggregate Evidence Bundle').first().json.evidence,analysisContext:$('Aggregate Evidence Bundle').first().json.analysisContext}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "wf014-call-wf012",
+      "name": "Call WF-012 Evidence Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        620
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, dealId: $('Aggregate Evidence Bundle').first().json.dealId, evidence_count: $('Aggregate Evidence Bundle').first().json.evidence.length, pipeline: 'WF-012 evidence persistence + WF-011 AI deal analysis', result: $json } }}",
+        "options": {}
+      },
+      "id": "wf014-response-v2",
+      "name": "Respond Pipeline Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $json.dealId + '/property-intelligence/reconcile' }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({evidence:$json.evidence}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "wf014-reconcile",
+      "name": "Reconcile Canonical Property",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        540
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf014-registry",
+      "name": "Load Canonical Source Registry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -560,
+        -20
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.WHOLESTACK_SOURCE_REGISTRY_URL || 'https://raw.githubusercontent.com/deaven55/real-estate-acquisition-workflows/feature/insula-crm-integration/config/jurisdiction-source-registry.json' }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Property Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Property Request": {
+      "main": [
+        [
+          {
+            "node": "IF Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid": {
+      "main": [
+        [
+          {
+            "node": "County Supplied?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Source Targets": {
+      "main": [
+        [
+          {
+            "node": "Collect County Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect County Source": {
+      "main": [
+        [
+          {
+            "node": "Normalize Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Evidence": {
+      "main": [
+        [
+          {
+            "node": "Extract Structured Property Facts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build State/County Source Targets": {
+      "main": [
+        [
+          {
+            "node": "Registry or Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registry or Discovery": {
+      "main": [
+        [
+          {
+            "node": "Discover County Sources When Needed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discover County Sources When Needed": {
+      "main": [
+        [
+          {
+            "node": "Normalize Discovered Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Discovered Sources": {
+      "main": [
+        [
+          {
+            "node": "Split Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "County Supplied?": {
+      "main": [
+        [
+          {
+            "node": "Use Supplied County",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resolve County When Missing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Supplied County": {
+      "main": [
+        [
+          {
+            "node": "Continue With Resolved County",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve County When Missing": {
+      "main": [
+        [
+          {
+            "node": "Normalize County Resolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize County Resolution": {
+      "main": [
+        [
+          {
+            "node": "Continue With Resolved County",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue With Resolved County": {
+      "main": [
+        [
+          {
+            "node": "Validate State and County",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate State and County": {
+      "main": [
+        [
+          {
+            "node": "Load Canonical Source Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Structured Property Facts": {
+      "main": [
+        [
+          {
+            "node": "Build Structured Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Structured Evidence": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Evidence Bundle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Evidence Bundle": {
+      "main": [
+        [
+          {
+            "node": "Reconcile Canonical Property",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF-012 Evidence Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Respond Pipeline Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconcile Canonical Property": {
+      "main": [
+        [
+          {
+            "node": "Call WF-012 Evidence Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Canonical Source Registry": {
+      "main": [
+        [
+          {
+            "node": "Build State/County Source Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "wf014-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

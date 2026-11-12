@@ -489,7 +489,8 @@
         "options": {
           "timeout": 30000
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -527,17 +528,6 @@
         [
           {
             "node": "Respond 400",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build County Source Targets": {
-      "main": [
-        [
-          {
-            "node": "Split Source Targets",
             "type": "main",
             "index": 0
           }
@@ -622,17 +612,6 @@
         [
           {
             "node": "Split Source Targets",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Resolve State/County Inputs": {
-      "main": [
-        [
-          {
-            "node": "County Supplied?",
             "type": "main",
             "index": 0
           }

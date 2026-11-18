@@ -1,0 +1,240 @@
+{
+  "name": "WholeStack WF-376: Negotiation Action & Re-Offer Controller",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Negotiation Action Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-negotiation-action",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fetchEvaluation",
+      "name": "Fetch WF-375 Evaluation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/negotiations/evaluation/get",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ evaluationId: $json.body.evaluationId, dealId: $json.body.dealId, activityId: $json.body.activityId }) }}"
+      }
+    },
+    {
+      "id": "validate",
+      "name": "Validate Negotiation Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "jsCode": "var e = $input.first().json.data || $input.first().json;\\nvar decision = String(e.evaluationDecision || '').toLowerCase();\\nvar counter = Number(e.counterofferAmount);\\nvar current = Number(e.currentOfferAmount || 0);\\nvar mao = Number(e.protectedMAO);\\nvar dealStatus = String(e.dealStatus || '').toLowerCase();\\nvar suppressed = e.suppressed === true || e.dnc === true;\\nvar human = e.humanReviewRequired === true || decision === 'human_review';\\nvar proposed = decision === 'revised_offer' ? Math.min(mao, counter > 0 && current > 0 ? Math.round(((counter + current) / 2) * 100) / 100 : 0) : decision === 'accept_or_contract' ? counter : 0;\\nvar action = decision === 'accept_or_contract' ? 'accept_or_contract' : decision === 'revised_offer' ? 're_offer' : decision === 'walk_away_or_reengage' ? 're_engage' : 'human_review';\\nvar validAmount = Number.isFinite(proposed) && proposed > 0;\\nvar protectedState = ['closed','cancelled','disputed'].indexOf(dealStatus) !== -1;\\nvar blocked = human || suppressed || protectedState || !Number.isFinite(mao) || mao <= 0 || (action === 're_offer' && (!validAmount || proposed > mao));\\nvar blockedReason = human ? 'human_review_required' : suppressed ? 'seller_suppressed_or_dnc' : protectedState ? 'deal_state_protected' : !Number.isFinite(mao) || mao <= 0 ? 'missing_protected_mao' : action === 're_offer' && (!validAmount || proposed > mao) ? 'invalid_or_excessive_re_offer' : null;\\nreturn [{ json: { ...e, evaluationDecision: decision, negotiationAction: action, proposedOfferAmount: proposed, blocked: blocked, blockedReason: blockedReason, idempotencyKey: 'wf376:' + String(e.evaluationId || e.activityId || '') + ':' + action + ':' + String(proposed) } }];"
+      }
+    },
+    {
+      "id": "ifAllowed",
+      "name": "IF Action Allowed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        930,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.blocked }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "persist",
+      "name": "Persist Negotiation Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/negotiations/action",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ evaluationId: $json.evaluationId, dealId: $json.dealId, sellerId: $json.sellerId, negotiationAction: $json.negotiationAction, proposedOfferAmount: $json.proposedOfferAmount, currentOfferAmount: $json.currentOfferAmount, counterofferAmount: $json.counterofferAmount, idempotencyKey: $json.idempotencyKey }) }}"
+      }
+    },
+    {
+      "id": "dispatch",
+      "name": "Dispatch Re-Offer Through WF-373",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1390,
+        150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/communications/negotiation-dispatch",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sellerId: $json.sellerId, dealId: $json.dealId, decisionId: $json.evaluationId, decisionType: $json.negotiationAction === 're_offer' ? 'revised_offer' : $json.negotiationAction, offerAmount: $json.proposedOfferAmount, approvedTerms: $json.approvedTerms || {}, sellerMessage: $json.sellerMessage || null, idempotencyKey: $json.idempotencyKey }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond Negotiation Action",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1620,
+        150
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, workflow: 'WF-376', negotiationAction: $('Validate Negotiation Action').first().json.negotiationAction, proposedOfferAmount: $('Validate Negotiation Action').first().json.proposedOfferAmount, dispatchStatus: $json.status || 'submitted', idempotencyKey: $('Validate Negotiation Action').first().json.idempotencyKey }) }}"
+      }
+    },
+    {
+      "id": "respondBlocked",
+      "name": "Respond Action Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1160,
+        450
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, actionCreated: false, workflow: 'WF-376', reason: $json.blockedReason || 'action_blocked', dealId: $json.dealId || null, evaluationId: $json.evaluationId || null }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Negotiation Action Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch WF-375 Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch WF-375 Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Validate Negotiation Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Negotiation Action": {
+      "main": [
+        [
+          {
+            "node": "IF Action Allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Action Allowed": {
+      "main": [
+        [
+          {
+            "node": "Persist Negotiation Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Action Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Negotiation Action": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Re-Offer Through WF-373",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Re-Offer Through WF-373": {
+      "main": [
+        [
+          {
+            "node": "Respond Negotiation Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

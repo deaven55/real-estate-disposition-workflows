@@ -1,0 +1,333 @@
+{
+  "name": "WF-387 — Assignment Closing Coordination & Final Buyer/Seller Handoff Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "assignment-closing-coordination",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf387-webhook",
+      "name": "Assignment Closing Coordination Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst required = ['assignmentId','dealId','buyerId','sellerId'];\nconst missing = required.filter(k => b[k] === undefined || b[k] === null || b[k] === '');\nif (missing.length) throw new Error('Missing required closing coordination fields: ' + missing.join(', '));\nconst assignmentId = String(b.assignmentId);\nconst dealId = String(b.dealId);\nconst buyerId = String(b.buyerId);\nconst sellerId = String(b.sellerId);\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf387:closing-coordination:' + assignmentId + ':' + dealId + ':' + buyerId + ':' + sellerId));\nreturn [{ json: { ...b, assignmentId, dealId, buyerId, sellerId, idempotencyKey } }];"
+      },
+      "id": "wf387-normalize",
+      "name": "Normalize Closing Coordination Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/assignments/closing-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf387-context",
+      "name": "Fetch InsulaCRM Closing Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst assignment = r.assignment ?? r.data?.assignment ?? {};\nconst deal = r.deal ?? r.data?.deal ?? {};\nconst buyer = r.buyer ?? r.data?.buyer ?? {};\nconst seller = r.seller ?? r.data?.seller ?? {};\nconst approval = r.approval ?? r.data?.approval ?? {};\nconst contract = r.contract ?? r.data?.contract ?? {};\nconst signatures = r.signatures ?? r.data?.signatures ?? {};\nconst blockedStates = new Set(['closed','cancelled','disputed','dnc']);\nconst dealState = String(deal.state ?? deal.status ?? '').toLowerCase();\nconst assignmentState = String(assignment.state ?? assignment.status ?? '').toLowerCase();\nconst approvalStatus = String(approval.status ?? approval.decision ?? '').toLowerCase();\nconst buyerActive = buyer.active === true || String(buyer.status ?? '').toLowerCase() === 'active';\nconst sellerValid = seller.id !== undefined && seller.id !== null;\nconst contractReady = contract.ready === true || contract.contractReady === true;\nconst buyerSigned = signatures.buyerSigned === true || contract.buyerSigned === true;\nconst sellerSigned = signatures.sellerSigned === true || contract.sellerSigned === true;\nconst purchasePrice = Number(assignment.purchasePrice ?? deal.purchasePrice ?? 0);\nconst assignmentFee = Number(assignment.assignmentFee ?? deal.assignmentFee ?? 0);\nconst issues = [];\nif (approvalStatus !== 'approved') issues.push('assignment_approval_not_confirmed');\nif (!contractReady) issues.push('contract_not_ready');\nif (!buyerSigned) issues.push('buyer_signature_not_confirmed');\nif (!sellerSigned) issues.push('seller_signature_not_confirmed');\nif (!buyerActive) issues.push('buyer_not_active');\nif (!sellerValid) issues.push('seller_identity_not_confirmed');\nif (!(purchasePrice > 0)) issues.push('purchase_price_invalid');\nif (!(assignmentFee >= 0)) issues.push('assignment_fee_invalid');\nif (blockedStates.has(dealState)) issues.push('deal_state_blocked:' + dealState);\nif (blockedStates.has(assignmentState)) issues.push('assignment_state_blocked:' + assignmentState);\nconst closingReady = issues.length === 0;\nreturn [{ json: { ...r, assignment, deal, buyer, seller, approval, contract, signatures, purchasePrice, assignmentFee, closingReady, issues, dealState, assignmentState, approvalStatus } }];"
+      },
+      "id": "wf387-validate",
+      "name": "Validate Approval Contract Signatures & Economics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "closing-ready",
+              "leftValue": "={{$json.closingReady}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf387-if",
+      "name": "IF Closing Ready",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/buyer-final-handoff",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:buyer"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId}}"
+            },
+            {
+              "name": "purchasePrice",
+              "value": "={{$json.purchasePrice}}"
+            },
+            {
+              "name": "assignmentFee",
+              "value": "={{$json.assignmentFee}}"
+            },
+            {
+              "name": "handoffStatus",
+              "value": "closing_coordination"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf387-buyer",
+      "name": "Persist Buyer Final Handoff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/seller-final-handoff",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:seller"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId}}"
+            },
+            {
+              "name": "handoffStatus",
+              "value": "closing_coordination"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf387-seller",
+      "name": "Persist Seller Final Handoff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 20]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/closing-coordination",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:closing"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId}}"
+            },
+            {
+              "name": "status",
+              "value": "closing_coordination"
+            },
+            {
+              "name": "purchasePrice",
+              "value": "={{$json.purchasePrice}}"
+            },
+            {
+              "name": "assignmentFee",
+              "value": "={{$json.assignmentFee}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf387-closing",
+      "name": "Persist Closing Coordination",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -60]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-387', status: 'closing_coordination', assignmentId: $json.assignmentId, dealId: $json.dealId, buyerId: $json.buyerId, sellerId: $json.sellerId, purchasePrice: $json.purchasePrice, assignmentFee: $json.assignmentFee, message: 'Buyer and seller final handoff coordinated; closing coordination is active.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf387-response-ready",
+      "name": "Respond Closing Coordination Active",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1540, -60]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-387', status: 'blocked', assignmentId: $json.assignmentId, dealId: $json.dealId, issues: $json.issues, message: 'Closing coordination blocked until approval, signatures, buyer status, seller identity, economics, and deal-state requirements are satisfied.' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf387-response-blocked",
+      "name": "Respond Closing Coordination Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Assignment Closing Coordination Webhook": {
+      "main": [[{"node": "Normalize Closing Coordination Request", "type": "main", "index": 0}]]
+    },
+    "Normalize Closing Coordination Request": {
+      "main": [[{"node": "Fetch InsulaCRM Closing Context", "type": "main", "index": 0}]]
+    },
+    "Fetch InsulaCRM Closing Context": {
+      "main": [[{"node": "Validate Approval Contract Signatures & Economics", "type": "main", "index": 0}]]
+    },
+    "Validate Approval Contract Signatures & Economics": {
+      "main": [[{"node": "IF Closing Ready", "type": "main", "index": 0}]]
+    },
+    "IF Closing Ready": {
+      "main": [
+        [
+          {"node": "Persist Buyer Final Handoff", "type": "main", "index": 0},
+          {"node": "Persist Seller Final Handoff", "type": "main", "index": 0}
+        ],
+        [
+          {"node": "Respond Closing Coordination Blocked", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Persist Buyer Final Handoff": {
+      "main": [[{"node": "Persist Closing Coordination", "type": "main", "index": 0}]]
+    },
+    "Persist Seller Final Handoff": {
+      "main": [[{"node": "Persist Closing Coordination", "type": "main", "index": 0}]]
+    },
+    "Persist Closing Coordination": {
+      "main": [[{"node": "Respond Closing Coordination Active", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate", "insula-crm", "assignment", "closing", "handoff", "wf-387"]
+}

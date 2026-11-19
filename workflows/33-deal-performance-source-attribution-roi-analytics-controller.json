@@ -1,0 +1,244 @@
+{
+  "name": "WF-395 — Deal Performance, Source Attribution & ROI Analytics Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deal-performance-roi-analytics",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf395-webhook",
+      "name": "Deal Performance Analytics Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nif (b.dealId === undefined || b.dealId === null || b.dealId === '') throw new Error('Missing required analytics field: dealId');\nconst eventType = String(b.eventType ?? 'deal_closed').toLowerCase();\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf395:roi:' + String(b.dealId) + ':' + eventType + ':' + String(b.period ?? 'all-time')));\nreturn [{ json: { ...b, dealId: String(b.dealId), eventType, idempotencyKey } }];"
+      },
+      "id": "wf395-normalize",
+      "name": "Normalize Performance Analytics Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/analytics/deal-performance-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:context"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf395-context",
+      "name": "Fetch Deal Performance Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $json;\nconst deal = c.deal ?? c.data?.deal ?? {};\nconst source = c.source ?? c.leadSource ?? deal.source ?? c.data?.source ?? {};\nconst acquisition = c.acquisition ?? c.data?.acquisition ?? {};\nconst financial = c.financial ?? c.data?.financial ?? {};\nconst closed = String(deal.state ?? deal.status ?? '').toLowerCase();\nconst issues = [];\nif (!['closed','closed_settled'].includes(closed)) issues.push('deal_not_closed:' + closed);\nconst grossRevenue = Number(financial.grossRevenue ?? deal.grossRevenue ?? deal.assignmentFee ?? 0);\nconst totalCosts = Number(financial.totalCosts ?? ((Number(financial.closingCosts ?? deal.closingCosts ?? 0)) + (Number(financial.otherCosts ?? deal.otherCosts ?? 0)) + (Number(acquisition.acquisitionCost ?? 0))));\nconst netProfit = Number(financial.netProfit ?? deal.netProfit ?? (grossRevenue - totalCosts));\nconst acquisitionCost = Number(acquisition.acquisitionCost ?? acquisition.marketingCost ?? 0);\nconst sourceSpend = Number(source.spend ?? source.cost ?? acquisition.sourceSpend ?? 0);\nconst totalInvestment = acquisitionCost + sourceSpend;\nconst roi = totalInvestment > 0 ? netProfit / totalInvestment : null;\nconst profitMultiple = totalInvestment > 0 ? netProfit / totalInvestment : null;\nconst daysToClose = Number(deal.daysToClose ?? acquisition.daysToClose ?? 0);\nconst leadToContractDays = Number(acquisition.leadToContractDays ?? 0);\nconst contractToCloseDays = Number(acquisition.contractToCloseDays ?? 0);\nconst sourceName = String(source.name ?? source.channel ?? source.type ?? 'unknown');\nconst campaign = String(source.campaign ?? acquisition.campaign ?? '');\nconst dispositionChannel = String(deal.dispositionChannel ?? c.dispositionChannel ?? 'unknown');\nif (![grossRevenue,totalCosts,netProfit,acquisitionCost,sourceSpend,totalInvestment].every(Number.isFinite)) issues.push('financial_values_not_numeric');\nif (grossRevenue < 0 || totalCosts < 0 || acquisitionCost < 0 || sourceSpend < 0) issues.push('negative_financial_input');\nif (daysToClose < 0 || leadToContractDays < 0 || contractToCloseDays < 0) issues.push('duration_invalid');\nconst eligible = issues.length === 0;\nreturn [{ json: { ...$json, deal, source, acquisition, financial, closed, grossRevenue, totalCosts, netProfit, acquisitionCost, sourceSpend, totalInvestment, roi, profitMultiple, daysToClose, leadToContractDays, contractToCloseDays, sourceName, campaign, dispositionChannel, issues, analyticsEligible: eligible } }];"
+      },
+      "id": "wf395-calc",
+      "name": "Calculate Deal ROI & Source Attribution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "roi-eligible",
+              "leftValue": "={{$json.analyticsEligible}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf395-if",
+      "name": "IF ROI Analytics Eligible",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/deal-performance-roi",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:roi"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"dealId","value":"={{$json.dealId}}"},
+            {"name":"sourceName","value":"={{$json.sourceName}}"},
+            {"name":"campaign","value":"={{$json.campaign}}"},
+            {"name":"dispositionChannel","value":"={{$json.dispositionChannel}}"},
+            {"name":"grossRevenue","value":"={{$json.grossRevenue}}"},
+            {"name":"totalCosts","value":"={{$json.totalCosts}}"},
+            {"name":"netProfit","value":"={{$json.netProfit}}"},
+            {"name":"acquisitionCost","value":"={{$json.acquisitionCost}}"},
+            {"name":"sourceSpend","value":"={{$json.sourceSpend}}"},
+            {"name":"totalInvestment","value":"={{$json.totalInvestment}}"},
+            {"name":"roi","value":"={{$json.roi}}"},
+            {"name":"profitMultiple","value":"={{$json.profitMultiple}}"},
+            {"name":"daysToClose","value":"={{$json.daysToClose}}"},
+            {"name":"leadToContractDays","value":"={{$json.leadToContractDays}}"},
+            {"name":"contractToCloseDays","value":"={{$json.contractToCloseDays}}"}
+          ]
+        },
+        "options": {"timeout": 30000}
+      },
+      "id": "wf395-roi",
+      "name": "Persist Deal ROI & Source Attribution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/source-performance",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name":"Authorization","value":"Bearer {{$env.INSULACRM_API_KEY}}"},
+            {"name":"Idempotency-Key","value":"={{$json.idempotencyKey}}:source"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"dealId","value":"={{$json.dealId}}"},
+            {"name":"sourceName","value":"={{$json.sourceName}}"},
+            {"name":"campaign","value":"={{$json.campaign}}"},
+            {"name":"sourceSpend","value":"={{$json.sourceSpend}}"},
+            {"name":"netProfit","value":"={{$json.netProfit}}"},
+            {"name":"roi","value":"={{$json.roi}}"},
+            {"name":"daysToClose","value":"={{$json.daysToClose}}"}
+          ]
+        },
+        "options": {"timeout": 30000}
+      },
+      "id": "wf395-source",
+      "name": "Persist Source Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/deal-performance-activity",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name":"Authorization","value":"Bearer {{$env.INSULACRM_API_KEY}}"},
+            {"name":"Idempotency-Key","value":"={{$json.idempotencyKey}}:activity"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"dealId","value":"={{$json.dealId}}"},
+            {"name":"activityType","value":"deal_roi_reconciled"},
+            {"name":"sourceName","value":"={{$json.sourceName}}"},
+            {"name":"netProfit","value":"={{$json.netProfit}}"},
+            {"name":"roi","value":"={{$json.roi}}"}
+          ]
+        },
+        "options": {"timeout": 30000}
+      },
+      "id": "wf395-activity",
+      "name": "Persist Performance Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-395', status: 'roi_reconciled', dealId: $json.dealId, source: $json.sourceName, netProfit: $json.netProfit, roi: $json.roi, message: 'Deal performance, source attribution, and ROI analytics were persisted.' } }}",
+        "options": {"responseCode": 200}
+      },
+      "id": "wf395-response",
+      "name": "Respond ROI Reconciled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1760, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-395', status: 'blocked', dealId: $json.dealId, issues: $json.issues, message: 'ROI analytics blocked because the deal was not confirmed closed or financial attribution data was invalid.' } }}",
+        "options": {"responseCode": 409}
+      },
+      "id": "wf395-response-blocked",
+      "name": "Respond ROI Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Deal Performance Analytics Webhook": {"main":[[{"node":"Normalize Performance Analytics Request","type":"main","index":0}]]},
+    "Normalize Performance Analytics Request": {"main":[[{"node":"Fetch Deal Performance Context","type":"main","index":0}]]},
+    "Fetch Deal Performance Context": {"main":[[{"node":"Calculate Deal ROI & Source Attribution","type":"main","index":0}]]},
+    "Calculate Deal ROI & Source Attribution": {"main":[[{"node":"IF ROI Analytics Eligible","type":"main","index":0}]]},
+    "IF ROI Analytics Eligible": {"main":[[{"node":"Persist Deal ROI & Source Attribution","type":"main","index":0}],[{"node":"Respond ROI Blocked","type":"main","index":0}]]},
+    "Persist Deal ROI & Source Attribution": {"main":[[{"node":"Persist Source Performance","type":"main","index":0}]]},
+    "Persist Source Performance": {"main":[[{"node":"Persist Performance Activity","type":"main","index":0}]]},
+    "Persist Performance Activity": {"main":[[{"node":"Respond ROI Reconciled","type":"main","index":0}]]}
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate","insula-crm","analytics","roi","source-attribution","performance","wf-395"]
+}

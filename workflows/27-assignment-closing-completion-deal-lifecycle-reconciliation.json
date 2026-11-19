@@ -1,0 +1,276 @@
+{
+  "name": "WF-389 — Assignment Closing Completion & Deal Lifecycle Reconciliation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "assignment-closing-completion-reconciliation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf389-webhook",
+      "name": "Closing Completion Reconciliation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst required = ['assignmentId','dealId','closingOutcome'];\nconst missing = required.filter(k => b[k] === undefined || b[k] === null || b[k] === '');\nif (missing.length) throw new Error('Missing required closing completion fields: ' + missing.join(', '));\nconst allowed = new Set(['closed','cancelled','failed','rescheduled','pending']);\nconst closingOutcome = String(b.closingOutcome).toLowerCase();\nif (!allowed.has(closingOutcome)) throw new Error('Unsupported closing outcome: ' + closingOutcome);\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf389:closing-completion:' + String(b.assignmentId) + ':' + String(b.dealId) + ':' + closingOutcome + ':' + String(b.eventId ?? 'default')));\nreturn [{ json: { ...b, assignmentId: String(b.assignmentId), dealId: String(b.dealId), closingOutcome, idempotencyKey } }];"
+      },
+      "id": "wf389-normalize",
+      "name": "Normalize Closing Completion Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/assignments/closing-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:context"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf389-context",
+      "name": "Fetch Final Closing Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst assignment = ctx.assignment ?? ctx.data?.assignment ?? {};\nconst deal = ctx.deal ?? ctx.data?.deal ?? {};\nconst approval = ctx.approval ?? ctx.data?.approval ?? {};\nconst closing = ctx.closing ?? ctx.data?.closing ?? {};\nconst blocked = new Set(['cancelled','disputed','dnc']);\nconst dealState = String(deal.state ?? deal.status ?? '').toLowerCase();\nconst assignmentState = String(assignment.state ?? assignment.status ?? '').toLowerCase();\nconst approvalStatus = String(approval.status ?? approval.decision ?? '').toLowerCase();\nconst closingStatus = String(closing.status ?? '').toLowerCase();\nconst issues = [];\nif (approvalStatus !== 'approved') issues.push('assignment_approval_not_confirmed');\nif (['closed'].includes(dealState) && $json.closingOutcome !== 'closed') issues.push('deal_already_closed');\nif (blocked.has(dealState)) issues.push('deal_state_blocked:' + dealState);\nif (blocked.has(assignmentState) && $json.closingOutcome !== 'cancelled') issues.push('assignment_state_blocked:' + assignmentState);\nif ($json.closingOutcome === 'closed' && closingStatus === 'cancelled') issues.push('closing_already_cancelled');\nconst requiredForClose = ['closingCompletedAt','fundsConfirmed','buyerFundsConfirmed','sellerPayoffConfirmed'];\nif ($json.closingOutcome === 'closed') {\n  for (const field of requiredForClose) {\n    if (field === 'closingCompletedAt' && !$json[field] && !closing.completedAt) issues.push('missing_closing_completed_at');\n    if (field !== 'closingCompletedAt' && $json[field] !== true && closing[field] !== true) issues.push(field + '_not_confirmed');\n  }\n}\nconst valid = issues.length === 0;\nreturn [{ json: { ...$json, assignment, deal, approval, closing, dealState, assignmentState, approvalStatus, closingStatus, issues, valid } }];"
+      },
+      "id": "wf389-validate",
+      "name": "Validate Closing Completion Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{$json.valid}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf389-if",
+      "name": "IF Closing Outcome Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/closing-completion",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:completion"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "closingOutcome",
+              "value": "={{$json.closingOutcome}}"
+            },
+            {
+              "name": "closingCompletedAt",
+              "value": "={{$json.closingCompletedAt ?? $json.closing?.completedAt ?? ''}}"
+            },
+            {
+              "name": "closingDocumentId",
+              "value": "={{$json.closingDocumentId ?? ''}}"
+            },
+            {
+              "name": "fundsConfirmed",
+              "value": "={{$json.fundsConfirmed ?? false}}"
+            },
+            {
+              "name": "buyerFundsConfirmed",
+              "value": "={{$json.buyerFundsConfirmed ?? false}}"
+            },
+            {
+              "name": "sellerPayoffConfirmed",
+              "value": "={{$json.sellerPayoffConfirmed ?? false}}"
+            },
+            {
+              "name": "notes",
+              "value": "={{$json.notes ?? ''}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf389-completion",
+      "name": "Persist Closing Completion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/lifecycle-reconciliation",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:lifecycle"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "closingOutcome",
+              "value": "={{$json.closingOutcome}}"
+            },
+            {
+              "name": "targetDealState",
+              "value": "={{$json.closingOutcome === 'closed' ? 'closed' : ($json.closingOutcome === 'cancelled' ? 'cancelled' : ($json.closingOutcome === 'failed' ? 'closing_failed' : ($json.closingOutcome === 'rescheduled' ? 'closing_rescheduled' : 'closing_pending')))}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf389-lifecycle",
+      "name": "Reconcile Deal Lifecycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-389', status: ($json.closingOutcome === 'closed' ? 'closed' : ($json.closingOutcome === 'cancelled' ? 'cancelled' : ($json.closingOutcome === 'failed' ? 'closing_failed' : ($json.closingOutcome === 'rescheduled' ? 'closing_rescheduled' : 'closing_pending')))), assignmentId: $json.assignmentId, dealId: $json.dealId, closingOutcome: $json.closingOutcome, message: 'Closing outcome persisted and deal lifecycle reconciliation requested.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf389-response",
+      "name": "Respond Lifecycle Reconciled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-389', status: 'blocked', assignmentId: $json.assignmentId, dealId: $json.dealId, closingOutcome: $json.closingOutcome, issues: $json.issues, message: 'Closing completion was blocked because approval, evidence, or lifecycle-state requirements were not satisfied.' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf389-response-blocked",
+      "name": "Respond Closing Outcome Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Closing Completion Reconciliation Webhook": {
+      "main": [[{"node": "Normalize Closing Completion Outcome", "type": "main", "index": 0}]]
+    },
+    "Normalize Closing Completion Outcome": {
+      "main": [[{"node": "Fetch Final Closing Context", "type": "main", "index": 0}]]
+    },
+    "Fetch Final Closing Context": {
+      "main": [[{"node": "Validate Closing Completion Evidence", "type": "main", "index": 0}]]
+    },
+    "Validate Closing Completion Evidence": {
+      "main": [[{"node": "IF Closing Outcome Valid", "type": "main", "index": 0}]]
+    },
+    "IF Closing Outcome Valid": {
+      "main": [
+        [{"node": "Persist Closing Completion", "type": "main", "index": 0}],
+        [{"node": "Respond Closing Outcome Blocked", "type": "main", "index": 0}]
+      ]
+    },
+    "Persist Closing Completion": {
+      "main": [[{"node": "Reconcile Deal Lifecycle", "type": "main", "index": 0}]]
+    },
+    "Reconcile Deal Lifecycle": {
+      "main": [[{"node": "Respond Lifecycle Reconciled", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate", "insula-crm", "assignment", "closing", "lifecycle", "reconciliation", "wf-389"]
+}

@@ -1,0 +1,344 @@
+{
+  "name": "WF-401 — Lead Acquisition Channel Experiment & A/B Performance Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-acquisition-experiment-performance",
+        "responseMode": "lastNode"
+      },
+      "id": "w401a",
+      "name": "Experiment Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; return [{json:{...b,experimentId:String(b.experimentId??''),period:String(b.period??''),variants:Array.isArray(b.variants)?b.variants:[]}}];"
+      },
+      "id": "w401b",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.experimentId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w401c",
+      "name": "Validate Experiment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/lead-acquisition-experiment-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "experimentId",
+              "value": "={{$json.experimentId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            }
+          ]
+        }
+      },
+      "id": "w401d",
+      "name": "Fetch Experiment Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Request').first().json; const ctx=$json.context??$json; const vs=Array.isArray(ctx.variants)?ctx.variants:input.variants; const rate=(a,b)=>b>0?a/b:0; const variants=vs.map(v=>{const i=Number(v.impressions||0),vis=Number(v.visits||0),l=Number(v.leads||0),q=Number(v.qualifiedLeads||0),a=Number(v.appointments||0),c=Number(v.contracts||0),cl=Number(v.closedDeals||0),s=Number(v.spend||0),r=Number(v.revenue||0),p=Number(v.netProfit||0); return {...v,impressions:i,visits:vis,leads:l,qualifiedLeads:q,appointments:a,contracts:c,closedDeals:cl,spend:s,revenue:r,netProfit:p,visitRate:rate(vis,i),leadRate:rate(l,vis),qualificationRate:rate(q,l),appointmentRate:rate(a,q),contractRate:rate(c,l),closeRate:rate(cl,c),cpl:s>0?s/l:null,cpql:s>0?s/q:null,cpa:s>0?s/a:null,costPerContract:s>0?s/c:null,costPerClosedDeal:s>0?s/cl:null,roi:s>0?p/s:null,profitMultiple:s>0?p/s:null};}); return [{json:{...input,context:ctx,variants}}];"
+      },
+      "id": "w401e",
+      "name": "Calculate Variant Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$json; const eligible=(d.variants||[]).filter(v=>Number(v.leads||0)>=10&&Number(v.impressions||0)>=100); const ranked=[...eligible].sort((a,b)=>Number(b.netProfit||0)-Number(a.netProfit||0)||Number(b.leadRate||0)-Number(a.leadRate||0)); let status='insufficient_sample',winnerVariantId=null,leadingVariantId=null,lift=null; if(ranked.length>=2){leadingVariantId=ranked[0].variantId??ranked[0].id??ranked[0].name; const base=Number(ranked[1].leadRate||0),lead=Number(ranked[0].leadRate||0); lift=base>0?(lead-base)/base:null; status=lift!==null&&lift>=0.1?'winner_identified':'leading_variant'; if(status==='winner_identified') winnerVariantId=leadingVariantId;} return [{json:{...d,experimentResult:{status,winnerVariantId,leadingVariantId,relativeLift:lift,eligibleVariantCount:ranked.length,decisionBasis:'lead_rate_with_profit_tiebreaker'}}}];"
+      },
+      "id": "w401f",
+      "name": "Determine Winner or Leader",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/lead-acquisition-experiment-performance",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "experimentId",
+              "value": "={{$json.experimentId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "result",
+              "value": "={{JSON.stringify($json.experimentResult)}}"
+            },
+            {
+              "name": "variants",
+              "value": "={{JSON.stringify($json.variants)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf401:' + $json.experimentId + ':' + $json.period}}"
+            }
+          ]
+        }
+      },
+      "id": "w401g",
+      "name": "Persist Experiment Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "lead_acquisition_experiment_performance"
+            },
+            {
+              "name": "experimentId",
+              "value": "={{$json.experimentId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.experimentResult.status}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf401:activity:' + $json.experimentId + ':' + $json.period}}"
+            }
+          ]
+        }
+      },
+      "id": "w401h",
+      "name": "Record Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}"
+      },
+      "id": "w401i",
+      "name": "Respond Performance",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'experimentId and period are required'} }}"
+      },
+      "id": "w401j",
+      "name": "Respond Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
+    }
+  ],
+  "connections": {
+    "Experiment Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Experiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Experiment": {
+      "main": [
+        [
+          {
+            "node": "Fetch Experiment Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Experiment Context": {
+      "main": [
+        [
+          {
+            "node": "Calculate Variant Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Variant Metrics": {
+      "main": [
+        [
+          {
+            "node": "Determine Winner or Leader",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Winner or Leader": {
+      "main": [
+        [
+          {
+            "node": "Persist Experiment Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Experiment Performance": {
+      "main": [
+        [
+          {
+            "node": "Record Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Analytics Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-401"
+    },
+    {
+      "name": "analytics"
+    },
+    {
+      "name": "lead-acquisition"
+    },
+    {
+      "name": "ab-testing"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-401",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf401:{experimentId}:{period}"
+  }
+}

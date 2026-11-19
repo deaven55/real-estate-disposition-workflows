@@ -1,0 +1,164 @@
+{
+  "name": "WholeStack WF-378: Contract Readiness & Assignment Handoff Controller",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Contract Readiness Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-contract-readiness",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch Contract Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/contracts/readiness-context",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId: $json.body.dealId, sellerId: $json.body.sellerId, negotiationActionId: $json.body.negotiationActionId, outcomeActivityId: $json.body.activityId }) }}"
+      }
+    },
+    {
+      "id": "validate",
+      "name": "Validate Contract Readiness",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300],
+      "parameters": {
+        "jsCode": "var c=$input.first().json.data||$input.first().json;\nvar state=String(c.dealStatus||'').toLowerCase();\nvar outcome=String(c.negotiationOutcome||c.normalizedOutcome||'').toLowerCase();\nvar purchasePrice=Number(c.purchasePrice||c.acceptedPurchasePrice||c.contractPrice);\nvar mao=Number(c.protectedMAO);\nvar required={dealId:!!c.dealId,sellerId:!!c.sellerId,propertyId:!!c.propertyId,acceptedOutcome:['accepted','contract_ready'].indexOf(outcome)!==-1,contractPrice:Number.isFinite(purchasePrice)&&purchasePrice>0,withinProtectedMAO:Number.isFinite(purchasePrice)&&Number.isFinite(mao)&&purchasePrice<=mao,contractDocumentPresent:c.contractDocumentPresent===true||!!c.contractDocumentId,signaturesPresent:c.signaturesPresent===true||c.signedBySeller===true};\nvar missing=Object.keys(required).filter(function(k){return required[k]!==true;});\nvar blockedState=['closed','cancelled','disputed'].indexOf(state)!==-1;\nvar ready=missing.length===0&&!blockedState;\nreturn [{json:{...c,purchasePrice:purchasePrice,contractReadiness:ready?'ready':'incomplete',contractReadinessMissing:missing,blocked:!ready,blockedReason:blockedState?'deal_state_protected':missing.length?'missing_contract_requirements':null}}];"
+      }
+    },
+    {
+      "id": "ifReady",
+      "name": "IF Contract Ready",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [930, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ $json.blocked }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "persist",
+      "name": "Persist Contract Readiness",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/contracts/readiness",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId:$json.dealId, sellerId:$json.sellerId, propertyId:$json.propertyId, purchasePrice:$json.purchasePrice, readinessStatus:'ready', contractDocumentId:$json.contractDocumentId||null, idempotencyKey:'wf378:'+String($json.dealId||'')+':ready:'+String($json.contractDocumentId||$json.activityId||'') }) }}"
+      }
+    },
+    {
+      "id": "handoff",
+      "name": "Assignment Handoff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1390, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/handoff",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId:$json.dealId, sellerId:$json.sellerId, propertyId:$json.propertyId, contractDocumentId:$json.contractDocumentId||null, purchasePrice:$json.purchasePrice, sourceWorkflow:'WF-378', idempotencyKey:'wf378-handoff:'+String($json.dealId||'')+':'+String($json.contractDocumentId||$json.activityId||'') }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond Contract Handoff",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1620, 150],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success:true, workflow:'WF-378', contractReadiness:'ready', handoffStatus:$json.status||'submitted', dealId:$('Validate Contract Readiness').first().json.dealId, purchasePrice:$('Validate Contract Readiness').first().json.purchasePrice }) }}"
+      }
+    },
+    {
+      "id": "respondBlocked",
+      "name": "Respond Contract Readiness Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1160, 450],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success:true, workflow:'WF-378', contractReadiness:'incomplete', reason:$json.blockedReason||'missing_contract_requirements', missing:$json.contractReadinessMissing||[], dealId:$json.dealId||null }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Contract Readiness Webhook": {
+      "main": [[{"node":"Fetch Contract Context","type":"main","index":0}]]
+    },
+    "Fetch Contract Context": {
+      "main": [[{"node":"Validate Contract Readiness","type":"main","index":0}]]
+    },
+    "Validate Contract Readiness": {
+      "main": [[{"node":"IF Contract Ready","type":"main","index":0}]]
+    },
+    "IF Contract Ready": {
+      "main": [
+        [{"node":"Persist Contract Readiness","type":"main","index":0}],
+        [{"node":"Respond Contract Readiness Blocked","type":"main","index":0}]
+      ]
+    },
+    "Persist Contract Readiness": {
+      "main": [[{"node":"Assignment Handoff","type":"main","index":0}]]
+    },
+    "Assignment Handoff": {
+      "main": [[{"node":"Respond Contract Handoff","type":"main","index":0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

@@ -1,0 +1,137 @@
+{
+  "name": "WF-396 — Lead Source / Marketing Channel Performance Aggregation Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf-396/lead-source-channel-performance",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf396-webhook",
+      "name": "Lead Source Performance Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst dealId = String(body.dealId ?? '').trim();\nconst periodStart = String(body.periodStart ?? '').trim();\nconst periodEnd = String(body.periodEnd ?? '').trim();\nconst source = String(body.source ?? body.leadSource ?? '').trim();\nconst marketingChannel = String(body.marketingChannel ?? body.channel ?? '').trim();\nconst campaign = String(body.campaign ?? body.campaignName ?? '').trim();\nif (!periodStart || !periodEnd) throw new Error('periodStart and periodEnd are required');\nif (new Date(periodStart).getTime() > new Date(periodEnd).getTime()) throw new Error('periodStart must be before periodEnd');\nreturn [{ json: { dealId, periodStart, periodEnd, source, marketingChannel, campaign, requestedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf396-normalize",
+      "name": "Normalize Source Performance Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://YOUR_INSULACRM_API/analytics/lead-source-channel-context?periodStart=' + encodeURIComponent($json.periodStart) + '&periodEnd=' + encodeURIComponent($json.periodEnd) + '&source=' + encodeURIComponent($json.source) + '&marketingChannel=' + encodeURIComponent($json.marketingChannel) + '&campaign=' + encodeURIComponent($json.campaign) }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf396-context",
+      "name": "Fetch InsulaCRM Lead Source Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json.data ?? $json;\nconst records = Array.isArray(ctx.records) ? ctx.records : (Array.isArray(ctx.deals) ? ctx.deals : []);\nconst valid = records.filter(r => r && (r.leadSource || r.source || r.marketingChannel || r.channel || r.campaign));\nif (!valid.length) throw new Error('No valid lead source/channel performance data available for the requested period');\nreturn [{ json: { records: valid, periodStart: $('Normalize Source Performance Request').first().json.periodStart, periodEnd: $('Normalize Source Performance Request').first().json.periodEnd } }];"
+      },
+      "id": "wf396-validate",
+      "name": "Validate Source Performance Dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const records = $json.records;\nconst buckets = new Map();\nconst num = v => Number.isFinite(Number(v)) ? Number(v) : 0;\nfor (const r of records) {\n  const key = [r.leadSource ?? r.source ?? 'unknown', r.marketingChannel ?? r.channel ?? 'unknown', r.campaign ?? 'unknown', r.dispositionChannel ?? 'unknown'].map(String).join('|');\n  if (!buckets.has(key)) buckets.set(key, { leadSource: r.leadSource ?? r.source ?? 'unknown', marketingChannel: r.marketingChannel ?? r.channel ?? 'unknown', campaign: r.campaign ?? 'unknown', dispositionChannel: r.dispositionChannel ?? 'unknown', leads: 0, contracts: 0, closedDeals: 0, grossRevenue: 0, netProfit: 0, spend: 0 });\n  const b = buckets.get(key);\n  b.leads += num(r.leads ?? r.leadCount ?? (r.isLead ? 1 : 0));\n  b.contracts += num(r.contracts ?? r.contractCount ?? (r.contractSigned ? 1 : 0));\n  b.closedDeals += num(r.closedDeals ?? r.closedDealCount ?? (r.closed ? 1 : 0));\n  b.grossRevenue += num(r.grossRevenue);\n  b.netProfit += num(r.netProfit);\n  b.spend += num(r.spend ?? r.sourceSpend ?? r.campaignSpend);\n}\nconst rows = [...buckets.values()].map(b => ({ ...b, costPerLead: b.leads ? b.spend / b.leads : 0, costPerContract: b.contracts ? b.spend / b.contracts : 0, costPerClosedDeal: b.closedDeals ? b.spend / b.closedDeals : 0, leadToContractRate: b.leads ? b.contracts / b.leads : 0, contractToCloseRate: b.contracts ? b.closedDeals / b.contracts : 0, leadToCloseRate: b.leads ? b.closedDeals / b.leads : 0, roi: b.spend ? (b.netProfit - b.spend) / b.spend : null, profitMultiple: b.spend ? b.netProfit / b.spend : null }));\nconst totals = rows.reduce((a, b) => { for (const k of ['leads','contracts','closedDeals','grossRevenue','netProfit','spend']) a[k] += b[k]; return a; }, { leads:0, contracts:0, closedDeals:0, grossRevenue:0, netProfit:0, spend:0 });\ntotals.costPerLead = totals.leads ? totals.spend / totals.leads : 0;\ntotals.costPerContract = totals.contracts ? totals.spend / totals.contracts : 0;\ntotals.costPerClosedDeal = totals.closedDeals ? totals.spend / totals.closedDeals : 0;\ntotals.leadToContractRate = totals.leads ? totals.contracts / totals.leads : 0;\ntotals.contractToCloseRate = totals.contracts ? totals.closedDeals / totals.contracts : 0;\ntotals.leadToCloseRate = totals.leads ? totals.closedDeals / totals.leads : 0;\ntotals.roi = totals.spend ? (totals.netProfit - totals.spend) / totals.spend : null;\ntotals.profitMultiple = totals.spend ? totals.netProfit / totals.spend : null;\nreturn [{ json: { periodStart: $json.periodStart, periodEnd: $json.periodEnd, aggregation: rows, totals, recordCount: records.length, aggregatedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf396-aggregate",
+      "name": "Aggregate Lead Source & Marketing Channel KPIs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/lead-source-channel-performance",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ periodStart: $json.periodStart, periodEnd: $json.periodEnd, aggregation: $json.aggregation, totals: $json.totals, recordCount: $json.recordCount, idempotencyKey: 'wf-396:lead-source-channel:' + $json.periodStart + ':' + $json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf396-persist",
+      "name": "Persist Source Channel Performance to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activities",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ activityType: 'lead_source_channel_performance_aggregated', periodStart: $('Aggregate Lead Source & Marketing Channel KPIs').first().json.periodStart, periodEnd: $('Aggregate Lead Source & Marketing Channel KPIs').first().json.periodEnd, recordCount: $('Aggregate Lead Source & Marketing Channel KPIs').first().json.recordCount, idempotencyKey: 'wf-396:activity:' + $('Aggregate Lead Source & Marketing Channel KPIs').first().json.periodStart + ':' + $('Aggregate Lead Source & Marketing Channel KPIs').first().json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf396-activity",
+      "name": "Record Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-396', status: 'aggregated', periodStart: $('Aggregate Lead Source & Marketing Channel KPIs').first().json.periodStart, periodEnd: $('Aggregate Lead Source & Marketing Channel KPIs').first().json.periodEnd, recordCount: $('Aggregate Lead Source & Marketing Channel KPIs').first().json.recordCount, totals: $('Aggregate Lead Source & Marketing Channel KPIs').first().json.totals } }}"
+      },
+      "id": "wf396-response",
+      "name": "Respond Source Performance Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 0]
+    }
+  ],
+  "connections": {
+    "Lead Source Performance Webhook": { "main": [[{ "node": "Normalize Source Performance Request", "type": "main", "index": 0 }]] },
+    "Normalize Source Performance Request": { "main": [[{ "node": "Fetch InsulaCRM Lead Source Context", "type": "main", "index": 0 }]] },
+    "Fetch InsulaCRM Lead Source Context": { "main": [[{ "node": "Validate Source Performance Dataset", "type": "main", "index": 0 }]] },
+    "Validate Source Performance Dataset": { "main": [[{ "node": "Aggregate Lead Source & Marketing Channel KPIs", "type": "main", "index": 0 }]] },
+    "Aggregate Lead Source & Marketing Channel KPIs": { "main": [[{ "node": "Persist Source Channel Performance to InsulaCRM", "type": "main", "index": 0 }]] },
+    "Persist Source Channel Performance to InsulaCRM": { "main": [[{ "node": "Record Analytics Activity", "type": "main", "index": 0 }]] },
+    "Record Analytics Activity": { "main": [[{ "node": "Respond Source Performance Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "versionId": "wf-396-v1"
+}

@@ -1,0 +1,278 @@
+{
+  "name": "WF-388 — Closing Milestone / Document / Escrow Event Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "closing-milestone-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf388-webhook",
+      "name": "Closing Milestone Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst required = ['assignmentId','dealId','eventType'];\nconst missing = required.filter(k => b[k] === undefined || b[k] === null || b[k] === '');\nif (missing.length) throw new Error('Missing required closing event fields: ' + missing.join(', '));\nconst allowed = new Set(['closing_scheduled','escrow_opened','title_started','document_requested','document_received','document_verified','funds_confirmed','buyer_funds_confirmed','seller_payoff_confirmed','closing_rescheduled','closing_completed','closing_cancelled']);\nconst eventType = String(b.eventType).toLowerCase();\nif (!allowed.has(eventType)) throw new Error('Unsupported closing event type: ' + eventType);\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf388:closing-event:' + String(b.assignmentId) + ':' + String(b.dealId) + ':' + eventType + ':' + String(b.eventId ?? 'default')));\nreturn [{ json: { ...b, assignmentId: String(b.assignmentId), dealId: String(b.dealId), eventType, idempotencyKey } }];"
+      },
+      "id": "wf388-normalize",
+      "name": "Normalize Closing Milestone Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/assignments/closing-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:context"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf388-context",
+      "name": "Fetch Current Closing Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst assignment = ctx.assignment ?? ctx.data?.assignment ?? {};\nconst deal = ctx.deal ?? ctx.data?.deal ?? {};\nconst approval = ctx.approval ?? ctx.data?.approval ?? {};\nconst blocked = new Set(['closed','cancelled','disputed','dnc']);\nconst dealState = String(deal.state ?? deal.status ?? '').toLowerCase();\nconst assignmentState = String(assignment.state ?? assignment.status ?? '').toLowerCase();\nconst approvalStatus = String(approval.status ?? approval.decision ?? '').toLowerCase();\nconst issues = [];\nif (approvalStatus !== 'approved') issues.push('assignment_approval_not_confirmed');\nif (blocked.has(dealState)) issues.push('deal_state_blocked:' + dealState);\nif (blocked.has(assignmentState) && !['closing_cancelled','closing_completed'].includes(String($json.eventType ?? '').toLowerCase())) issues.push('assignment_state_blocked:' + assignmentState);\nif (['closing_completed','funds_confirmed','buyer_funds_confirmed','seller_payoff_confirmed'].includes($json.eventType) && assignmentState === 'cancelled') issues.push('assignment_cancelled');\nreturn [{ json: { ...$json, assignment, deal, approval, dealState, assignmentState, approvalStatus, issues, eventAccepted: issues.length === 0 } }];"
+      },
+      "id": "wf388-validate",
+      "name": "Validate Closing Event Eligibility",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "event-accepted",
+              "leftValue": "={{$json.eventAccepted}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf388-if",
+      "name": "IF Closing Event Accepted",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/closing-events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "eventId",
+              "value": "={{$json.eventId ?? $json.idempotencyKey}}"
+            },
+            {
+              "name": "eventAt",
+              "value": "={{$json.eventAt ?? new Date().toISOString()}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.source ?? 'closing-coordination'}}"
+            },
+            {
+              "name": "documentId",
+              "value": "={{$json.documentId ?? ''}}"
+            },
+            {
+              "name": "escrowId",
+              "value": "={{$json.escrowId ?? ''}}"
+            },
+            {
+              "name": "titleCompany",
+              "value": "={{$json.titleCompany ?? ''}}"
+            },
+            {
+              "name": "notes",
+              "value": "={{$json.notes ?? ''}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf388-persist",
+      "name": "Persist Closing Milestone Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/closing-status",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:status"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "status",
+              "value": "={{ ['closing_completed'].includes($json.eventType) ? 'closing_completed' : (['closing_cancelled'].includes($json.eventType) ? 'closing_cancelled' : 'closing_coordination') }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf388-status",
+      "name": "Update Closing Milestone Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-388', status: ($json.eventType === 'closing_completed' ? 'closing_completed' : ($json.eventType === 'closing_cancelled' ? 'closing_cancelled' : 'closing_coordination')), assignmentId: $json.assignmentId, dealId: $json.dealId, eventType: $json.eventType, eventId: ($json.eventId ?? $json.idempotencyKey), message: 'Closing milestone event accepted and persisted.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf388-response",
+      "name": "Respond Closing Event Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-388', status: 'blocked', assignmentId: $json.assignmentId, dealId: $json.dealId, eventType: $json.eventType, issues: $json.issues, message: 'Closing milestone event blocked because assignment approval or deal-state requirements are not satisfied.' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf388-response-blocked",
+      "name": "Respond Closing Event Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Closing Milestone Event Webhook": {
+      "main": [[{"node": "Normalize Closing Milestone Event", "type": "main", "index": 0}]]
+    },
+    "Normalize Closing Milestone Event": {
+      "main": [[{"node": "Fetch Current Closing Context", "type": "main", "index": 0}]]
+    },
+    "Fetch Current Closing Context": {
+      "main": [[{"node": "Validate Closing Event Eligibility", "type": "main", "index": 0}]]
+    },
+    "Validate Closing Event Eligibility": {
+      "main": [[{"node": "IF Closing Event Accepted", "type": "main", "index": 0}]]
+    },
+    "IF Closing Event Accepted": {
+      "main": [
+        [{"node": "Persist Closing Milestone Event", "type": "main", "index": 0}],
+        [{"node": "Respond Closing Event Blocked", "type": "main", "index": 0}]
+      ]
+    },
+    "Persist Closing Milestone Event": {
+      "main": [[{"node": "Update Closing Milestone Status", "type": "main", "index": 0}]]
+    },
+    "Update Closing Milestone Status": {
+      "main": [[{"node": "Respond Closing Event Accepted", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate", "insula-crm", "assignment", "closing", "escrow", "documents", "wf-388"]
+}

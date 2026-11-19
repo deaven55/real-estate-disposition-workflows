@@ -1,0 +1,351 @@
+{
+  "name": "WF-404 — Multi-Channel Campaign Execution & Lead Intake Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "multi-channel-campaign-lead-intake",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w404a",
+      "name": "Campaign Lead Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const channel=String(b.channel??'').trim().toLowerCase(); const source=String(b.source??channel).trim(); const campaignId=String(b.campaignId??'').trim(); const leadId=String(b.leadId??'').trim(); return [{json:{...b,channel,source,campaignId,leadId,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w404b",
+      "name": "Normalize Multi-Channel Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.source}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w404c",
+      "name": "Validate Lead Attribution",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/multi-channel-intake-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.source}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w404d",
+      "name": "Fetch Lead Intake Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Multi-Channel Lead').first().json; const ctx=$json.context??$json; const existing=ctx.existingLead??null; const duplicate=Boolean(existing?.leadId||ctx.duplicate===true); const consent=ctx.consentStatus??input.consentStatus??'unknown'; const suppressed=Boolean(ctx.suppressed||input.suppressed); const route=suppressed?'blocked':duplicate?'existing_lead':(consent==='granted'||consent==='unknown'?'new_lead':'consent_review'); return [{json:{...input,context:ctx,intakeDecision:{status:route,duplicate,existingLeadId:existing?.leadId??null,consentStatus:consent,suppressed,attribution:{source:input.source,channel:input.channel,campaignId:input.campaignId},idempotencyKey:'wf404:'+input.leadId+':'+input.source+':'+(input.campaignId||'none')}}}];"
+      },
+      "id": "w404e",
+      "name": "Determine Intake & Attribution Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/multi-channel-intake",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.source}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{JSON.stringify($json.intakeDecision)}}"
+            },
+            {
+              "name": "leadData",
+              "value": "={{JSON.stringify($json)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.intakeDecision.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w404f",
+      "name": "Persist Lead Intake & Attribution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "multi_channel_lead_intake"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.source}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.intakeDecision.status}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf404:activity:' + $json.leadId + ':' + $json.source + ':' + ($json.campaignId || 'none')}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w404g",
+      "name": "Record Lead Acquisition Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w404h",
+      "name": "Respond Lead Intake",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId and source are required'} }}",
+        "options": {}
+      },
+      "id": "w404i",
+      "name": "Respond Invalid Lead",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
+    }
+  ],
+  "connections": {
+    "Campaign Lead Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Multi-Channel Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Multi-Channel Lead": {
+      "main": [
+        [
+          {
+            "node": "Validate Lead Attribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Lead Attribution": {
+      "main": [
+        [
+          {
+            "node": "Fetch Lead Intake Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Lead Intake Context": {
+      "main": [
+        [
+          {
+            "node": "Determine Intake & Attribution Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Intake & Attribution Route": {
+      "main": [
+        [
+          {
+            "node": "Persist Lead Intake & Attribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Lead Intake & Attribution": {
+      "main": [
+        [
+          {
+            "node": "Record Lead Acquisition Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Lead Acquisition Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Lead Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-404"
+    },
+    {
+      "name": "lead-generation"
+    },
+    {
+      "name": "multi-channel"
+    },
+    {
+      "name": "attribution"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-404",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf404:{leadId}:{source}:{campaignId}",
+    "notes": "Placeholder InsulaCRM endpoints require final API contract mapping before production use."
+  }
+}

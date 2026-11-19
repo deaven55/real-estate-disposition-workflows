@@ -1,0 +1,153 @@
+{
+  "name": "WholeStack WF-377: Negotiation Outcome Reconciliation & Deal-State Transition Controller",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Negotiation Outcome Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-negotiation-outcome",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch Negotiation Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/negotiations/outcome-context",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId: $json.body.dealId, sellerId: $json.body.sellerId, negotiationActionId: $json.body.negotiationActionId, activityId: $json.body.activityId }) }}"
+      }
+    },
+    {
+      "id": "normalize",
+      "name": "Normalize Negotiation Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300],
+      "parameters": {
+        "jsCode": "var c=$input.first().json.data||$input.first().json;\nvar outcome=String(c.outcome||c.responseIntent||'').toLowerCase().trim();\nvar map={accepted:'accepted',accept:'accepted',contract_ready:'accepted',signed:'accepted',counteroffer:'counteroffer',counter:'counteroffer',rejected:'rejected',reject:'rejected',declined:'rejected',dnc:'dnc',do_not_contact:'dnc',no_response:'no_response',expired:'no_response'};\nvar normalized=map[outcome]||'unknown';\nvar terminal=['accepted','rejected','dnc'].indexOf(normalized)!==-1;\nreturn [{json:{...c,normalizedOutcome:normalized,terminalOutcome:terminal}}];"
+      }
+    },
+    {
+      "id": "guard",
+      "name": "Enforce Outcome Transition Guardrails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [930, 300],
+      "parameters": {
+        "jsCode": "var d=$input.first().json;\nvar status=String(d.dealStatus||'').toLowerCase();\nvar protectedState=['closed','cancelled','disputed'].indexOf(status)!==-1;\nvar unknown=d.normalizedOutcome==='unknown';\nvar blocked=protectedState||unknown;\nvar nextState=blocked?status:(d.normalizedOutcome==='accepted'?'contract_ready':d.normalizedOutcome==='counteroffer'?'negotiation':d.normalizedOutcome==='rejected'?'seller_rejected':d.normalizedOutcome==='dnc'?'dnc':status||'negotiation');\nreturn [{json:{...d,blocked,blockedReason:protectedState?'deal_state_protected':unknown?'unknown_outcome':null,nextDealState:nextState}}];"
+      }
+    },
+    {
+      "id": "ifAllowed",
+      "name": "IF Outcome Transition Allowed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1160, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.blocked }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "persist",
+      "name": "Persist Outcome & Deal State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1390, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/negotiations/reconcile",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dealId: $json.dealId, sellerId: $json.sellerId, negotiationActionId: $json.negotiationActionId, normalizedOutcome: $json.normalizedOutcome, nextDealState: $json.nextDealState, terminalOutcome: $json.terminalOutcome, idempotencyKey: 'wf377:' + String($json.negotiationActionId || $json.activityId || $json.dealId || '') + ':' + String($json.normalizedOutcome) }) }}"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond Outcome Reconciled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1620, 150],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, workflow: 'WF-377', normalizedOutcome: $('Normalize Negotiation Outcome').first().json.normalizedOutcome, nextDealState: $('Enforce Outcome Transition Guardrails').first().json.nextDealState, terminalOutcome: $('Enforce Outcome Transition Guardrails').first().json.terminalOutcome }) }}"
+      }
+    },
+    {
+      "id": "respondBlocked",
+      "name": "Respond Transition Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1390, 450],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success: true, reconciled: false, workflow: 'WF-377', reason: $json.blockedReason || 'transition_blocked', dealId: $json.dealId || null }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Negotiation Outcome Webhook": {
+      "main": [[{"node": "Fetch Negotiation Context", "type": "main", "index": 0}]]
+    },
+    "Fetch Negotiation Context": {
+      "main": [[{"node": "Normalize Negotiation Outcome", "type": "main", "index": 0}]]
+    },
+    "Normalize Negotiation Outcome": {
+      "main": [[{"node": "Enforce Outcome Transition Guardrails", "type": "main", "index": 0}]]
+    },
+    "Enforce Outcome Transition Guardrails": {
+      "main": [[{"node": "IF Outcome Transition Allowed", "type": "main", "index": 0}]]
+    },
+    "IF Outcome Transition Allowed": {
+      "main": [
+        [{"node": "Persist Outcome & Deal State", "type": "main", "index": 0}],
+        [{"node": "Respond Transition Blocked", "type": "main", "index": 0}]
+      ]
+    },
+    "Persist Outcome & Deal State": {
+      "main": [[{"node": "Respond Outcome Reconciled", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

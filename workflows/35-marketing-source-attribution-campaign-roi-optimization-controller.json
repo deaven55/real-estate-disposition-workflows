@@ -1,0 +1,137 @@
+{
+  "name": "WF-397 — Marketing Source Attribution & Campaign ROI Optimization Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf-397/marketing-source-attribution-roi",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf397-webhook",
+      "name": "Marketing ROI Optimization Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst periodStart = String(body.periodStart ?? '').trim();\nconst periodEnd = String(body.periodEnd ?? '').trim();\nconst source = String(body.source ?? body.leadSource ?? '').trim();\nconst marketingChannel = String(body.marketingChannel ?? body.channel ?? '').trim();\nconst campaign = String(body.campaign ?? body.campaignName ?? '').trim();\nif (!periodStart || !periodEnd) throw new Error('periodStart and periodEnd are required');\nif (new Date(periodStart).getTime() > new Date(periodEnd).getTime()) throw new Error('periodStart must be before periodEnd');\nreturn [{ json: { periodStart, periodEnd, source, marketingChannel, campaign, requestedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf397-normalize",
+      "name": "Normalize Marketing ROI Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://YOUR_INSULACRM_API/analytics/marketing-source-attribution-context?periodStart=' + encodeURIComponent($json.periodStart) + '&periodEnd=' + encodeURIComponent($json.periodEnd) + '&source=' + encodeURIComponent($json.source) + '&marketingChannel=' + encodeURIComponent($json.marketingChannel) + '&campaign=' + encodeURIComponent($json.campaign) }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf397-context",
+      "name": "Fetch InsulaCRM Marketing Attribution Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json.data ?? $json;\nconst records = Array.isArray(ctx.records) ? ctx.records : (Array.isArray(ctx.campaigns) ? ctx.campaigns : []);\nconst valid = records.filter(r => r && (r.source || r.leadSource || r.marketingChannel || r.channel || r.campaign));\nif (!valid.length) throw new Error('No valid marketing attribution data available for the requested period');\nreturn [{ json: { records: valid, periodStart: $('Normalize Marketing ROI Request').first().json.periodStart, periodEnd: $('Normalize Marketing ROI Request').first().json.periodEnd } }];"
+      },
+      "id": "wf397-validate",
+      "name": "Validate Marketing Attribution Dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const records = $json.records;\nconst buckets = new Map();\nconst num = v => Number.isFinite(Number(v)) ? Number(v) : 0;\nfor (const r of records) {\n  const source = String(r.source ?? r.leadSource ?? 'unknown');\n  const channel = String(r.marketingChannel ?? r.channel ?? 'unknown');\n  const campaign = String(r.campaign ?? r.campaignName ?? 'unknown');\n  const key = [source, channel, campaign].join('|');\n  if (!buckets.has(key)) buckets.set(key, { source, marketingChannel: channel, campaign, leads: 0, qualifiedLeads: 0, appointments: 0, contracts: 0, closedDeals: 0, grossRevenue: 0, netProfit: 0, spend: 0 });\n  const b = buckets.get(key);\n  b.leads += num(r.leads ?? r.leadCount ?? (r.isLead ? 1 : 0));\n  b.qualifiedLeads += num(r.qualifiedLeads ?? r.qualifiedLeadCount);\n  b.appointments += num(r.appointments ?? r.appointmentCount);\n  b.contracts += num(r.contracts ?? r.contractCount ?? (r.contractSigned ? 1 : 0));\n  b.closedDeals += num(r.closedDeals ?? r.closedDealCount ?? (r.closed ? 1 : 0));\n  b.grossRevenue += num(r.grossRevenue);\n  b.netProfit += num(r.netProfit);\n  b.spend += num(r.spend ?? r.sourceSpend ?? r.campaignSpend);\n}\nconst rows = [...buckets.values()].map(b => ({ ...b, costPerLead: b.leads ? b.spend / b.leads : 0, costPerQualifiedLead: b.qualifiedLeads ? b.spend / b.qualifiedLeads : 0, costPerAppointment: b.appointments ? b.spend / b.appointments : 0, costPerContract: b.contracts ? b.spend / b.contracts : 0, costPerClosedDeal: b.closedDeals ? b.spend / b.closedDeals : 0, leadToQualifiedRate: b.leads ? b.qualifiedLeads / b.leads : 0, qualifiedToAppointmentRate: b.qualifiedLeads ? b.appointments / b.qualifiedLeads : 0, appointmentToContractRate: b.appointments ? b.contracts / b.appointments : 0, contractToCloseRate: b.contracts ? b.closedDeals / b.contracts : 0, leadToCloseRate: b.leads ? b.closedDeals / b.leads : 0, roi: b.spend ? (b.netProfit - b.spend) / b.spend : null, profitMultiple: b.spend ? b.netProfit / b.spend : null }));\nconst ranked = [...rows].sort((a,b) => ((b.roi ?? -Infinity) - (a.roi ?? -Infinity)) || (b.netProfit - a.netProfit));\nconst recommendations = ranked.map((r, i) => ({ rank: i + 1, source: r.source, marketingChannel: r.marketingChannel, campaign: r.campaign, action: r.roi === null ? 'collect_spend_data' : r.roi >= 2 ? 'scale' : r.roi >= 0.5 ? 'maintain_optimize' : r.roi >= 0 ? 'optimize_cautiously' : 'reduce_or_pause', reason: r.roi === null ? 'Spend is missing or zero' : 'ROI and downstream conversion performance' }));\nconst totals = rows.reduce((a,b) => { for (const k of ['leads','qualifiedLeads','appointments','contracts','closedDeals','grossRevenue','netProfit','spend']) a[k] += b[k]; return a; }, {leads:0,qualifiedLeads:0,appointments:0,contracts:0,closedDeals:0,grossRevenue:0,netProfit:0,spend:0});\ntotals.roi = totals.spend ? (totals.netProfit - totals.spend) / totals.spend : null;\ntotals.profitMultiple = totals.spend ? totals.netProfit / totals.spend : null;\ntotals.leadToCloseRate = totals.leads ? totals.closedDeals / totals.leads : 0;\nreturn [{ json: { periodStart: $json.periodStart, periodEnd: $json.periodEnd, performance: ranked, recommendations, totals, recordCount: records.length, optimizedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf397-optimize",
+      "name": "Rank Sources & Generate ROI Optimization Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/marketing-source-attribution-roi",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ periodStart: $json.periodStart, periodEnd: $json.periodEnd, performance: $json.performance, recommendations: $json.recommendations, totals: $json.totals, recordCount: $json.recordCount, idempotencyKey: 'wf-397:marketing-roi:' + $json.periodStart + ':' + $json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf397-persist",
+      "name": "Persist Marketing ROI Optimization to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activities",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ activityType: 'marketing_source_roi_optimization', periodStart: $('Rank Sources & Generate ROI Optimization Recommendations').first().json.periodStart, periodEnd: $('Rank Sources & Generate ROI Optimization Recommendations').first().json.periodEnd, recordCount: $('Rank Sources & Generate ROI Optimization Recommendations').first().json.recordCount, idempotencyKey: 'wf-397:activity:' + $('Rank Sources & Generate ROI Optimization Recommendations').first().json.periodStart + ':' + $('Rank Sources & Generate ROI Optimization Recommendations').first().json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf397-activity",
+      "name": "Record Marketing ROI Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-397', status: 'optimized', periodStart: $('Rank Sources & Generate ROI Optimization Recommendations').first().json.periodStart, periodEnd: $('Rank Sources & Generate ROI Optimization Recommendations').first().json.periodEnd, recordCount: $('Rank Sources & Generate ROI Optimization Recommendations').first().json.recordCount, totals: $('Rank Sources & Generate ROI Optimization Recommendations').first().json.totals, recommendations: $('Rank Sources & Generate ROI Optimization Recommendations').first().json.recommendations } }}"
+      },
+      "id": "wf397-response",
+      "name": "Respond Marketing ROI Optimization Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 0]
+    }
+  ],
+  "connections": {
+    "Marketing ROI Optimization Webhook": { "main": [[{ "node": "Normalize Marketing ROI Request", "type": "main", "index": 0 }]] },
+    "Normalize Marketing ROI Request": { "main": [[{ "node": "Fetch InsulaCRM Marketing Attribution Context", "type": "main", "index": 0 }]] },
+    "Fetch InsulaCRM Marketing Attribution Context": { "main": [[{ "node": "Validate Marketing Attribution Dataset", "type": "main", "index": 0 }]] },
+    "Validate Marketing Attribution Dataset": { "main": [[{ "node": "Rank Sources & Generate ROI Optimization Recommendations", "type": "main", "index": 0 }]] },
+    "Rank Sources & Generate ROI Optimization Recommendations": { "main": [[{ "node": "Persist Marketing ROI Optimization to InsulaCRM", "type": "main", "index": 0 }]] },
+    "Persist Marketing ROI Optimization to InsulaCRM": { "main": [[{ "node": "Record Marketing ROI Analytics Activity", "type": "main", "index": 0 }]] },
+    "Record Marketing ROI Analytics Activity": { "main": [[{ "node": "Respond Marketing ROI Optimization Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "versionId": "wf-397-v1"
+}

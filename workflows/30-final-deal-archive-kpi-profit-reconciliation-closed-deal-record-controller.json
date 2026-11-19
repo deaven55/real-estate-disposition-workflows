@@ -1,0 +1,338 @@
+{
+  "name": "WF-392 — Final Deal Archive, KPI / Profit Reconciliation & Closed-Deal Record Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "final-deal-archive-reconciliation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf392-webhook",
+      "name": "Final Deal Archive Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst required = ['assignmentId','dealId'];\nconst missing = required.filter(k => b[k] === undefined || b[k] === null || b[k] === '');\nif (missing.length) throw new Error('Missing required archive fields: ' + missing.join(', '));\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf392:archive:' + String(b.assignmentId) + ':' + String(b.dealId) + ':' + String(b.eventId ?? 'default')));\nreturn [{ json: { ...b, assignmentId: String(b.assignmentId), dealId: String(b.dealId), idempotencyKey } }];"
+      },
+      "id": "wf392-normalize",
+      "name": "Normalize Final Archive Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/deals/final-archive-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:context"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf392-context",
+      "name": "Fetch Final Deal Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst assignment = ctx.assignment ?? ctx.data?.assignment ?? {};\nconst deal = ctx.deal ?? ctx.data?.deal ?? {};\nconst settlement = ctx.settlement ?? ctx.data?.settlement ?? {};\nconst completion = ctx.completion ?? ctx.data?.completion ?? {};\nconst dealState = String(deal.state ?? deal.status ?? '').toLowerCase();\nconst settlementStatus = String(settlement.status ?? '').toLowerCase();\nconst completionStatus = String(completion.status ?? '').toLowerCase();\nconst issues = [];\nif (!['closed','closed_settled'].includes(dealState)) issues.push('deal_not_closed:' + dealState);\nif (!['settled','completed'].includes(settlementStatus)) issues.push('settlement_not_confirmed:' + settlementStatus);\nif (!['completed','closed'].includes(completionStatus)) issues.push('transaction_completion_not_confirmed:' + completionStatus);\nconst purchasePrice = Number(assignment.purchasePrice ?? deal.purchasePrice ?? 0);\nconst assignmentFee = Number(assignment.assignmentFee ?? deal.assignmentFee ?? 0);\nconst closingCosts = Number(assignment.closingCosts ?? deal.closingCosts ?? 0);\nconst otherCosts = Number(assignment.otherCosts ?? deal.otherCosts ?? 0);\nconst grossRevenue = Number(assignment.grossRevenue ?? deal.grossRevenue ?? assignmentFee);\nconst netProfit = Number(assignment.netProfit ?? deal.netProfit ?? (grossRevenue - closingCosts - otherCosts));\nif (purchasePrice < 0 || assignmentFee < 0 || closingCosts < 0 || otherCosts < 0) issues.push('financial_values_invalid');\nconst archiveEligible = issues.length === 0;\nreturn [{ json: { ...$json, assignment, deal, settlement, completion, dealState, settlementStatus, completionStatus, purchasePrice, assignmentFee, closingCosts, otherCosts, grossRevenue, netProfit, issues, archiveEligible } }];"
+      },
+      "id": "wf392-validate",
+      "name": "Validate Closed Deal & Reconcile Financials",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "archive-eligible",
+              "leftValue": "={{$json.archiveEligible}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf392-if",
+      "name": "IF Archive Eligible",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/closed-record",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:record"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "status",
+              "value": "closed_archived"
+            },
+            {
+              "name": "purchasePrice",
+              "value": "={{$json.purchasePrice}}"
+            },
+            {
+              "name": "assignmentFee",
+              "value": "={{$json.assignmentFee}}"
+            },
+            {
+              "name": "closingCosts",
+              "value": "={{$json.closingCosts}}"
+            },
+            {
+              "name": "otherCosts",
+              "value": "={{$json.otherCosts}}"
+            },
+            {
+              "name": "grossRevenue",
+              "value": "={{$json.grossRevenue}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf392-record",
+      "name": "Persist Closed Deal Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/closed-deal-kpi-reconciliation",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:kpi"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "grossRevenue",
+              "value": "={{$json.grossRevenue}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            },
+            {
+              "name": "assignmentFee",
+              "value": "={{$json.assignmentFee}}"
+            },
+            {
+              "name": "closingCosts",
+              "value": "={{$json.closingCosts}}"
+            },
+            {
+              "name": "otherCosts",
+              "value": "={{$json.otherCosts}}"
+            },
+            {
+              "name": "settlementStatus",
+              "value": "={{$json.settlementStatus}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf392-kpi",
+      "name": "Reconcile Closed Deal KPIs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/archive-activity",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:activity"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "activityType",
+              "value": "closed_deal_archived"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf392-activity",
+      "name": "Persist Closed Deal Archive Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-392', status: 'closed_archived', assignmentId: $json.assignmentId, dealId: $json.dealId, grossRevenue: $json.grossRevenue, netProfit: $json.netProfit, message: 'Closed deal record, financial reconciliation, KPI data, and archive activity were persisted.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf392-response",
+      "name": "Respond Closed Deal Archived",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1760, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-392', status: 'blocked', assignmentId: $json.assignmentId, dealId: $json.dealId, issues: $json.issues, message: 'Closed-deal archival blocked because closing, settlement, completion, or financial reconciliation requirements were not satisfied.' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf392-response-blocked",
+      "name": "Respond Archive Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Final Deal Archive Webhook": {
+      "main": [[{"node": "Normalize Final Archive Request", "type": "main", "index": 0}]]
+    },
+    "Normalize Final Archive Request": {
+      "main": [[{"node": "Fetch Final Deal Context", "type": "main", "index": 0}]]
+    },
+    "Fetch Final Deal Context": {
+      "main": [[{"node": "Validate Closed Deal & Reconcile Financials", "type": "main", "index": 0}]]
+    },
+    "Validate Closed Deal & Reconcile Financials": {
+      "main": [[{"node": "IF Archive Eligible", "type": "main", "index": 0}]]
+    },
+    "IF Archive Eligible": {
+      "main": [
+        [{"node": "Persist Closed Deal Record", "type": "main", "index": 0}],
+        [{"node": "Respond Archive Blocked", "type": "main", "index": 0}]
+      ]
+    },
+    "Persist Closed Deal Record": {
+      "main": [[{"node": "Reconcile Closed Deal KPIs", "type": "main", "index": 0}]]
+    },
+    "Reconcile Closed Deal KPIs": {
+      "main": [[{"node": "Persist Closed Deal Archive Activity", "type": "main", "index": 0}]]
+    },
+    "Persist Closed Deal Archive Activity": {
+      "main": [[{"node": "Respond Closed Deal Archived", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate", "insula-crm", "deal", "archive", "kpi", "profit", "wf-392"]
+}

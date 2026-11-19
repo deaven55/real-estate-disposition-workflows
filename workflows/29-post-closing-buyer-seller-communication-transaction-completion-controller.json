@@ -1,0 +1,393 @@
+{
+  "name": "WF-391 — Post-Closing Buyer/Seller Communication & Transaction Completion Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "post-closing-transaction-completion",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf391-webhook",
+      "name": "Transaction Completion Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst required = ['assignmentId','dealId','buyerId','sellerId','completionType'];\nconst missing = required.filter(k => b[k] === undefined || b[k] === null || b[k] === '');\nif (missing.length) throw new Error('Missing required transaction completion fields: ' + missing.join(', '));\nconst allowed = new Set(['transaction_completed','buyer_completion','seller_completion','funds_disbursed','documents_released','completion_failed','completion_cancelled']);\nconst completionType = String(b.completionType).toLowerCase();\nif (!allowed.has(completionType)) throw new Error('Unsupported completion type: ' + completionType);\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf391:transaction-completion:' + String(b.assignmentId) + ':' + String(b.dealId) + ':' + completionType + ':' + String(b.eventId ?? 'default')));\nreturn [{ json: { ...b, assignmentId: String(b.assignmentId), dealId: String(b.dealId), buyerId: String(b.buyerId), sellerId: String(b.sellerId), completionType, idempotencyKey } }];"
+      },
+      "id": "wf391-normalize",
+      "name": "Normalize Completion Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/assignments/post-closing-completion-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:context"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf391-context",
+      "name": "Fetch Transaction Completion Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst assignment = ctx.assignment ?? ctx.data?.assignment ?? {};\nconst deal = ctx.deal ?? ctx.data?.deal ?? {};\nconst buyer = ctx.buyer ?? ctx.data?.buyer ?? {};\nconst seller = ctx.seller ?? ctx.data?.seller ?? {};\nconst settlement = ctx.settlement ?? ctx.data?.settlement ?? {};\nconst blocked = new Set(['cancelled','disputed','dnc']);\nconst dealState = String(deal.state ?? deal.status ?? '').toLowerCase();\nconst assignmentState = String(assignment.state ?? assignment.status ?? '').toLowerCase();\nconst settlementStatus = String(settlement.status ?? '').toLowerCase();\nconst buyerActive = buyer.active === true || String(buyer.status ?? '').toLowerCase() === 'active';\nconst sellerValid = seller.id !== undefined && seller.id !== null;\nconst issues = [];\nif (!buyerActive) issues.push('buyer_not_active');\nif (!sellerValid) issues.push('seller_identity_not_confirmed');\nif (blocked.has(dealState)) issues.push('deal_state_blocked:' + dealState);\nif (blocked.has(assignmentState) && !['completion_cancelled','completion_failed'].includes($json.completionType)) issues.push('assignment_state_blocked:' + assignmentState);\nif (['transaction_completed','funds_disbursed'].includes($json.completionType) && !['settled','completed'].includes(settlementStatus)) issues.push('settlement_not_confirmed');\nconst valid = issues.length === 0;\nreturn [{ json: { ...$json, assignment, deal, buyer, seller, settlement, dealState, assignmentState, settlementStatus, issues, valid } }];"
+      },
+      "id": "wf391-validate",
+      "name": "Validate Completion & Communication Eligibility",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{$json.valid}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf391-if",
+      "name": "IF Completion Eligible",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/communications/buyer-transaction-completion",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:buyer"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId}}"
+            },
+            {
+              "name": "completionType",
+              "value": "={{$json.completionType}}"
+            },
+            {
+              "name": "messageTemplate",
+              "value": "transaction_completion_buyer"
+            },
+            {
+              "name": "fundsReference",
+              "value": "={{$json.fundsReference ?? ''}}"
+            },
+            {
+              "name": "documentReference",
+              "value": "={{$json.documentReference ?? ''}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf391-buyer",
+      "name": "Dispatch Buyer Completion Communication",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/communications/seller-transaction-completion",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:seller"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId}}"
+            },
+            {
+              "name": "completionType",
+              "value": "={{$json.completionType}}"
+            },
+            {
+              "name": "messageTemplate",
+              "value": "transaction_completion_seller"
+            },
+            {
+              "name": "documentReference",
+              "value": "={{$json.documentReference ?? ''}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf391-seller",
+      "name": "Dispatch Seller Completion Communication",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 20]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/transaction-completion",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:completion"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId}}"
+            },
+            {
+              "name": "completionType",
+              "value": "={{$json.completionType}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.completionType === 'transaction_completed' ? 'completed' : ($json.completionType === 'completion_failed' ? 'failed' : ($json.completionType === 'completion_cancelled' ? 'cancelled' : 'completion_coordination'))}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf391-completion",
+      "name": "Persist Transaction Completion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -60]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/post-closing-activity",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:activity"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId}}"
+            },
+            {
+              "name": "activityType",
+              "value": "post_closing_transaction_completion"
+            },
+            {
+              "name": "completionType",
+              "value": "={{$json.completionType}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf391-activity",
+      "name": "Persist Completion Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, -60]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-391', status: ($json.completionType === 'transaction_completed' ? 'completed' : ($json.completionType === 'completion_failed' ? 'failed' : ($json.completionType === 'completion_cancelled' ? 'cancelled' : 'completion_coordination'))), assignmentId: $json.assignmentId, dealId: $json.dealId, buyerId: $json.buyerId, sellerId: $json.sellerId, completionType: $json.completionType, message: 'Buyer and seller transaction completion communication and post-closing activity were recorded.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf391-response",
+      "name": "Respond Transaction Completion",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1760, -60]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-391', status: 'blocked', assignmentId: $json.assignmentId, dealId: $json.dealId, buyerId: $json.buyerId, sellerId: $json.sellerId, completionType: $json.completionType, issues: $json.issues, message: 'Transaction completion communication was blocked because settlement, participant, or lifecycle requirements were not satisfied.' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf391-response-blocked",
+      "name": "Respond Completion Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Transaction Completion Webhook": {
+      "main": [[{"node": "Normalize Completion Event", "type": "main", "index": 0}]]
+    },
+    "Normalize Completion Event": {
+      "main": [[{"node": "Fetch Transaction Completion Context", "type": "main", "index": 0}]]
+    },
+    "Fetch Transaction Completion Context": {
+      "main": [[{"node": "Validate Completion & Communication Eligibility", "type": "main", "index": 0}]]
+    },
+    "Validate Completion & Communication Eligibility": {
+      "main": [[{"node": "IF Completion Eligible", "type": "main", "index": 0}]]
+    },
+    "IF Completion Eligible": {
+      "main": [
+        [
+          {"node": "Dispatch Buyer Completion Communication", "type": "main", "index": 0},
+          {"node": "Dispatch Seller Completion Communication", "type": "main", "index": 0}
+        ],
+        [
+          {"node": "Respond Completion Blocked", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Dispatch Buyer Completion Communication": {
+      "main": [[{"node": "Persist Transaction Completion", "type": "main", "index": 0}]]
+    },
+    "Dispatch Seller Completion Communication": {
+      "main": [[{"node": "Persist Transaction Completion", "type": "main", "index": 0}]]
+    },
+    "Persist Transaction Completion": {
+      "main": [[{"node": "Persist Completion Activity", "type": "main", "index": 0}]]
+    },
+    "Persist Completion Activity": {
+      "main": [[{"node": "Respond Transaction Completion", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate", "insula-crm", "assignment", "post-closing", "buyer", "seller", "communication", "wf-391"]
+}

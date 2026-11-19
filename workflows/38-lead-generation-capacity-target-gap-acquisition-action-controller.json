@@ -1,0 +1,137 @@
+{
+  "name": "WF-400 — Lead Generation Capacity, Target Gap & Acquisition Action Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf-400/lead-generation-capacity-actions",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf400-webhook",
+      "name": "Lead Generation Capacity Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst periodStart = String(body.periodStart ?? '').trim();\nconst periodEnd = String(body.periodEnd ?? '').trim();\nconst targetClosedDeals = Number(body.targetClosedDeals ?? 0);\nconst targetContracts = Number(body.targetContracts ?? 0);\nconst targetLeads = Number(body.targetLeads ?? 0);\nconst targetQualifiedLeads = Number(body.targetQualifiedLeads ?? 0);\nif (!periodStart || !periodEnd) throw new Error('periodStart and periodEnd are required');\nif (new Date(periodStart).getTime() > new Date(periodEnd).getTime()) throw new Error('periodStart must be before periodEnd');\nfor (const [name,value] of Object.entries({targetClosedDeals,targetContracts,targetLeads,targetQualifiedLeads})) if (!Number.isFinite(value) || value < 0) throw new Error(name + ' must be non-negative');\nreturn [{ json: { periodStart, periodEnd, targetClosedDeals, targetContracts, targetLeads, targetQualifiedLeads, requestedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf400-normalize",
+      "name": "Normalize Capacity Target Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://YOUR_INSULACRM_API/analytics/lead-generation-capacity-context?periodStart=' + encodeURIComponent($json.periodStart) + '&periodEnd=' + encodeURIComponent($json.periodEnd) }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf400-context",
+      "name": "Fetch InsulaCRM Capacity Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json.data ?? $json;\nconst forecast = Array.isArray(ctx.sourceForecasts) ? ctx.sourceForecasts : [];\nconst capacity = ctx.capacity ?? {};\nif (!forecast.length && !Object.keys(capacity).length) throw new Error('No valid forecast or capacity data available for the requested period');\nreturn [{ json: { forecast, capacity, periodStart: $('Normalize Capacity Target Request').first().json.periodStart, periodEnd: $('Normalize Capacity Target Request').first().json.periodEnd, targetClosedDeals: $('Normalize Capacity Target Request').first().json.targetClosedDeals, targetContracts: $('Normalize Capacity Target Request').first().json.targetContracts, targetLeads: $('Normalize Capacity Target Request').first().json.targetLeads, targetQualifiedLeads: $('Normalize Capacity Target Request').first().json.targetQualifiedLeads } }];"
+      },
+      "id": "wf400-validate",
+      "name": "Validate Forecast & Capacity Inputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const forecast = $json.forecast;\nconst num = v => Number.isFinite(Number(v)) ? Number(v) : 0;\nconst projected = forecast.reduce((a,s) => {\n  const periods = Array.isArray(s.forecast) ? s.forecast : [];\n  for (const p of periods) { a.leads += num(p.projectedLeads); a.qualifiedLeads += num(p.projectedQualifiedLeads); a.contracts += num(p.projectedContracts); a.closedDeals += num(p.projectedClosedDeals); }\n  return a;\n}, { leads:0, qualifiedLeads:0, contracts:0, closedDeals:0 });\nconst targets = { leads: num($json.targetLeads), qualifiedLeads: num($json.targetQualifiedLeads), contracts: num($json.targetContracts), closedDeals: num($json.targetClosedDeals) };\nconst gaps = { leads: Math.max(0, targets.leads - projected.leads), qualifiedLeads: Math.max(0, targets.qualifiedLeads - projected.qualifiedLeads), contracts: Math.max(0, targets.contracts - projected.contracts), closedDeals: Math.max(0, targets.closedDeals - projected.closedDeals) };\nconst rates = { leadToQualified: projected.leads ? projected.qualifiedLeads / projected.leads : 0, leadToContract: projected.leads ? projected.contracts / projected.leads : 0, contractToClose: projected.contracts ? projected.closedDeals / projected.contracts : 0 };\nconst actions = [];\nif (gaps.leads > 0) actions.push({ priority: 'high', action: 'increase_lead_acquisition', metric: 'leads', gap: Number(gaps.leads.toFixed(2)), rationale: 'Projected lead volume is below target' });\nif (gaps.qualifiedLeads > 0) actions.push({ priority: 'high', action: 'improve_lead_qualification', metric: 'qualifiedLeads', gap: Number(gaps.qualifiedLeads.toFixed(2)), rationale: 'Projected qualified-lead volume is below target' });\nif (gaps.contracts > 0) actions.push({ priority: 'medium', action: 'improve_offer_and_conversion_process', metric: 'contracts', gap: Number(gaps.contracts.toFixed(2)), rationale: 'Projected contracts are below target' });\nif (gaps.closedDeals > 0) actions.push({ priority: 'high', action: 'increase_pipeline_and_closing_capacity', metric: 'closedDeals', gap: Number(gaps.closedDeals.toFixed(2)), rationale: 'Projected closed deals are below target' });\nif (!actions.length) actions.push({ priority: 'low', action: 'maintain_current_acquisition_capacity', metric: 'all_targets', gap: 0, rationale: 'Projected pipeline meets or exceeds requested targets' });\nconst capacityFlags = { acquisitionCapacity: Boolean($json.capacity.acquisitionCapacity), salesCapacity: Boolean($json.capacity.salesCapacity), dispositionCapacity: Boolean($json.capacity.dispositionCapacity) };\nreturn [{ json: { periodStart: $json.periodStart, periodEnd: $json.periodEnd, targets, projected, gaps, conversionRates: rates, capacityFlags, actions, status: actions.some(a => a.priority === 'high') ? 'capacity_gap' : actions.some(a => a.priority === 'medium') ? 'optimization_needed' : 'on_track', analyzedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf400-analyze",
+      "name": "Analyze Capacity Gaps & Acquisition Actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/lead-generation-capacity-actions",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ periodStart: $json.periodStart, periodEnd: $json.periodEnd, targets: $json.targets, projected: $json.projected, gaps: $json.gaps, conversionRates: $json.conversionRates, capacityFlags: $json.capacityFlags, actions: $json.actions, status: $json.status, idempotencyKey: 'wf-400:capacity-actions:' + $json.periodStart + ':' + $json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf400-persist",
+      "name": "Persist Capacity Analysis to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activities",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ activityType: 'lead_generation_capacity_gap_analysis', periodStart: $('Analyze Capacity Gaps & Acquisition Actions').first().json.periodStart, periodEnd: $('Analyze Capacity Gaps & Acquisition Actions').first().json.periodEnd, status: $('Analyze Capacity Gaps & Acquisition Actions').first().json.status, actionsCount: $('Analyze Capacity Gaps & Acquisition Actions').first().json.actions.length, idempotencyKey: 'wf-400:activity:' + $('Analyze Capacity Gaps & Acquisition Actions').first().json.periodStart + ':' + $('Analyze Capacity Gaps & Acquisition Actions').first().json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf400-activity",
+      "name": "Record Capacity Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-400', status: $('Analyze Capacity Gaps & Acquisition Actions').first().json.status, periodStart: $('Analyze Capacity Gaps & Acquisition Actions').first().json.periodStart, periodEnd: $('Analyze Capacity Gaps & Acquisition Actions').first().json.periodEnd, targets: $('Analyze Capacity Gaps & Acquisition Actions').first().json.targets, projected: $('Analyze Capacity Gaps & Acquisition Actions').first().json.projected, gaps: $('Analyze Capacity Gaps & Acquisition Actions').first().json.gaps, actions: $('Analyze Capacity Gaps & Acquisition Actions').first().json.actions } }}"
+      },
+      "id": "wf400-response",
+      "name": "Respond Capacity Analysis Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 0]
+    }
+  ],
+  "connections": {
+    "Lead Generation Capacity Webhook": { "main": [[{ "node": "Normalize Capacity Target Request", "type": "main", "index": 0 }]] },
+    "Normalize Capacity Target Request": { "main": [[{ "node": "Fetch InsulaCRM Capacity Context", "type": "main", "index": 0 }]] },
+    "Fetch InsulaCRM Capacity Context": { "main": [[{ "node": "Validate Forecast & Capacity Inputs", "type": "main", "index": 0 }]] },
+    "Validate Forecast & Capacity Inputs": { "main": [[{ "node": "Analyze Capacity Gaps & Acquisition Actions", "type": "main", "index": 0 }]] },
+    "Analyze Capacity Gaps & Acquisition Actions": { "main": [[{ "node": "Persist Capacity Analysis to InsulaCRM", "type": "main", "index": 0 }]] },
+    "Persist Capacity Analysis to InsulaCRM": { "main": [[{ "node": "Record Capacity Analytics Activity", "type": "main", "index": 0 }]] },
+    "Record Capacity Analytics Activity": { "main": [[{ "node": "Respond Capacity Analysis Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "versionId": "wf-400-v1"
+}

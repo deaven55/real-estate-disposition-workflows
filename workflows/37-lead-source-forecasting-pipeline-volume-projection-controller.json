@@ -1,0 +1,137 @@
+{
+  "name": "WF-399 — Lead Source Forecasting & Pipeline Volume Projection Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf-399/lead-source-forecasting",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf399-webhook",
+      "name": "Lead Source Forecasting Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst periodStart = String(body.periodStart ?? '').trim();\nconst periodEnd = String(body.periodEnd ?? '').trim();\nconst forecastPeriods = Math.max(1, Math.min(12, Number(body.forecastPeriods ?? 3)));\nconst targetLeads = Number(body.targetLeads ?? 0);\nif (!periodStart || !periodEnd) throw new Error('periodStart and periodEnd are required');\nif (new Date(periodStart).getTime() > new Date(periodEnd).getTime()) throw new Error('periodStart must be before periodEnd');\nif (!Number.isFinite(forecastPeriods) || forecastPeriods < 1) throw new Error('forecastPeriods must be at least 1');\nif (!Number.isFinite(targetLeads) || targetLeads < 0) throw new Error('targetLeads must be non-negative');\nreturn [{ json: { periodStart, periodEnd, forecastPeriods, targetLeads, requestedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf399-normalize",
+      "name": "Normalize Forecast Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://YOUR_INSULACRM_API/analytics/lead-source-forecast-context?periodStart=' + encodeURIComponent($json.periodStart) + '&periodEnd=' + encodeURIComponent($json.periodEnd) }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf399-context",
+      "name": "Fetch InsulaCRM Forecast Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json.data ?? $json;\nconst records = Array.isArray(ctx.sources) ? ctx.sources : (Array.isArray(ctx.records) ? ctx.records : []);\nconst valid = records.filter(r => r && (r.source || r.leadSource || r.marketingChannel || r.channel));\nif (!valid.length) throw new Error('No valid historical lead-source data available for the requested period');\nreturn [{ json: { records: valid, periodStart: $('Normalize Forecast Request').first().json.periodStart, periodEnd: $('Normalize Forecast Request').first().json.periodEnd, forecastPeriods: $('Normalize Forecast Request').first().json.forecastPeriods, targetLeads: $('Normalize Forecast Request').first().json.targetLeads } }];"
+      },
+      "id": "wf399-validate",
+      "name": "Validate Historical Source Data",
+      "type": "n8n-nodes-base.code",
+      "position": [660, 0],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const records = $json.records;\nconst num = v => Number.isFinite(Number(v)) ? Number(v) : 0;\nconst grouped = new Map();\nfor (const r of records) {\n  const source = String(r.source ?? r.leadSource ?? 'unknown');\n  const channel = String(r.marketingChannel ?? r.channel ?? 'unknown');\n  const key = source + '|' + channel;\n  if (!grouped.has(key)) grouped.set(key, { source, marketingChannel: channel, periods: [], totalLeads: 0, totalQualifiedLeads: 0, totalContracts: 0, totalClosedDeals: 0 });\n  const g = grouped.get(key);\n  g.periods.push({ period: String(r.period ?? r.date ?? r.month ?? ''), leads: num(r.leads ?? r.leadCount), qualifiedLeads: num(r.qualifiedLeads ?? r.qualifiedLeadCount), contracts: num(r.contracts ?? r.contractCount), closedDeals: num(r.closedDeals ?? r.closedDealCount) });\n  g.totalLeads += num(r.leads ?? r.leadCount);\n  g.totalQualifiedLeads += num(r.qualifiedLeads ?? r.qualifiedLeadCount);\n  g.totalContracts += num(r.contracts ?? r.contractCount);\n  g.totalClosedDeals += num(r.closedDeals ?? r.closedDealCount);\n}\nconst profiles = [...grouped.values()].map(g => {\n  const n = g.periods.length;\n  const recent = g.periods.slice(-3);\n  const avgLeads = n ? g.totalLeads / n : 0;\n  const recentAvg = recent.length ? recent.reduce((s,p) => s + p.leads, 0) / recent.length : avgLeads;\n  const trend = avgLeads ? (recentAvg - avgLeads) / avgLeads : 0;\n  const leadToQualifiedRate = g.totalLeads ? g.totalQualifiedLeads / g.totalLeads : 0;\n  const leadToContractRate = g.totalLeads ? g.totalContracts / g.totalLeads : 0;\n  const contractToCloseRate = g.totalContracts ? g.totalClosedDeals / g.totalContracts : 0;\n  return { ...g, averageLeadsPerPeriod: avgLeads, recentAverageLeads: recentAvg, trendRate: trend, leadToQualifiedRate, leadToContractRate, contractToCloseRate };\n});\nconst forecast = profiles.map(p => {\n  const projectedPeriods = [];\n  let base = p.recentAverageLeads || p.averageLeadsPerPeriod;\n  for (let i = 1; i <= $json.forecastPeriods; i++) {\n    const projectedLeads = Math.max(0, base * Math.pow(1 + Math.max(-0.5, Math.min(0.5, p.trendRate)), i));\n    projectedPeriods.push({ periodIndex: i, projectedLeads: Number(projectedLeads.toFixed(2)), projectedQualifiedLeads: Number((projectedLeads * p.leadToQualifiedRate).toFixed(2)), projectedContracts: Number((projectedLeads * p.leadToContractRate).toFixed(2)), projectedClosedDeals: Number((projectedLeads * p.leadToContractRate * p.contractToCloseRate).toFixed(2)) });\n  }\n  return { source: p.source, marketingChannel: p.marketingChannel, historical: { averageLeadsPerPeriod: p.averageLeadsPerPeriod, recentAverageLeads: p.recentAverageLeads, trendRate: p.trendRate, leadToQualifiedRate: p.leadToQualifiedRate, leadToContractRate: p.leadToContractRate, contractToCloseRate: p.contractToCloseRate }, forecast: projectedPeriods };\n});\nconst totals = forecast.reduce((a, f) => { for (const p of f.forecast) { a.projectedLeads += p.projectedLeads; a.projectedQualifiedLeads += p.projectedQualifiedLeads; a.projectedContracts += p.projectedContracts; a.projectedClosedDeals += p.projectedClosedDeals; } return a; }, { projectedLeads: 0, projectedQualifiedLeads: 0, projectedContracts: 0, projectedClosedDeals: 0 });\nconst targetGap = $json.targetLeads ? $json.targetLeads - totals.projectedLeads : null;\nreturn [{ json: { periodStart: $json.periodStart, periodEnd: $json.periodEnd, forecastPeriods: $json.forecastPeriods, targetLeads: $json.targetLeads, sourceForecasts: forecast, totals: { projectedLeads: Number(totals.projectedLeads.toFixed(2)), projectedQualifiedLeads: Number(totals.projectedQualifiedLeads.toFixed(2)), projectedContracts: Number(totals.projectedContracts.toFixed(2)), projectedClosedDeals: Number(totals.projectedClosedDeals.toFixed(2)) }, targetGap: targetGap === null ? null : Number(targetGap.toFixed(2)), forecastMethod: 'recent-average-with-capped-trend-adjustment', generatedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf399-forecast",
+      "name": "Project Lead Source Pipeline Volume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/lead-source-forecast",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ periodStart: $json.periodStart, periodEnd: $json.periodEnd, forecastPeriods: $json.forecastPeriods, targetLeads: $json.targetLeads, sourceForecasts: $json.sourceForecasts, totals: $json.totals, targetGap: $json.targetGap, forecastMethod: $json.forecastMethod, idempotencyKey: 'wf-399:lead-source-forecast:' + $json.periodStart + ':' + $json.periodEnd + ':' + $json.forecastPeriods }) }}",
+        "options": {}
+      },
+      "id": "wf399-persist",
+      "name": "Persist Lead Source Forecast to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activities",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ activityType: 'lead_source_pipeline_forecast', periodStart: $('Project Lead Source Pipeline Volume').first().json.periodStart, periodEnd: $('Project Lead Source Pipeline Volume').first().json.periodEnd, forecastPeriods: $('Project Lead Source Pipeline Volume').first().json.forecastPeriods, projectedLeads: $('Project Lead Source Pipeline Volume').first().json.totals.projectedLeads, projectedContracts: $('Project Lead Source Pipeline Volume').first().json.totals.projectedContracts, projectedClosedDeals: $('Project Lead Source Pipeline Volume').first().json.totals.projectedClosedDeals, idempotencyKey: 'wf-399:activity:' + $('Project Lead Source Pipeline Volume').first().json.periodStart + ':' + $('Project Lead Source Pipeline Volume').first().json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf399-activity",
+      "name": "Record Forecast Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-399', status: 'forecasted', periodStart: $('Project Lead Source Pipeline Volume').first().json.periodStart, periodEnd: $('Project Lead Source Pipeline Volume').first().json.periodEnd, forecastPeriods: $('Project Lead Source Pipeline Volume').first().json.forecastPeriods, totals: $('Project Lead Source Pipeline Volume').first().json.totals, targetGap: $('Project Lead Source Pipeline Volume').first().json.targetGap, sourceForecasts: $('Project Lead Source Pipeline Volume').first().json.sourceForecasts } }}"
+      },
+      "id": "wf399-response",
+      "name": "Respond Lead Source Forecast Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 0]
+    }
+  ],
+  "connections": {
+    "Lead Source Forecasting Webhook": { "main": [[{ "node": "Normalize Forecast Request", "type": "main", "index": 0 }]] },
+    "Normalize Forecast Request": { "main": [[{ "node": "Fetch InsulaCRM Forecast Context", "type": "main", "index": 0 }]] },
+    "Fetch InsulaCRM Forecast Context": { "main": [[{ "node": "Validate Historical Source Data", "type": "main", "index": 0 }]] },
+    "Validate Historical Source Data": { "main": [[{ "node": "Project Lead Source Pipeline Volume", "type": "main", "index": 0 }]] },
+    "Project Lead Source Pipeline Volume": { "main": [[{ "node": "Persist Lead Source Forecast to InsulaCRM", "type": "main", "index": 0 }]] },
+    "Persist Lead Source Forecast to InsulaCRM": { "main": [[{ "node": "Record Forecast Analytics Activity", "type": "main", "index": 0 }]] },
+    "Record Forecast Analytics Activity": { "main": [[{ "node": "Respond Lead Source Forecast Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "versionId": "wf-399-v1"
+}

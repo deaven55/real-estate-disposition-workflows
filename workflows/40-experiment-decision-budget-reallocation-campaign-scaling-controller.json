@@ -1,0 +1,327 @@
+{
+  "name": "WF-402 — Experiment Decision → Budget Reallocation & Campaign Scaling Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "experiment-budget-reallocation-scaling",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w402a",
+      "name": "Experiment Decision Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; return [{json:{...b,experimentId:String(b.experimentId??''),period:String(b.period??''),budget:Number(b.budget??0),variants:Array.isArray(b.variants)?b.variants:[],decisionContext:b.decisionContext??{}}}];"
+      },
+      "id": "w402b",
+      "name": "Normalize Scaling Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.experimentId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w402c",
+      "name": "Validate Experiment Decision",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/experiment-budget-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "experimentId",
+              "value": "={{$json.experimentId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w402d",
+      "name": "Fetch Experiment Budget Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Scaling Request').first().json; const ctx=$json.context??$json; const variants=Array.isArray(ctx.variants)?ctx.variants:input.variants; const eligible=variants.filter(v=>Number(v.impressions||0)>=100&&Number(v.leads||0)>=10); const scored=eligible.map(v=>{const roi=Number(v.roi??0),close=Number(v.closeRate??0),profit=Number(v.netProfit??0),spend=Number(v.spend??0); const efficiency=spend>0?profit/spend:0; const score=Math.max(0,Math.min(100,(roi*40)+(close*30)+(Math.min(efficiency,5)/5*20)+10)); return {...v,scalingScore:score};}).sort((a,b)=>b.scalingScore-a.scalingScore); const leader=scored[0]; let action='hold',reason='insufficient evidence for scaling'; let recommendedBudget=Number(input.budget||ctx.currentBudget||0); if(scored.length>=2&&leader){if(leader.scalingScore>=75&&Number(leader.roi||0)>0){action='scale'; recommendedBudget=Math.min(Number(ctx.maxBudget||recommendedBudget*1.5||0),Math.max(Number(ctx.minBudget||0),recommendedBudget*1.25||0)); reason='winner has sufficient sample and strong efficiency';} else if(leader.scalingScore>=55){action='maintain_optimize'; reason='leader is promising but not strong enough for aggressive scaling';} else {action='reduce_or_pause'; recommendedBudget=Number(ctx.minBudget||0); reason='experiment evidence does not justify continued spend at current level';}} return [{json:{...input,context:ctx,eligibleVariants:scored,scalingDecision:{action,reason,leaderVariantId:leader?.variantId??leader?.id??leader?.name??null,currentBudget:recommendedBudget===0?Number(input.budget||0):Number(input.budget||ctx.currentBudget||0),recommendedBudget,decisionScore:leader?.scalingScore??0,decidedAt:new Date().toISOString()}}}];"
+      },
+      "id": "w402e",
+      "name": "Score Experiment & Recommend Budget Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/experiment-budget-reallocation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "experimentId",
+              "value": "={{$json.experimentId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{JSON.stringify($json.scalingDecision)}}"
+            },
+            {
+              "name": "variants",
+              "value": "={{JSON.stringify($json.eligibleVariants)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf402:' + $json.experimentId + ':' + $json.period}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w402f",
+      "name": "Persist Budget Reallocation Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "experiment_budget_reallocation"
+            },
+            {
+              "name": "experimentId",
+              "value": "={{$json.experimentId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.scalingDecision.action}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf402:activity:' + $json.experimentId + ':' + $json.period}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w402g",
+      "name": "Record Scaling Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w402h",
+      "name": "Respond Scaling Decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'experimentId and period are required'} }}",
+        "options": {}
+      },
+      "id": "w402i",
+      "name": "Respond Invalid Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
+    }
+  ],
+  "connections": {
+    "Experiment Decision Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Scaling Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Scaling Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Experiment Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Experiment Decision": {
+      "main": [
+        [
+          {
+            "node": "Fetch Experiment Budget Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Experiment Budget Context": {
+      "main": [
+        [
+          {
+            "node": "Score Experiment & Recommend Budget Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Experiment & Recommend Budget Action": {
+      "main": [
+        [
+          {
+            "node": "Persist Budget Reallocation Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Budget Reallocation Decision": {
+      "main": [
+        [
+          {
+            "node": "Record Scaling Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Scaling Analytics Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Scaling Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-402"
+    },
+    {
+      "name": "analytics"
+    },
+    {
+      "name": "budget"
+    },
+    {
+      "name": "campaign-scaling"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-402",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf402:{experimentId}:{period}",
+    "notes": "Budget actions are recommendations; final production API and approval controls must be mapped before live spend changes."
+  }
+}

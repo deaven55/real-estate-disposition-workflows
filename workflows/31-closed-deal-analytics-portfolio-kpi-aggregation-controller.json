@@ -1,0 +1,288 @@
+{
+  "name": "WF-393 — Closed-Deal Analytics & Portfolio KPI Aggregation Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "closed-deal-analytics-portfolio-kpi",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf393-webhook",
+      "name": "Closed Deal Analytics Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst required = ['dealId'];\nconst missing = required.filter(k => b[k] === undefined || b[k] === null || b[k] === '');\nif (missing.length) throw new Error('Missing required analytics fields: ' + missing.join(', '));\nconst eventType = String(b.eventType ?? 'closed_deal_archived').toLowerCase();\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf393:analytics:' + String(b.dealId) + ':' + eventType + ':' + String(b.period ?? 'all-time')));\nreturn [{ json: { ...b, dealId: String(b.dealId), eventType, idempotencyKey } }];"
+      },
+      "id": "wf393-normalize",
+      "name": "Normalize Analytics Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/analytics/closed-deal-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:context"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf393-context",
+      "name": "Fetch Closed Deal Analytics Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $json;\nconst deals = Array.isArray(c.closedDeals) ? c.closedDeals : (Array.isArray(c.data?.closedDeals) ? c.data.closedDeals : []);\nconst current = c.currentDeal ?? c.deal ?? c.data?.currentDeal ?? c.data?.deal ?? {};\nconst rows = deals.length ? deals : [current];\nconst closedRows = rows.filter(d => String(d.status ?? d.state ?? '').toLowerCase().includes('closed'));\nconst validRows = closedRows.filter(d => Number.isFinite(Number(d.netProfit ?? d.profit ?? 0)));\nconst count = validRows.length;\nconst grossRevenue = validRows.reduce((s,d)=>s+Number(d.grossRevenue ?? d.assignmentFee ?? 0),0);\nconst netProfit = validRows.reduce((s,d)=>s+Number(d.netProfit ?? d.profit ?? 0),0);\nconst assignmentFees = validRows.reduce((s,d)=>s+Number(d.assignmentFee ?? 0),0);\nconst closingCosts = validRows.reduce((s,d)=>s+Number(d.closingCosts ?? 0),0);\nconst otherCosts = validRows.reduce((s,d)=>s+Number(d.otherCosts ?? 0),0);\nconst avgNetProfit = count ? netProfit / count : 0;\nconst avgAssignmentFee = count ? assignmentFees / count : 0;\nconst profitMargin = grossRevenue ? netProfit / grossRevenue : 0;\nconst profitableDeals = validRows.filter(d=>Number(d.netProfit ?? d.profit ?? 0)>0).length;\nconst lossDeals = validRows.filter(d=>Number(d.netProfit ?? d.profit ?? 0)<0).length;\nconst winRate = count ? profitableDeals / count : 0;\nconst period = String($json.period ?? c.period ?? 'all-time');\nconst analytics = { period, closedDealCount: count, grossRevenue, netProfit, assignmentFees, closingCosts, otherCosts, averageNetProfit: avgNetProfit, averageAssignmentFee: avgAssignmentFee, profitMargin, profitableDeals, lossDeals, winRate };\nreturn [{ json: { ...$json, analytics, analyticsEligible: count > 0, closedRows: validRows } }];"
+      },
+      "id": "wf393-aggregate",
+      "name": "Aggregate Closed Deal KPIs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "analytics-eligible",
+              "leftValue": "={{$json.analyticsEligible}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf393-if",
+      "name": "IF Analytics Eligible",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/portfolio-kpi-reconciliation",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:portfolio"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "period",
+              "value": "={{$json.analytics.period}}"
+            },
+            {
+              "name": "closedDealCount",
+              "value": "={{$json.analytics.closedDealCount}}"
+            },
+            {
+              "name": "grossRevenue",
+              "value": "={{$json.analytics.grossRevenue}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.analytics.netProfit}}"
+            },
+            {
+              "name": "assignmentFees",
+              "value": "={{$json.analytics.assignmentFees}}"
+            },
+            {
+              "name": "closingCosts",
+              "value": "={{$json.analytics.closingCosts}}"
+            },
+            {
+              "name": "otherCosts",
+              "value": "={{$json.analytics.otherCosts}}"
+            },
+            {
+              "name": "averageNetProfit",
+              "value": "={{$json.analytics.averageNetProfit}}"
+            },
+            {
+              "name": "averageAssignmentFee",
+              "value": "={{$json.analytics.averageAssignmentFee}}"
+            },
+            {
+              "name": "profitMargin",
+              "value": "={{$json.analytics.profitMargin}}"
+            },
+            {
+              "name": "profitableDeals",
+              "value": "={{$json.analytics.profitableDeals}}"
+            },
+            {
+              "name": "lossDeals",
+              "value": "={{$json.analytics.lossDeals}}"
+            },
+            {
+              "name": "winRate",
+              "value": "={{$json.analytics.winRate}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf393-persist",
+      "name": "Persist Portfolio KPI Reconciliation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/closed-deal-activity",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:activity"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "activityType",
+              "value": "portfolio_kpi_reconciled"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.analytics.period}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.analytics.netProfit}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf393-activity",
+      "name": "Persist Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-393', status: 'analytics_reconciled', dealId: $json.dealId, metrics: $json.analytics, message: 'Closed-deal portfolio KPI aggregation and reconciliation were persisted.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf393-response",
+      "name": "Respond Analytics Reconciled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-393', status: 'blocked', dealId: $json.dealId, message: 'No valid closed deals with reconciled net profit were available for portfolio KPI aggregation.' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf393-response-blocked",
+      "name": "Respond Analytics Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Closed Deal Analytics Webhook": {
+      "main": [[{"node": "Normalize Analytics Request", "type": "main", "index": 0}]]
+    },
+    "Normalize Analytics Request": {
+      "main": [[{"node": "Fetch Closed Deal Analytics Context", "type": "main", "index": 0}]]
+    },
+    "Fetch Closed Deal Analytics Context": {
+      "main": [[{"node": "Aggregate Closed Deal KPIs", "type": "main", "index": 0}]]
+    },
+    "Aggregate Closed Deal KPIs": {
+      "main": [[{"node": "IF Analytics Eligible", "type": "main", "index": 0}]]
+    },
+    "IF Analytics Eligible": {
+      "main": [
+        [{"node": "Persist Portfolio KPI Reconciliation", "type": "main", "index": 0}],
+        [{"node": "Respond Analytics Blocked", "type": "main", "index": 0}]
+      ]
+    },
+    "Persist Portfolio KPI Reconciliation": {
+      "main": [[{"node": "Persist Analytics Activity", "type": "main", "index": 0}]]
+    },
+    "Persist Analytics Activity": {
+      "main": [[{"node": "Respond Analytics Reconciled", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate", "insula-crm", "analytics", "kpi", "profit", "portfolio", "wf-393"]
+}

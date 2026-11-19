@@ -1,0 +1,139 @@
+{
+  "name": "WholeStack WF-380: Buyer Distribution & Intelligent Buyer Matching Controller",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Buyer Distribution Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wholestack-buyer-distribution",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch Buyer & Assignment Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/buyers/distribution-context",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ assignmentId:$json.body.assignmentId,dealId:$json.body.dealId,propertyId:$json.body.propertyId,buyerId:$json.body.buyerId }) }}"
+      }
+    },
+    {
+      "id": "validate",
+      "name": "Validate Buyer Distribution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300],
+      "parameters": {
+        "jsCode": "var c=$input.first().json.data||$input.first().json;\nvar state=String(c.dealStatus||'').toLowerCase();\nvar eligible=c.assignmentEligible!==false&&c.dispositionStatus!=='blocked';\nvar buyerActive=c.buyerActive!==false;\nvar buyBoxMatch=c.buyBoxMatch===true||c.buyBoxMatchScore>=0.6;\nvar suppressed=c.buyerSuppressed===true||c.dnc===true;\nvar blockedState=['closed','cancelled','disputed'].indexOf(state)!==-1;\nvar blocked=!eligible||!buyerActive||!buyBoxMatch||suppressed||blockedState;\nvar reason=!eligible?'assignment_not_eligible':!buyerActive?'buyer_inactive':!buyBoxMatch?'buy_box_mismatch':suppressed?'buyer_suppressed_or_dnc':blockedState?'deal_state_protected':null;\nreturn [{json:{...c,buyBoxMatch:buyBoxMatch,blocked:blocked,blockedReason:reason}}];"
+      }
+    },
+    {
+      "id": "score",
+      "name": "Score Buyer Deal Fit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [930, 300],
+      "parameters": {
+        "jsCode": "var d=$input.first().json;\nvar fit=Number(d.buyBoxMatchScore||0);\nvar location=Number(d.locationFitScore||fit);\nvar price=Number(d.priceFitScore||fit);\nvar property=Number(d.propertyTypeFitScore||fit);\nvar speed=Number(d.closeSpeedScore||0.5);\nvar score=Math.round(Math.max(0,Math.min(1,(fit*0.4+location*0.2+price*0.2+property*0.1+speed*0.1)))*100);\nvar tier=score>=85?'A':score>=70?'B':score>=55?'C':'D';\nreturn [{json:{...d,buyerFitScore:score,buyerFitTier:tier}}];"
+      }
+    },
+    {
+      "id": "ifAllowed",
+      "name": "IF Buyer Distribution Allowed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1160, 300],
+      "parameters": {
+        "conditions": {
+          "options":{"version":2,"leftValue":"","caseSensitive":true,"typeValidation":"strict"},
+          "combinator":"and",
+          "conditions":[{"id":"allowed","leftValue":"={{ $json.blocked }}","rightValue":false,"operator":{"type":"boolean","operation":"equals"}}]
+        }
+      }
+    },
+    {
+      "id": "persist",
+      "name": "Persist Buyer Match",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1390, 150],
+      "parameters": {
+        "method":"POST",
+        "url":"https://YOUR_INSULACRM_API/buyers/match",
+        "sendBody":true,
+        "specifyBody":"json",
+        "jsonBody":"={{ JSON.stringify({ assignmentId:$json.assignmentId,dealId:$json.dealId,propertyId:$json.propertyId,buyerId:$json.buyerId,buyerFitScore:$json.buyerFitScore,buyerFitTier:$json.buyerFitTier,idempotencyKey:'wf380:'+String($json.assignmentId||$json.dealId||'')+':'+String($json.buyerId||'') }) }}"
+      }
+    },
+    {
+      "id": "dispatch",
+      "name": "Dispatch Deal To Matched Buyer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion":4.2,
+      "position":[1620,150],
+      "parameters":{
+        "method":"POST",
+        "url":"https://YOUR_INSULACRM_API/buyers/send-deal",
+        "sendBody":true,
+        "specifyBody":"json",
+        "jsonBody":"={{ JSON.stringify({ assignmentId:$json.assignmentId,dealId:$json.dealId,propertyId:$json.propertyId,buyerId:$json.buyerId,buyerFitScore:$json.buyerFitScore,buyerFitTier:$json.buyerFitTier,package:$json.buyerDispositionPackage||null,idempotencyKey:'wf380-send:'+String($json.assignmentId||$json.dealId||'')+':'+String($json.buyerId||'') }) }}",
+        "options":{"response":{"response":{"neverError":true}}}
+      }
+    },
+    {
+      "id":"respond",
+      "name":"Respond Buyer Distribution",
+      "type":"n8n-nodes-base.respondToWebhook",
+      "typeVersion":1.1,
+      "position":[1850,150],
+      "parameters":{
+        "respondWith":"json",
+        "responseCode":200,
+        "responseBody":"={{ JSON.stringify({ success:true,workflow:'WF-380',distributionStatus:$json.status||'submitted',buyerFitScore:$('Score Buyer Deal Fit').first().json.buyerFitScore,buyerFitTier:$('Score Buyer Deal Fit').first().json.buyerFitTier,buyerId:$('Score Buyer Deal Fit').first().json.buyerId }) }}"
+      }
+    },
+    {
+      "id":"respondBlocked",
+      "name":"Respond Buyer Distribution Blocked",
+      "type":"n8n-nodes-base.respondToWebhook",
+      "typeVersion":1.1,
+      "position":[1390,450],
+      "parameters":{
+        "respondWith":"json",
+        "responseCode":200,
+        "responseBody":"={{ JSON.stringify({ success:true,workflow:'WF-380',distributed:false,reason:$json.blockedReason||'distribution_blocked',assignmentId:$json.assignmentId||null,buyerId:$json.buyerId||null }) }}"
+      }
+    }
+  ],
+  "connections":{
+    "Buyer Distribution Webhook":{"main":[[{"node":"Fetch Buyer & Assignment Context","type":"main","index":0}]]},
+    "Fetch Buyer & Assignment Context":{"main":[[{"node":"Validate Buyer Distribution","type":"main","index":0}]]},
+    "Validate Buyer Distribution":{"main":[[{"node":"Score Buyer Deal Fit","type":"main","index":0}]]},
+    "Score Buyer Deal Fit":{"main":[[{"node":"IF Buyer Distribution Allowed","type":"main","index":0}]]},
+    "IF Buyer Distribution Allowed":{"main":[[{"node":"Persist Buyer Match","type":"main","index":0}],[{"node":"Respond Buyer Distribution Blocked","type":"main","index":0}]]},
+    "Persist Buyer Match":{"main":[[{"node":"Dispatch Deal To Matched Buyer","type":"main","index":0}]]},
+    "Dispatch Deal To Matched Buyer":{"main":[[{"node":"Respond Buyer Distribution","type":"main","index":0}]]}
+  },
+  "settings":{
+    "executionOrder":"v1",
+    "saveDataErrorExecution":"all",
+    "saveDataSuccessExecution":"all",
+    "saveManualExecutions":true,
+    "saveExecutionProgress":true,
+    "callerPolicy":"workflowsFromSameOwner",
+    "availableInMCP":false
+  },
+  "active":false
+}

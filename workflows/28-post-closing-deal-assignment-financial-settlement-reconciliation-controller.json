@@ -1,0 +1,324 @@
+{
+  "name": "WF-390 — Post-Closing Deal / Assignment Reconciliation & Financial Settlement Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "post-closing-settlement-reconciliation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf390-webhook",
+      "name": "Post-Closing Settlement Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst required = ['assignmentId','dealId','settlementOutcome'];\nconst missing = required.filter(k => b[k] === undefined || b[k] === null || b[k] === '');\nif (missing.length) throw new Error('Missing required settlement fields: ' + missing.join(', '));\nconst allowed = new Set(['settled','partially_settled','pending','failed','reversed','cancelled']);\nconst settlementOutcome = String(b.settlementOutcome).toLowerCase();\nif (!allowed.has(settlementOutcome)) throw new Error('Unsupported settlement outcome: ' + settlementOutcome);\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf390:settlement:' + String(b.assignmentId) + ':' + String(b.dealId) + ':' + settlementOutcome + ':' + String(b.eventId ?? 'default')));\nreturn [{ json: { ...b, assignmentId: String(b.assignmentId), dealId: String(b.dealId), settlementOutcome, idempotencyKey } }];"
+      },
+      "id": "wf390-normalize",
+      "name": "Normalize Settlement Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/assignments/post-closing-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:context"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf390-context",
+      "name": "Fetch Post-Closing Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst assignment = ctx.assignment ?? ctx.data?.assignment ?? {};\nconst deal = ctx.deal ?? ctx.data?.deal ?? {};\nconst closing = ctx.closing ?? ctx.data?.closing ?? {};\nconst settlement = ctx.settlement ?? ctx.data?.settlement ?? {};\nconst dealState = String(deal.state ?? deal.status ?? '').toLowerCase();\nconst assignmentState = String(assignment.state ?? assignment.status ?? '').toLowerCase();\nconst closingStatus = String(closing.status ?? '').toLowerCase();\nconst issues = [];\nif (dealState !== 'closed' && closingStatus !== 'closed' && $json.settlementOutcome === 'settled') issues.push('closing_not_confirmed');\nif (['cancelled','disputed','dnc'].includes(dealState)) issues.push('deal_state_blocked:' + dealState);\nif (['cancelled','disputed'].includes(assignmentState) && !['cancelled','reversed'].includes($json.settlementOutcome)) issues.push('assignment_state_blocked:' + assignmentState);\nif ($json.settlementOutcome === 'settled') {\n  const required = ['settlementAmount','assignmentFee','settlementDate'];\n  for (const f of required) {\n    if (f === 'settlementDate' && !$json[f] && !settlement.settlementDate) issues.push('missing_settlement_date');\n    if (f !== 'settlementDate' && Number($json[f] ?? settlement[f] ?? 0) < 0) issues.push(f + '_invalid');\n  }\n}\nreturn [{ json: { ...$json, assignment, deal, closing, settlement, dealState, assignmentState, closingStatus, issues, valid: issues.length === 0 } }];"
+      },
+      "id": "wf390-validate",
+      "name": "Validate Post-Closing Settlement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "settlement-valid",
+              "leftValue": "={{$json.valid}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf390-if",
+      "name": "IF Settlement Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/settlement-reconciliation",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:reconciliation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "settlementOutcome",
+              "value": "={{$json.settlementOutcome}}"
+            },
+            {
+              "name": "settlementAmount",
+              "value": "={{$json.settlementAmount ?? $json.settlement?.settlementAmount ?? 0}}"
+            },
+            {
+              "name": "assignmentFee",
+              "value": "={{$json.assignmentFee ?? $json.assignment?.assignmentFee ?? 0}}"
+            },
+            {
+              "name": "settlementDate",
+              "value": "={{$json.settlementDate ?? $json.settlement?.settlementDate ?? ''}}"
+            },
+            {
+              "name": "fundsReference",
+              "value": "={{$json.fundsReference ?? ''}}"
+            },
+            {
+              "name": "notes",
+              "value": "={{$json.notes ?? ''}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf390-settlement",
+      "name": "Persist Financial Settlement Reconciliation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/post-closing-reconciliation",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:deal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "settlementOutcome",
+              "value": "={{$json.settlementOutcome}}"
+            },
+            {
+              "name": "targetLifecycleState",
+              "value": "={{$json.settlementOutcome === 'settled' ? 'closed_settled' : ($json.settlementOutcome === 'partially_settled' ? 'closed_partial_settlement' : ($json.settlementOutcome === 'reversed' ? 'settlement_reversed' : ($json.settlementOutcome === 'failed' ? 'settlement_failed' : ($json.settlementOutcome === 'cancelled' ? 'settlement_cancelled' : 'settlement_pending'))))}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf390-deal",
+      "name": "Reconcile Post-Closing Deal Lifecycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/post-closing-activity",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:activity"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "activityType",
+              "value": "post_closing_settlement_reconciliation"
+            },
+            {
+              "name": "settlementOutcome",
+              "value": "={{$json.settlementOutcome}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf390-activity",
+      "name": "Persist Post-Closing Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-390', status: ($json.settlementOutcome === 'settled' ? 'closed_settled' : ($json.settlementOutcome === 'partially_settled' ? 'closed_partial_settlement' : ($json.settlementOutcome === 'reversed' ? 'settlement_reversed' : ($json.settlementOutcome === 'failed' ? 'settlement_failed' : ($json.settlementOutcome === 'cancelled' ? 'settlement_cancelled' : 'settlement_pending'))))), assignmentId: $json.assignmentId, dealId: $json.dealId, settlementOutcome: $json.settlementOutcome, message: 'Post-closing settlement and deal lifecycle reconciliation persisted.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf390-response",
+      "name": "Respond Settlement Reconciled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1760, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-390', status: 'blocked', assignmentId: $json.assignmentId, dealId: $json.dealId, settlementOutcome: $json.settlementOutcome, issues: $json.issues, message: 'Post-closing settlement reconciliation blocked because closing confirmation, lifecycle state, or settlement evidence is incomplete.' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf390-response-blocked",
+      "name": "Respond Settlement Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Post-Closing Settlement Webhook": {
+      "main": [[{"node": "Normalize Settlement Outcome", "type": "main", "index": 0}]]
+    },
+    "Normalize Settlement Outcome": {
+      "main": [[{"node": "Fetch Post-Closing Context", "type": "main", "index": 0}]]
+    },
+    "Fetch Post-Closing Context": {
+      "main": [[{"node": "Validate Post-Closing Settlement", "type": "main", "index": 0}]]
+    },
+    "Validate Post-Closing Settlement": {
+      "main": [[{"node": "IF Settlement Valid", "type": "main", "index": 0}]]
+    },
+    "IF Settlement Valid": {
+      "main": [
+        [{"node": "Persist Financial Settlement Reconciliation", "type": "main", "index": 0}],
+        [{"node": "Respond Settlement Blocked", "type": "main", "index": 0}]
+      ]
+    },
+    "Persist Financial Settlement Reconciliation": {
+      "main": [[{"node": "Reconcile Post-Closing Deal Lifecycle", "type": "main", "index": 0}]]
+    },
+    "Reconcile Post-Closing Deal Lifecycle": {
+      "main": [[{"node": "Persist Post-Closing Activity", "type": "main", "index": 0}]]
+    },
+    "Persist Post-Closing Activity": {
+      "main": [[{"node": "Respond Settlement Reconciled", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate", "insula-crm", "assignment", "post-closing", "settlement", "reconciliation", "wf-390"]
+}

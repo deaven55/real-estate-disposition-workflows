@@ -1,0 +1,137 @@
+{
+  "name": "WF-398 — Lead Generation Budget Allocation & Source Scaling Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf-398/lead-generation-budget-allocation",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wf398-webhook",
+      "name": "Lead Generation Budget Allocation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst periodStart = String(body.periodStart ?? '').trim();\nconst periodEnd = String(body.periodEnd ?? '').trim();\nconst totalBudget = Number(body.totalBudget ?? body.availableBudget ?? 0);\nconst minimumSpend = Number(body.minimumSpend ?? 0);\nconst maximumSpend = Number(body.maximumSpend ?? 0);\nif (!periodStart || !periodEnd) throw new Error('periodStart and periodEnd are required');\nif (new Date(periodStart).getTime() > new Date(periodEnd).getTime()) throw new Error('periodStart must be before periodEnd');\nif (!Number.isFinite(totalBudget) || totalBudget < 0) throw new Error('totalBudget must be a non-negative number');\nreturn [{ json: { periodStart, periodEnd, totalBudget, minimumSpend: Math.max(0, minimumSpend), maximumSpend: Math.max(0, maximumSpend), requestedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf398-normalize",
+      "name": "Normalize Budget Allocation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://YOUR_INSULACRM_API/analytics/lead-generation-budget-context?periodStart=' + encodeURIComponent($json.periodStart) + '&periodEnd=' + encodeURIComponent($json.periodEnd) }}",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf398-context",
+      "name": "Fetch InsulaCRM Budget & Source Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json.data ?? $json;\nconst sources = Array.isArray(ctx.sources) ? ctx.sources : (Array.isArray(ctx.records) ? ctx.records : []);\nconst valid = sources.filter(s => s && (s.source || s.leadSource || s.marketingChannel || s.channel || s.campaign));\nif (!valid.length) throw new Error('No valid lead-generation source performance data available for the requested period');\nreturn [{ json: { sources: valid, periodStart: $('Normalize Budget Allocation Request').first().json.periodStart, periodEnd: $('Normalize Budget Allocation Request').first().json.periodEnd, totalBudget: $('Normalize Budget Allocation Request').first().json.totalBudget, minimumSpend: $('Normalize Budget Allocation Request').first().json.minimumSpend, maximumSpend: $('Normalize Budget Allocation Request').first().json.maximumSpend } }];"
+      },
+      "id": "wf398-validate",
+      "name": "Validate Source Performance Inputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sources = $json.sources;\nconst totalBudget = Number($json.totalBudget);\nconst minSpend = Number($json.minimumSpend);\nconst maxSpend = Number($json.maximumSpend);\nconst num = v => Number.isFinite(Number(v)) ? Number(v) : 0;\nconst rows = sources.map(s => {\n  const leads = num(s.leads ?? s.leadCount);\n  const qualifiedLeads = num(s.qualifiedLeads ?? s.qualifiedLeadCount);\n  const contracts = num(s.contracts ?? s.contractCount);\n  const closedDeals = num(s.closedDeals ?? s.closedDealCount);\n  const netProfit = num(s.netProfit);\n  const spend = num(s.spend ?? s.sourceSpend ?? s.campaignSpend);\n  const roi = spend ? (netProfit - spend) / spend : null;\n  const leadToCloseRate = leads ? closedDeals / leads : 0;\n  const profitPerLead = leads ? netProfit / leads : 0;\n  const profitPerDollar = spend ? netProfit / spend : 0;\n  const score = (roi === null ? 0 : Math.max(0, Math.min(4, roi + 1))) * 0.35 + Math.min(1, leadToCloseRate * 10) * 0.25 + Math.min(1, profitPerLead / 1000) * 0.20 + Math.min(1, profitPerDollar / 4) * 0.20;\n  return { source: String(s.source ?? s.leadSource ?? 'unknown'), marketingChannel: String(s.marketingChannel ?? s.channel ?? 'unknown'), campaign: String(s.campaign ?? s.campaignName ?? 'unknown'), leads, qualifiedLeads, contracts, closedDeals, netProfit, spend, roi, leadToCloseRate, profitPerLead, profitPerDollar, score };\n}).sort((a,b) => b.score - a.score);\nconst positive = rows.filter(r => r.score > 0);\nconst scoreTotal = positive.reduce((sum,r) => sum + r.score, 0);\nlet remaining = totalBudget;\nconst allocations = rows.map((r, i) => {\n  let allocation = scoreTotal ? totalBudget * (r.score / scoreTotal) : (rows.length ? totalBudget / rows.length : 0);\n  if (minSpend > 0 && r.score > 0) allocation = Math.max(allocation, minSpend);\n  if (maxSpend > 0) allocation = Math.min(allocation, maxSpend);\n  allocation = Math.max(0, allocation);\n  remaining -= allocation;\n  return { ...r, recommendedBudget: Number(allocation.toFixed(2)), action: r.roi === null ? 'test_with_tracking' : r.roi >= 1 ? 'scale' : r.roi >= 0 ? 'maintain_and_optimize' : 'reduce_or_pause' };\n});\nif (remaining < -0.01 && allocations.length) {\n  const factor = totalBudget / allocations.reduce((s,r) => s + r.recommendedBudget, 0);\n  for (const r of allocations) r.recommendedBudget = Number((r.recommendedBudget * factor).toFixed(2));\n}\nconst allocatedBudget = allocations.reduce((s,r) => s + r.recommendedBudget, 0);\nconst unallocatedBudget = Number(Math.max(0, totalBudget - allocatedBudget).toFixed(2));\nreturn [{ json: { periodStart: $json.periodStart, periodEnd: $json.periodEnd, totalBudget, allocations, allocatedBudget: Number(allocatedBudget.toFixed(2)), unallocatedBudget, allocationMethod: 'performance_weighted_source_scaling', generatedAt: new Date().toISOString() } }];"
+      },
+      "id": "wf398-allocate",
+      "name": "Calculate Performance-Weighted Budget Allocation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/lead-generation-budget-allocation",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ periodStart: $json.periodStart, periodEnd: $json.periodEnd, totalBudget: $json.totalBudget, allocations: $json.allocations, allocatedBudget: $json.allocatedBudget, unallocatedBudget: $json.unallocatedBudget, allocationMethod: $json.allocationMethod, idempotencyKey: 'wf-398:budget-allocation:' + $json.periodStart + ':' + $json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf398-persist",
+      "name": "Persist Budget Allocation to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activities",
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{ JSON.stringify({ activityType: 'lead_generation_budget_allocation', periodStart: $('Calculate Performance-Weighted Budget Allocation').first().json.periodStart, periodEnd: $('Calculate Performance-Weighted Budget Allocation').first().json.periodEnd, totalBudget: $('Calculate Performance-Weighted Budget Allocation').first().json.totalBudget, allocatedBudget: $('Calculate Performance-Weighted Budget Allocation').first().json.allocatedBudget, idempotencyKey: 'wf-398:activity:' + $('Calculate Performance-Weighted Budget Allocation').first().json.periodStart + ':' + $('Calculate Performance-Weighted Budget Allocation').first().json.periodEnd }) }}",
+        "options": {}
+      },
+      "id": "wf398-activity",
+      "name": "Record Budget Allocation Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-398', status: 'allocated', periodStart: $('Calculate Performance-Weighted Budget Allocation').first().json.periodStart, periodEnd: $('Calculate Performance-Weighted Budget Allocation').first().json.periodEnd, totalBudget: $('Calculate Performance-Weighted Budget Allocation').first().json.totalBudget, allocatedBudget: $('Calculate Performance-Weighted Budget Allocation').first().json.allocatedBudget, unallocatedBudget: $('Calculate Performance-Weighted Budget Allocation').first().json.unallocatedBudget, allocations: $('Calculate Performance-Weighted Budget Allocation').first().json.allocations } }}"
+      },
+      "id": "wf398-response",
+      "name": "Respond Budget Allocation Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 0]
+    }
+  ],
+  "connections": {
+    "Lead Generation Budget Allocation Webhook": { "main": [[{ "node": "Normalize Budget Allocation Request", "type": "main", "index": 0 }]] },
+    "Normalize Budget Allocation Request": { "main": [[{ "node": "Fetch InsulaCRM Budget & Source Context", "type": "main", "index": 0 }]] },
+    "Fetch InsulaCRM Budget & Source Context": { "main": [[{ "node": "Validate Source Performance Inputs", "type": "main", "index": 0 }]] },
+    "Validate Source Performance Inputs": { "main": [[{ "node": "Calculate Performance-Weighted Budget Allocation", "type": "main", "index": 0 }]] },
+    "Calculate Performance-Weighted Budget Allocation": { "main": [[{ "node": "Persist Budget Allocation to InsulaCRM", "type": "main", "index": 0 }]] },
+    "Persist Budget Allocation to InsulaCRM": { "main": [[{ "node": "Record Budget Allocation Analytics Activity", "type": "main", "index": 0 }]] },
+    "Record Budget Allocation Analytics Activity": { "main": [[{ "node": "Respond Budget Allocation Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "versionId": "wf-398-v1"
+}

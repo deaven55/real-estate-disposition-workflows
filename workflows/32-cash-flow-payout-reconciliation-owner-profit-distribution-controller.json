@@ -1,0 +1,322 @@
+{
+  "name": "WF-394 — Cash-Flow / Payout Reconciliation & Owner Profit Distribution Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cash-flow-payout-reconciliation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf394-webhook",
+      "name": "Cash Flow Payout Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst required = ['dealId'];\nconst missing = required.filter(k => b[k] === undefined || b[k] === null || b[k] === '');\nif (missing.length) throw new Error('Missing required payout fields: ' + missing.join(', '));\nconst eventType = String(b.eventType ?? 'settlement_confirmed').toLowerCase();\nconst idempotencyKey = String(b.idempotencyKey ?? ('wf394:payout:' + String(b.dealId) + ':' + eventType + ':' + String(b.eventId ?? 'default')));\nreturn [{ json: { ...b, dealId: String(b.dealId), eventType, idempotencyKey } }];"
+      },
+      "id": "wf394-normalize",
+      "name": "Normalize Payout Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_INSULACRM_API/finance/final-payout-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:context"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf394-context",
+      "name": "Fetch Final Payout Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $json;\nconst deal = c.deal ?? c.data?.deal ?? {};\nconst settlement = c.settlement ?? c.data?.settlement ?? {};\nconst completion = c.completion ?? c.data?.completion ?? {};\nconst payout = c.payout ?? c.data?.payout ?? {};\nconst dealState = String(deal.state ?? deal.status ?? '').toLowerCase();\nconst settlementStatus = String(settlement.status ?? '').toLowerCase();\nconst completionStatus = String(completion.status ?? '').toLowerCase();\nconst issues = [];\nif (!['closed','closed_settled'].includes(dealState)) issues.push('deal_not_closed:' + dealState);\nif (!['settled','completed'].includes(settlementStatus)) issues.push('settlement_not_confirmed:' + settlementStatus);\nif (!['completed','closed'].includes(completionStatus)) issues.push('transaction_completion_not_confirmed:' + completionStatus);\nconst grossRevenue = Number(payout.grossRevenue ?? deal.grossRevenue ?? deal.assignmentFee ?? 0);\nconst closingCosts = Number(payout.closingCosts ?? deal.closingCosts ?? 0);\nconst otherCosts = Number(payout.otherCosts ?? deal.otherCosts ?? 0);\nconst netProfit = Number(payout.netProfit ?? deal.netProfit ?? (grossRevenue - closingCosts - otherCosts));\nconst ownerSharePercent = Number(payout.ownerSharePercent ?? c.ownerSharePercent ?? 100);\nconst reserveAmount = Number(payout.reserveAmount ?? c.reserveAmount ?? 0);\nconst ownerDistribution = Number(payout.ownerDistribution ?? (netProfit * ownerSharePercent / 100 - reserveAmount));\nconst reconciliationDelta = Number(payout.reconciliationDelta ?? 0);\nif (![grossRevenue, closingCosts, otherCosts, netProfit, ownerSharePercent, reserveAmount, ownerDistribution, reconciliationDelta].every(Number.isFinite)) issues.push('financial_values_not_numeric');\nif (grossRevenue < 0 || closingCosts < 0 || otherCosts < 0 || reserveAmount < 0) issues.push('negative_financial_input');\nif (ownerSharePercent < 0 || ownerSharePercent > 100) issues.push('owner_share_percent_out_of_range');\nif (ownerDistribution < 0) issues.push('owner_distribution_negative');\nif (Math.abs(reconciliationDelta) > 0.01) issues.push('reconciliation_delta_not_zero');\nconst eligible = issues.length === 0;\nreturn [{ json: { ...$json, deal, settlement, completion, payout, dealState, settlementStatus, completionStatus, grossRevenue, closingCosts, otherCosts, netProfit, ownerSharePercent, reserveAmount, ownerDistribution, reconciliationDelta, issues, payoutEligible: eligible } }];"
+      },
+      "id": "wf394-validate",
+      "name": "Validate Settlement & Reconcile Payout",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "payout-eligible",
+              "leftValue": "={{$json.payoutEligible}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf394-if",
+      "name": "IF Payout Eligible",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/finance/payout-reconciliation",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:reconciliation"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "grossRevenue",
+              "value": "={{$json.grossRevenue}}"
+            },
+            {
+              "name": "closingCosts",
+              "value": "={{$json.closingCosts}}"
+            },
+            {
+              "name": "otherCosts",
+              "value": "={{$json.otherCosts}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            },
+            {
+              "name": "reconciliationDelta",
+              "value": "={{$json.reconciliationDelta}}"
+            },
+            {
+              "name": "status",
+              "value": "reconciled"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf394-reconcile",
+      "name": "Persist Cash Flow Reconciliation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/finance/owner-profit-distribution",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:distribution"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            },
+            {
+              "name": "ownerSharePercent",
+              "value": "={{$json.ownerSharePercent}}"
+            },
+            {
+              "name": "reserveAmount",
+              "value": "={{$json.reserveAmount}}"
+            },
+            {
+              "name": "ownerDistribution",
+              "value": "={{$json.ownerDistribution}}"
+            },
+            {
+              "name": "status",
+              "value": "distribution_ready"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf394-distribution",
+      "name": "Persist Owner Profit Distribution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/finance/payout-activity",
+        "sendHeaders": true,
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+          },
+          {
+            "name": "Idempotency-Key",
+            "value": "={{$json.idempotencyKey}}:activity"
+          }
+        ],
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "activityType",
+              "value": "payout_reconciled"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            },
+            {
+              "name": "ownerDistribution",
+              "value": "={{$json.ownerDistribution}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "wf394-activity",
+      "name": "Persist Payout Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, -120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, workflow: 'WF-394', status: 'payout_reconciled', dealId: $json.dealId, netProfit: $json.netProfit, ownerDistribution: $json.ownerDistribution, message: 'Cash-flow reconciliation and owner profit distribution were persisted.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf394-response",
+      "name": "Respond Payout Reconciled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1760, -120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, workflow: 'WF-394', status: 'blocked', dealId: $json.dealId, issues: $json.issues, message: 'Payout reconciliation blocked because closing, settlement, completion, or financial validation requirements were not satisfied.' } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf394-response-blocked",
+      "name": "Respond Payout Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1100, 220]
+    }
+  ],
+  "connections": {
+    "Cash Flow Payout Webhook": {
+      "main": [[{"node": "Normalize Payout Request", "type": "main", "index": 0}]]
+    },
+    "Normalize Payout Request": {
+      "main": [[{"node": "Fetch Final Payout Context", "type": "main", "index": 0}]]
+    },
+    "Fetch Final Payout Context": {
+      "main": [[{"node": "Validate Settlement & Reconcile Payout", "type": "main", "index": 0}]]
+    },
+    "Validate Settlement & Reconcile Payout": {
+      "main": [[{"node": "IF Payout Eligible", "type": "main", "index": 0}]]
+    },
+    "IF Payout Eligible": {
+      "main": [
+        [{"node": "Persist Cash Flow Reconciliation", "type": "main", "index": 0}],
+        [{"node": "Respond Payout Blocked", "type": "main", "index": 0}]
+      ]
+    },
+    "Persist Cash Flow Reconciliation": {
+      "main": [[{"node": "Persist Owner Profit Distribution", "type": "main", "index": 0}]]
+    },
+    "Persist Owner Profit Distribution": {
+      "main": [[{"node": "Persist Payout Activity", "type": "main", "index": 0}]]
+    },
+    "Persist Payout Activity": {
+      "main": [[{"node": "Respond Payout Reconciled", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveDataManualExecutions": true,
+    "saveDataCrash": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["real-estate", "insula-crm", "finance", "cash-flow", "payout", "profit", "wf-394"]
+}

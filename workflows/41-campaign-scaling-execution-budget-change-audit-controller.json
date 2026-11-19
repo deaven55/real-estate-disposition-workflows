@@ -1,0 +1,299 @@
+{
+  "name": "WF-403 — Campaign Scaling Execution & Budget Change Audit Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campaign-scaling-execution",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w403a",
+      "name": "Campaign Scaling Execution Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; return [{json:{...b,experimentId:String(b.experimentId??''),period:String(b.period??''),approved:Boolean(b.approved),requestedBudget:Number(b.requestedBudget??0),action:String(b.action??'').trim(),requestedBy:String(b.requestedBy??'').trim(),changeReason:String(b.changeReason??'').trim()}}];"
+      },
+      "id": "w403b",
+      "name": "Normalize Scaling Execution Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.experimentId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.action}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w403c",
+      "name": "Validate Scaling Execution",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/campaign-scaling-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "experimentId",
+              "value": "={{$json.experimentId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "requestedBudget",
+              "value": "={{$json.requestedBudget}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w403d",
+      "name": "Fetch Campaign Scaling Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Scaling Execution Request').first().json; const ctx=$json.context??$json; const approved=input.approved===true||ctx.approved===true; const action=input.action; const allowed=['scale','maintain_optimize','reduce_or_pause']; const current=Number(ctx.currentBudget??0); const requested=Number(input.requestedBudget||ctx.recommendedBudget||0); const max=Number(ctx.maxBudget??0); const min=Number(ctx.minBudget??0); const delta=requested-current; let status='blocked',reason=''; if(!approved) reason='explicit approval is required before budget execution'; else if(!allowed.includes(action)) reason='unsupported scaling action'; else if(requested<0) reason='budget cannot be negative'; else if(max>0&&requested>max) reason='requested budget exceeds configured maximum'; else if(requested<min) reason='requested budget is below configured minimum'; else if(!input.requestedBy) reason='requestedBy is required for auditability'; else status='approved_for_execution'; return [{json:{...input,context:ctx,executionDecision:{status,reason,action,currentBudget:current,requestedBudget:requested,budgetDelta:delta,approvalRequired:true,approvedBy:input.requestedBy,approvedAt:new Date().toISOString()}}}];"
+      },
+      "id": "w403e",
+      "name": "Validate Approval & Budget Change",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/campaign-budget-change",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "experimentId",
+              "value": "={{$json.experimentId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.action}}"
+            },
+            {
+              "name": "currentBudget",
+              "value": "={{$json.executionDecision.currentBudget}}"
+            },
+            {
+              "name": "requestedBudget",
+              "value": "={{$json.executionDecision.requestedBudget}}"
+            },
+            {
+              "name": "budgetDelta",
+              "value": "={{$json.executionDecision.budgetDelta}}"
+            },
+            {
+              "name": "requestedBy",
+              "value": "={{$json.executionDecision.approvedBy}}"
+            },
+            {
+              "name": "changeReason",
+              "value": "={{$json.changeReason}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf403:' + $json.experimentId + ':' + $json.period + ':' + $json.action}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w403f",
+      "name": "Persist Budget Change Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w403g",
+      "name": "Respond Scaling Execution",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'experimentId, period, and action are required'} }}",
+        "options": {}
+      },
+      "id": "w403h",
+      "name": "Respond Invalid Execution",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
+    }
+  ],
+  "connections": {
+    "Campaign Scaling Execution Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Scaling Execution Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Scaling Execution Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Scaling Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Scaling Execution": {
+      "main": [
+        [
+          {
+            "node": "Fetch Campaign Scaling Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Campaign Scaling Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Approval & Budget Change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Approval & Budget Change": {
+      "main": [
+        [
+          {
+            "node": "Persist Budget Change Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Budget Change Audit": {
+      "main": [
+        [
+          {
+            "node": "Respond Scaling Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-403"
+    },
+    {
+      "name": "analytics"
+    },
+    {
+      "name": "campaign-scaling"
+    },
+    {
+      "name": "budget-audit"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-403",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf403:{experimentId}:{period}:{action}",
+    "notes": "This controller records and validates approved budget changes; live ad-platform execution remains behind the final production API/approval integration."
+  }
+}

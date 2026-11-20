@@ -1,0 +1,58 @@
+{
+  "name": "WF-461 — Seller Response → Negotiation Loop / Contract Acceptance / Walk-Away Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"seller-response-negotiation-loop-contract-acceptance-walkaway","responseMode":"lastNode","options":{}},
+      "id":"w461a","name":"Seller Response Loop Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const dealId=String(b.dealId??'').trim(); const responseId=String(b.responseId??b.messageId??'').trim(); const responseText=String(b.responseText??b.message??'').trim(); const offerId=String(b.offerId??'').trim(); return [{json:{...b,leadId,portfolioId,dealId,responseId,responseText,offerId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w461b","name":"Normalize Seller Negotiation Response","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.responseId}}","operation":"notEmpty"},{"value1":"={{$json.responseText}}","operation":"notEmpty"}]}},
+      "id":"w461c","name":"Validate Seller Negotiation Response","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-negotiation-loop-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"responseId","value":"={{$json.responseId}}"},{"name":"offerId","value":"={{$json.offerId}}"},{"name":"responseText","value":"={{$json.responseText}}"}]},"options":{}},
+      "id":"w461d","name":"Fetch Seller Negotiation Loop Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Seller Negotiation Response').first().json; const ctx=$json.context??$json; const text=input.responseText.toLowerCase(); const dnc=ctx.dnc===true||ctx.suppressed===true; const blocked=ctx.closed===true||['closed','cancelled','disputed'].includes(String(ctx.dealStatus??'').toLowerCase()); const duplicate=ctx.responseAlreadyProcessed===true; const protectedMao=Number(ctx.protectedMAO??ctx.protectedMao??0); const currentOffer=Number(ctx.currentOffer??0); const latestOffer=Number(ctx.latestOffer??currentOffer); const rounds=Number(ctx.negotiationRound??ctx.round??0); const maxRounds=Math.max(1,Number(ctx.maxNegotiationRounds??5)); const sellerMotivation=Math.max(0,Math.min(100,Number(ctx.motivationScore??50))); const intentRules=[['dnc',/(do not contact|stop contacting|remove me|unsubscribe|don't text|dont text)/],['accept',/^(yes|accept|accepted|deal|agreed|i agree|let's do it|lets do it)/],['counteroffer',/(counter|would take|i can do|take \$|for \$|price is)/],['reject',/(not interested|no thanks|pass|no deal|too low)/],['callback',/(call me|give me a call|talk on the phone)/],['nurture',/(later|not ready|next month|next year)/]]; let intent='other'; for(const [k,r] of intentRules){if(r.test(text)){intent=k;break;}} const mentioned=(text.match(/\$\s?([0-9,]+(?:\.\d+)?)/)||[])[1]; const counterAmount=mentioned?Number(String(mentioned).replace(/,/g,'')):0; let route='human_review'; let nextAction='review_response'; let status='review'; const flags=[]; if(dnc||intent==='dnc'){route='do_not_contact';nextAction='suppress_future_outreach';status='blocked';flags.push('dnc_or_suppressed');} else if(blocked){route='blocked_deal';nextAction='no_further_negotiation';status='blocked';flags.push('closed_or_blocked_deal');} else if(duplicate){route='duplicate_response';nextAction='do_not_reprocess';status='duplicate';flags.push('duplicate_response');} else if(intent==='accept'){route='contract_acceptance';nextAction='verify_final_economics_and_contract_readiness';status='accepted';} else if(intent==='counteroffer'){if(counterAmount>0&&protectedMao>0&&counterAmount<=protectedMao&&rounds<maxRounds){route='negotiation_loop';nextAction='evaluate_counteroffer_and_prepare_next_action';status='counteroffer_valid';} else if(counterAmount>protectedMao){route='walk_away_or_reengage';nextAction=sellerMotivation>=70?'reengage_without_exceeding_protected_mao':'walk_away_or_nurture';status='above_mao';flags.push('counteroffer_above_protected_mao');} else if(rounds>=maxRounds){route='human_review_or_walk_away';nextAction='max_negotiation_rounds_reached';status='round_limit';flags.push('max_negotiation_rounds_reached');} else {route='human_review';nextAction='verify_counteroffer_amount';status='review';flags.push('counteroffer_amount_missing_or_invalid');}} else if(intent==='reject'){route='walk_away_or_nurture';nextAction=sellerMotivation>=60?'schedule_reengagement':'close_lost_or_nurture';status='rejected';} else if(intent==='callback'){route='call_follow_up';nextAction='schedule_seller_call';status='callback_requested';} else if(intent==='nurture'){route='nurture';nextAction='schedule_reengagement';status='nurture';} const confidence=intent==='other'?40:90; const idempotencyKey='wf461:'+input.leadId+':'+input.dealId+':'+input.responseId; return [{json:{...input,negotiationLoop:{intent,status,route,nextAction,counterAmount,currentOffer,latestOffer,protectedMAO:protectedMao,negotiationRound:rounds,maxNegotiationRounds:maxRounds,sellerMotivation,flags,requiresHumanReview:route==='human_review'||route==='human_review_or_walk_away',confidenceScore:confidence},idempotencyKey}}];"},
+      "id":"w461e","name":"Evaluate Seller Response & Negotiation Loop","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/negotiation-loop-result","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"responseId","value":"={{$json.responseId}}"},{"name":"intent","value":"={{$json.negotiationLoop.intent}}"},{"name":"status","value":"={{$json.negotiationLoop.status}}"},{"name":"route","value":"={{$json.negotiationLoop.route}}"},{"name":"nextAction","value":"={{$json.negotiationLoop.nextAction}}"},{"name":"counterAmount","value":"={{$json.negotiationLoop.counterAmount}}"},{"name":"protectedMAO","value":"={{$json.negotiationLoop.protectedMAO}}"},{"name":"negotiationRound","value":"={{$json.negotiationLoop.negotiationRound}}"},{"name":"flags","value":"={{JSON.stringify($json.negotiationLoop.flags)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w461f","name":"Persist Negotiation Loop Result","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/negotiation-loop-next-action","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"route","value":"={{$json.negotiationLoop.route}}"},{"name":"nextAction","value":"={{$json.negotiationLoop.nextAction}}"},{"name":"counterAmount","value":"={{$json.negotiationLoop.counterAmount}}"},{"name":"protectedMAO","value":"={{$json.negotiationLoop.protectedMAO}}"},{"name":"requiresHumanReview","value":"={{$json.negotiationLoop.requiresHumanReview}}"},{"name":"idempotencyKey","value":"={{'wf461:action:'+$json.leadId+':'+$json.dealId+':'+$json.responseId}}"}]},"options":{}},
+      "id":"w461g","name":"Route Negotiation Loop Next Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_response_negotiation_loop_contract_acceptance_walkaway"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"responseId","value":"={{$json.responseId}}"},{"name":"intent","value":"={{$json.negotiationLoop.intent}}"},{"name":"route","value":"={{$json.negotiationLoop.route}}"},{"name":"status","value":"={{$json.negotiationLoop.status}}"},{"name":"negotiationRound","value":"={{$json.negotiationLoop.negotiationRound}}"},{"name":"idempotencyKey","value":"={{'wf461:activity:'+$json.leadId+':'+$json.dealId+':'+$json.responseId}}"}]},"options":{}},
+      "id":"w461h","name":"Record Negotiation Loop Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w461i","name":"Respond Negotiation Loop Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, portfolioId, dealId, responseId and responseText are required'} }}","options":{}},
+      "id":"w461j","name":"Respond Invalid Seller Negotiation Response","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Seller Response Loop Webhook":{"main":[[{"node":"Normalize Seller Negotiation Response","type":"main","index":0}]]},
+    "Normalize Seller Negotiation Response":{"main":[[{"node":"Validate Seller Negotiation Response","type":"main","index":0}]]},
+    "Validate Seller Negotiation Response":{"main":[[{"node":"Fetch Seller Negotiation Loop Context","type":"main","index":0}],[{"node":"Respond Invalid Seller Negotiation Response","type":"main","index":0}]]},
+    "Fetch Seller Negotiation Loop Context":{"main":[[{"node":"Evaluate Seller Response & Negotiation Loop","type":"main","index":0}]]},
+    "Evaluate Seller Response & Negotiation Loop":{"main":[[{"node":"Persist Negotiation Loop Result","type":"main","index":0}]]},
+    "Persist Negotiation Loop Result":{"main":[[{"node":"Route Negotiation Loop Next Action","type":"main","index":0}]]},
+    "Route Negotiation Loop Next Action":{"main":[[{"node":"Record Negotiation Loop Activity","type":"main","index":0}]]},
+    "Record Negotiation Loop Activity":{"main":[[{"node":"Respond Negotiation Loop Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-461"},{"name":"seller-response"},{"name":"negotiation-loop"},{"name":"contract-acceptance"},{"name":"walk-away"},{"name":"protected-mao"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-461","contractStatus":"scaffolded","idempotency":"wf461:{leadId}:{dealId}:{responseId}","notes":"Closes the seller-response negotiation loop by classifying acceptance, counteroffer, rejection, callback, nurture and DNC signals; enforcing protected MAO and maximum negotiation rounds; and routing toward contract readiness, another negotiation cycle, walk-away/re-engagement or human review. Production use requires verified seller-response classification, canonical MAO, negotiation history, contract-readiness schema and InsulaCRM API contracts."}
+}

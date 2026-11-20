@@ -1,0 +1,53 @@
+{
+  "name": "WF-414 — Seller Offer Strategy Automation Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"seller-offer-strategy-automation","responseMode":"lastNode","options":{}},
+      "id":"w414a","name":"Seller Offer Strategy Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w414b","name":"Normalize Seller Offer Strategy Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"}]}},
+      "id":"w414c","name":"Validate Offer Strategy Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-offer-strategy-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"}]},"options":{}},
+      "id":"w414d","name":"Fetch Seller Offer Strategy Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Seller Offer Strategy Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const p=ctx.property??{}; const seller=ctx.seller??{}; const risk=ctx.riskValidation??{}; const underwriting=ctx.underwriting??{}; const num=v=>Number.isFinite(Number(v))?Number(v):null; const mao=num(underwriting.recommendedMAO??d.protectedMAO??d.mao); const currentOffer=num(d.currentOffer??d.offerAmount); const arv=num(underwriting.arv??d.arv??p.arv); const repairs=num(underwriting.repairs??d.repairs??p.repairs); const motivation=num(seller.motivationScore??ctx.motivationScore); const urgency=String(seller.urgency??ctx.urgency??'unknown').toLowerCase(); const responseHistory=Array.isArray(ctx.responseHistory)?ctx.responseHistory:[]; const counterCount=responseHistory.filter(x=>String(x.intent??'').toLowerCase()==='counteroffer').length; const riskLevel=String(risk.riskLevel??'unknown').toLowerCase(); const gap=currentOffer!==null&&mao!==null?mao-currentOffer:null; let strategy='human_review'; let posture='balanced'; let recommendedOffer=null; let ceiling=mao; let rationale=[]; if(mao!==null){if(currentOffer===null){recommendedOffer=motivation!==null&&motivation>=70?mao*.92:mao*.88; posture=motivation!==null&&motivation>=70?'firm_value':'anchored'; strategy='initial_offer'; rationale.push('No current offer; create controlled opening offer below protected MAO.');}else if(currentOffer<=mao){recommendedOffer=currentOffer; strategy='hold_or_contract'; posture='firm_value'; rationale.push('Current offer is within protected MAO.');}else{if(motivation!==null&&motivation>=70){recommendedOffer=mao*.98;posture='firm';strategy='reprice_to_mao';rationale.push('High motivation supports a firm value-based ceiling.');}else{recommendedOffer=mao*.90;posture='anchored';strategy='reprice_and_negotiate';rationale.push('Current ask exceeds protected MAO; maintain negotiation room.');}} if(urgency==='high')rationale.push('High seller urgency may support faster decision cycles.'); if(counterCount>=2){posture='firm';rationale.push('Multiple counteroffers detected; avoid uncontrolled escalation.');} if(riskLevel==='high'){strategy='human_review';rationale.push('High deal risk overrides automated escalation.');} if(repairs!==null&&arv!==null&&repairs/arv>=.25)rationale.push('High repair burden requires preserving downside protection.');} const lowerBound=recommendedOffer!==null?Math.max(0,recommendedOffer-(mao!==null?mao*.08:0)):null; const decision=strategy==='human_review'?'human_review':recommendedOffer!==null?'offer_ready':'insufficient_data'; const confidence=Math.round(Math.max(0,Math.min(100,(mao!==null?35:0)+(motivation!==null?20:0)+(currentOffer!==null?15:0)+(riskLevel!=='unknown'?15:0)+(responseHistory.length>0?15:0)))); const idempotencyKey='wf414:'+input.leadId+':'+input.propertyId+':'+input.dealId; return [{json:{...input,offerStrategy:{decision,strategy,posture,recommendedOffer,negotiationLowerBound:lowerBound,protectedMAO:mao,ceiling,offerGap:gap,confidenceScore:confidence,rationale,controls:{maxAutomatedOffer:mao,requiresHumanReview:riskLevel==='high',maxCounterofferCycles:4}},idempotencyKey}}];"},
+      "id":"w414e","name":"Build Seller Offer Strategy","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-offer-strategy","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"offerStrategy","value":"={{JSON.stringify($json.offerStrategy)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w414f","name":"Persist Seller Offer Strategy","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_offer_strategy"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"decision","value":"={{$json.offerStrategy.decision}}"},{"name":"strategy","value":"={{$json.offerStrategy.strategy}}"},{"name":"confidenceScore","value":"={{$json.offerStrategy.confidenceScore}}"},{"name":"idempotencyKey","value":"={{'wf414:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId}}"}]},"options":{}},
+      "id":"w414g","name":"Record Seller Offer Strategy Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w414h","name":"Respond Seller Offer Strategy","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId and dealId are required'} }}","options":{}},
+      "id":"w414i","name":"Respond Invalid Offer Strategy Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Seller Offer Strategy Webhook":{"main":[[{"node":"Normalize Seller Offer Strategy Request","type":"main","index":0}]]},
+    "Normalize Seller Offer Strategy Request":{"main":[[{"node":"Validate Offer Strategy Identity","type":"main","index":0}]]},
+    "Validate Offer Strategy Identity":{"main":[[{"node":"Fetch Seller Offer Strategy Context","type":"main","index":0}],[{"node":"Respond Invalid Offer Strategy Request","type":"main","index":0}]]},
+    "Fetch Seller Offer Strategy Context":{"main":[[{"node":"Build Seller Offer Strategy","type":"main","index":0}]]},
+    "Build Seller Offer Strategy":{"main":[[{"node":"Persist Seller Offer Strategy","type":"main","index":0}]]},
+    "Persist Seller Offer Strategy":{"main":[[{"node":"Record Seller Offer Strategy Activity","type":"main","index":0}]]},
+    "Record Seller Offer Strategy Activity":{"main":[[{"node":"Respond Seller Offer Strategy","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-414"},{"name":"seller-offer"},{"name":"negotiation"},{"name":"offer-strategy"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-414","contractStatus":"scaffolded","idempotency":"wf414:{leadId}:{propertyId}:{dealId}","notes":"Offer strategy is deterministic decision scaffolding pending verified InsulaCRM fields, production communication contract, seller-response NLP, and final approval controls. Protected MAO is never intended to be exposed in seller-facing communications."}
+}

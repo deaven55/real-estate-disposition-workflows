@@ -1,0 +1,58 @@
+{
+  "name": "WF-441 — Contract Package Generation & Seller Signature Initiation Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"contract-package-generation-seller-signature-initiation","responseMode":"lastNode","options":{}},
+      "id":"w441a","name":"Contract Package Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); return [{json:{...b,leadId,dealId,contractId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w441b","name":"Normalize Contract Package Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"}]}},
+      "id":"w441c","name":"Validate Contract Package Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/contract-package-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"}]},"options":{}},
+      "id":"w441d","name":"Fetch Contract Package Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Contract Package Request').first().json; const ctx=$json.context??$json; const readiness=ctx.contractReadiness??{}; const flags=[]; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); if(['closed','cancelled','disputed','dnc','suppressed'].includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); const sellerIdentity=readiness.sellerIdentityVerified===true; const propertyIdentity=readiness.propertyIdentityVerified===true; const sellerAccepted=readiness.sellerAccepted===true; const economicsReady=readiness.economicsReady===true; const requiredDocs=Array.isArray(readiness.requiredDocuments)?readiness.requiredDocuments:[]; const missingDocs=requiredDocs.filter(d=>d.required!==false&&!d.ready); const titleReady=readiness.titleCompanyConfirmed===true; const allPrereqs=sellerIdentity&&propertyIdentity&&sellerAccepted&&economicsReady&&missingDocs.length===0&&titleReady; if(!sellerIdentity)flags.push('seller_identity_not_verified'); if(!propertyIdentity)flags.push('property_identity_not_verified'); if(!sellerAccepted)flags.push('seller_acceptance_missing'); if(!economicsReady)flags.push('economics_not_ready'); if(missingDocs.length)flags.push('required_documents_missing'); if(!titleReady)flags.push('title_company_confirmation_missing'); const packageFields={seller:{sellerId:ctx.sellerId??null,name:ctx.sellerName??null},property:{propertyId:ctx.propertyId??null,address:ctx.propertyAddress??null},deal:{dealId:input.dealId,purchasePrice:ctx.purchasePrice??null,closingDate:ctx.closingDate??null},contract:{contractId:input.contractId,contractType:ctx.contractType??'purchase_agreement',version:ctx.contractVersion??1,requiredSigners:ctx.requiredSigners??['seller']}}; let decision=allPrereqs&&!flags.length?'package_ready':'blocked'; let nextAction=decision==='package_ready'?'generate_contract_document_and_initiate_seller_signature':'collect_missing_contract_prerequisites'; const idempotencyKey='wf441:'+input.leadId+':'+input.dealId+':'+input.contractId; return [{json:{...input,contractPackageDecision:{status:decision==='package_ready'?'ready':'blocked',decision,nextAction,packageFields,missingRequirements:missingDocs.map(d=>d.name??d.id??'required_document'),flags,requiresHumanReview:decision!=='package_ready',confidenceScore:decision==='package_ready'?96:20},idempotencyKey}}];"},
+      "id":"w441e","name":"Validate Contract Package & Signature Readiness","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/contract-package-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"contractPackageDecision","value":"={{JSON.stringify($json.contractPackageDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w441f","name":"Persist Contract Package Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/documents/contract-package-generate-signature","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"packageFields","value":"={{JSON.stringify($json.contractPackageDecision.packageFields)}}"},{"name":"nextAction","value":"={{$json.contractPackageDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf441:document:'+$json.leadId+':'+$json.dealId+':'+$json.contractId}}"}]},"options":{}},
+      "id":"w441g","name":"Generate Contract Package & Initiate Signature","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"contract_package_generation_seller_signature_initiation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"decision","value":"={{$json.contractPackageDecision.decision}}"},{"name":"nextAction","value":"={{$json.contractPackageDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf441:activity:'+$json.leadId+':'+$json.dealId+':'+$json.contractId}}"}]},"options":{}},
+      "id":"w441h","name":"Record Contract Package Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w441i","name":"Respond Contract Package Decision","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId and contractId are required'} }}","options":{}},
+      "id":"w441j","name":"Respond Invalid Contract Package Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Contract Package Webhook":{"main":[[{"node":"Normalize Contract Package Request","type":"main","index":0}]]},
+    "Normalize Contract Package Request":{"main":[[{"node":"Validate Contract Package Request","type":"main","index":0}]]},
+    "Validate Contract Package Request":{"main":[[{"node":"Fetch Contract Package Context","type":"main","index":0}],[{"node":"Respond Invalid Contract Package Request","type":"main","index":0}]]},
+    "Fetch Contract Package Context":{"main":[[{"node":"Validate Contract Package & Signature Readiness","type":"main","index":0}]]},
+    "Validate Contract Package & Signature Readiness":{"main":[[{"node":"Persist Contract Package Decision","type":"main","index":0}]]},
+    "Persist Contract Package Decision":{"main":[[{"node":"Generate Contract Package & Initiate Signature","type":"main","index":0}]]},
+    "Generate Contract Package & Initiate Signature":{"main":[[{"node":"Record Contract Package Activity","type":"main","index":0}]]},
+    "Record Contract Package Activity":{"main":[[{"node":"Respond Contract Package Decision","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-441"},{"name":"contract-package"},{"name":"seller-signature"},{"name":"document-automation"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-441","contractStatus":"scaffolded","idempotency":"wf441:{leadId}:{dealId}:{contractId}","notes":"Contract package generation and seller signature initiation is scaffolding pending verified InsulaCRM contract/document schema, legal document templates, e-signature provider, title-company integration, and production API contracts. Generation does not itself constitute legal execution."}
+}

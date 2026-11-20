@@ -1,0 +1,58 @@
+{
+  "name": "WF-436 — Seller Appointment Outcome → Qualification, Offer & Deal Pipeline Advancement Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"seller-appointment-outcome-pipeline-advancement","responseMode":"lastNode","options":{}},
+      "id":"w436a","name":"Seller Appointment Outcome Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const appointmentId=String(b.appointmentId??'').trim(); const outcome=String(b.outcome??b.eventType??'').trim().toLowerCase(); return [{json:{...b,leadId,appointmentId,outcome,receivedAt:new Date().toISOString()}}];"},
+      "id":"w436b","name":"Normalize Appointment Outcome","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.appointmentId}}","operation":"notEmpty"},{"value1":"={{$json.outcome}}","operation":"notEmpty"}]}},
+      "id":"w436c","name":"Validate Appointment Outcome","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/appointment-outcome-pipeline-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"appointmentId","value":"={{$json.appointmentId}}"},{"name":"outcome","value":"={{$json.outcome}}"}]},"options":{}},
+      "id":"w436d","name":"Fetch Appointment Outcome Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Appointment Outcome').first().json; const ctx=$json.context??$json; const blocked=['dnc','suppressed','closed','cancelled']; const leadStatus=String(ctx.leadStatus??ctx.status??'').toLowerCase(); const flags=[]; if(blocked.includes(leadStatus)||ctx.dnc===true||ctx.suppressed===true)flags.push('contact_blocked'); const positive=['interested','motivated','ready_to_sell','offer_requested','appointment_completed']; const qualified=['qualified','high_motivation','property_ready','deal_candidate']; const negative=['not_interested','no_longer_selling','wrong_number','unqualified']; const nurture=['needs_time','follow_up_later','not_ready']; const outcome=input.outcome; let pipelineState='manual_review',nextAction='review_appointment_outcome',advancement='human_review'; if(flags.length){pipelineState='blocked';nextAction='stop_pipeline_advancement';advancement='blocked';} else if(negative.includes(outcome)){pipelineState='closed_lost';nextAction='record_closed_lost';advancement='closed_lost';} else if(nurture.includes(outcome)){pipelineState='nurture';nextAction='schedule_nurture_follow_up';advancement='nurture';} else if(qualified.includes(outcome)){pipelineState='qualified';nextAction='run_underwriting_and_offer_strategy';advancement='underwriting';} else if(positive.includes(outcome)){pipelineState='sales_follow_up';nextAction=ctx.offerReady===true?'prepare_offer':'continue_seller_qualification';advancement=ctx.offerReady===true?'offer_ready':'qualification';} const score=Number(ctx.motivationScore??ctx.priorityScore??0); const propertyComplete=ctx.propertyDataComplete===true; const financialComplete=ctx.financialDataComplete===true; const qualificationComplete=qualified.includes(outcome)||score>=70; const readyForUnderwriting=qualificationComplete&&propertyComplete&&financialComplete&&!flags.length; const readyForOffer=readyForUnderwriting&&ctx.underwritingReady===true; if(readyForOffer){pipelineState='offer_ready';nextAction='execute_seller_offer_strategy';advancement='offer';} else if(readyForUnderwriting&&pipelineState!=='blocked'&&pipelineState!=='closed_lost'&&pipelineState!=='nurture'){pipelineState='underwriting';nextAction='complete_underwriting_before_offer';advancement='underwriting';} const idempotencyKey='wf436:'+input.leadId+':'+input.appointmentId+':'+outcome; return [{json:{...input,appointmentPipelineDecision:{status:flags.length?'blocked':'evaluated',pipelineState,nextAction,advancement,qualification:{motivationScore:score,qualificationComplete,propertyDataComplete:propertyComplete,financialDataComplete:financialComplete},readiness:{readyForUnderwriting,readyForOffer},flags,requiresHumanReview:pipelineState==='manual_review',confidenceScore:flags.length?10:(pipelineState==='manual_review'?55:93)},idempotencyKey}}];"},
+      "id":"w436e","name":"Evaluate Qualification & Pipeline Advancement","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/appointment-outcome-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"appointmentId","value":"={{$json.appointmentId}}"},{"name":"appointmentPipelineDecision","value":"={{JSON.stringify($json.appointmentPipelineDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w436f","name":"Persist Appointment Pipeline Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/pipeline-advancement","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"appointmentId","value":"={{$json.appointmentId}}"},{"name":"advancement","value":"={{$json.appointmentPipelineDecision.advancement}}"},{"name":"nextAction","value":"={{$json.appointmentPipelineDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf436:advancement:'+$json.leadId+':'+$json.appointmentId+':'+$json.outcome}}"}]},"options":{}},
+      "id":"w436g","name":"Persist Pipeline Advancement","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_appointment_outcome_pipeline_advancement"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"appointmentId","value":"={{$json.appointmentId}}"},{"name":"outcome","value":"={{$json.outcome}}"},{"name":"pipelineState","value":"={{$json.appointmentPipelineDecision.pipelineState}}"},{"name":"advancement","value":"={{$json.appointmentPipelineDecision.advancement}}"},{"name":"idempotencyKey","value":"={{'wf436:activity:'+$json.leadId+':'+$json.appointmentId+':'+$json.outcome}}"}]},"options":{}},
+      "id":"w436h","name":"Record Pipeline Advancement Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w436i","name":"Respond Pipeline Advancement","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, appointmentId and outcome are required'} }}","options":{}},
+      "id":"w436j","name":"Respond Invalid Appointment Outcome","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Seller Appointment Outcome Webhook":{"main":[[{"node":"Normalize Appointment Outcome","type":"main","index":0}]]},
+    "Normalize Appointment Outcome":{"main":[[{"node":"Validate Appointment Outcome","type":"main","index":0}]]},
+    "Validate Appointment Outcome":{"main":[[{"node":"Fetch Appointment Outcome Context","type":"main","index":0}],[{"node":"Respond Invalid Appointment Outcome","type":"main","index":0}]]},
+    "Fetch Appointment Outcome Context":{"main":[[{"node":"Evaluate Qualification & Pipeline Advancement","type":"main","index":0}]]},
+    "Evaluate Qualification & Pipeline Advancement":{"main":[[{"node":"Persist Appointment Pipeline Decision","type":"main","index":0}]]},
+    "Persist Appointment Pipeline Decision":{"main":[[{"node":"Persist Pipeline Advancement","type":"main","index":0}]]},
+    "Persist Pipeline Advancement":{"main":[[{"node":"Record Pipeline Advancement Activity","type":"main","index":0}]]},
+    "Record Pipeline Advancement Activity":{"main":[[{"node":"Respond Pipeline Advancement","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-436"},{"name":"seller-appointment"},{"name":"qualification"},{"name":"offer-pipeline"},{"name":"lead-management"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-436","contractStatus":"scaffolded","idempotency":"wf436:{leadId}:{appointmentId}:{outcome}","notes":"Appointment outcome pipeline advancement is scaffolding pending verified InsulaCRM qualification fields, property/financial completeness schema, underwriting readiness contract, communication provider, and production API contracts."}
+}

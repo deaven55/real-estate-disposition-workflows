@@ -1,0 +1,53 @@
+{
+  "name": "WF-413 — Deal Risk & Profitability Validation Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"deal-risk-profitability-validation","responseMode":"lastNode","options":{}},
+      "id":"w413a","name":"Deal Risk Validation Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w413b","name":"Normalize Risk Validation Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"}]}},
+      "id":"w413c","name":"Validate Risk Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/risk-validation-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"}]},"options":{}},
+      "id":"w413d","name":"Fetch Canonical Risk Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Risk Validation Request').first().json; const ctx=$json.context??$json; const p=ctx.property??{}; const d=ctx.deal??{}; const seller=ctx.seller??{}; const num=v=>Number.isFinite(Number(v))?Number(v):null; const arv=num(d.arv??p.arv); const purchasePrice=num(d.purchasePrice??d.offerAmount); const repairs=num(d.repairs??p.repairs); const closingCosts=num(d.closingCosts??0)??0; const holdingCosts=num(d.holdingCosts??0)??0; const wholesaleCosts=num(d.wholesaleCosts??0)??0; const contingencyPct=num(d.repairContingencyPercent??10)??10; const contingency=repairs!==null?repairs*contingencyPct/100:null; const totalBasis=purchasePrice!==null?(purchasePrice+repairs+(contingency??0)+closingCosts+holdingCosts+wholesaleCosts):null; const grossMargin=arv!==null&&totalBasis!==null?arv-totalBasis:null; const marginPct=arv&&grossMargin!==null?grossMargin/arv:null; const protectedMAO=num(d.protectedMAO??d.mao); const assignmentFee=num(d.assignmentFee); const buyerPrice=num(d.buyerPrice??d.dispositionPrice); const buyerSpread=buyerPrice!==null&&purchasePrice!==null?buyerPrice-purchasePrice:null; const sellerMotivation=num(seller.motivationScore??ctx.motivationScore); const titleRisk=String(ctx.titleRisk??d.titleRisk??'unknown').toLowerCase(); const occupancy=String(p.occupancy??seller.occupancy??'unknown').toLowerCase(); const flags=[]; const blockers=[]; if(arv===null)blockers.push('missing_arv'); if(repairs===null)blockers.push('missing_repairs'); if(purchasePrice===null)blockers.push('missing_purchase_price'); if(protectedMAO!==null&&purchasePrice!==null&&purchasePrice>protectedMAO)blockers.push('purchase_price_above_protected_mao'); if(grossMargin!==null&&grossMargin<0)blockers.push('negative_gross_margin'); if(marginPct!==null&&marginPct<0.10)flags.push('thin_margin'); if(repairs!==null&&arv!==null&&repairs/arv>=0.25)flags.push('high_repair_risk'); if(titleRisk==='high'||titleRisk==='clouded')flags.push('title_risk'); if(occupancy==='unknown')flags.push('occupancy_unknown'); if(sellerMotivation!==null&&sellerMotivation<40)flags.push('low_seller_motivation'); if(buyerSpread!==null&&buyerSpread<0)flags.push('negative_buyer_spread'); const financialReady=blockers.length===0&&grossMargin!==null; const riskScore=Math.max(0,Math.min(100,blockers.length*25+flags.length*10+(marginPct!==null&&marginPct<.15?10:0)+(titleRisk==='high'||titleRisk==='clouded'?15:0))); let riskLevel='low'; if(riskScore>=60)riskLevel='high'; else if(riskScore>=30)riskLevel='medium'; let recommendation='human_review'; if(blockers.length>0)recommendation='blocked'; else if(riskLevel==='high')recommendation='reprice_or_exit'; else if(riskLevel==='medium')recommendation='proceed_with_caution'; else if(financialReady)recommendation='approved_for_next_stage'; const confidence=Math.round(Math.max(0,Math.min(100,(arv!==null?20:0)+(repairs!==null?20:0)+(purchasePrice!==null?20:0)+(grossMargin!==null?20:0)+(protectedMAO!==null?10:0)+(titleRisk!=='unknown'?10:0)))); const idempotencyKey='wf413:'+input.leadId+':'+input.propertyId+':'+input.dealId; return [{json:{...input,riskValidation:{status:blockers.length?'blocked':financialReady?'validated':'partial',riskLevel,riskScore,recommendation,financials:{arv,purchasePrice,repairs,repairContingency:contingency,closingCosts,holdingCosts,wholesaleCosts,totalBasis,grossMargin,marginPercent:marginPct,protectedMAO,assignmentFee,buyerPrice,buyerSpread},flags,blockers,confidenceScore:confidence,assumptions:{repairContingencyPercent:contingencyPct}},idempotencyKey}}];"},
+      "id":"w413e","name":"Calculate Deal Risk & Profitability Validation","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/risk-validation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"riskValidation","value":"={{JSON.stringify($json.riskValidation)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w413f","name":"Persist Risk Validation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"deal_risk_profitability_validation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"riskLevel","value":"={{$json.riskValidation.riskLevel}}"},{"name":"recommendation","value":"={{$json.riskValidation.recommendation}}"},{"name":"riskScore","value":"={{$json.riskValidation.riskScore}}"},{"name":"idempotencyKey","value":"={{'wf413:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId}}"}]},"options":{}},
+      "id":"w413g","name":"Record Risk Validation Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w413h","name":"Respond Risk Validation Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId and dealId are required'} }}","options":{}},
+      "id":"w413i","name":"Respond Invalid Risk Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Deal Risk Validation Webhook":{"main":[[{"node":"Normalize Risk Validation Request","type":"main","index":0}]]},
+    "Normalize Risk Validation Request":{"main":[[{"node":"Validate Risk Identity","type":"main","index":0}]]},
+    "Validate Risk Identity":{"main":[[{"node":"Fetch Canonical Risk Context","type":"main","index":0}],[{"node":"Respond Invalid Risk Request","type":"main","index":0}]]},
+    "Fetch Canonical Risk Context":{"main":[[{"node":"Calculate Deal Risk & Profitability Validation","type":"main","index":0}]]},
+    "Calculate Deal Risk & Profitability Validation":{"main":[[{"node":"Persist Risk Validation","type":"main","index":0}]]},
+    "Persist Risk Validation":{"main":[[{"node":"Record Risk Validation Activity","type":"main","index":0}]]},
+    "Record Risk Validation Activity":{"main":[[{"node":"Respond Risk Validation Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-413"},{"name":"deal-risk"},{"name":"profitability"},{"name":"underwriting"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-413","contractStatus":"scaffolded","idempotency":"wf413:{leadId}:{propertyId}:{dealId}","notes":"Risk and profitability validation is deterministic scaffolding pending verified InsulaCRM fields, title/occupancy data providers, financing assumptions, and production API contracts."}
+}

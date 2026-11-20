@@ -1,19 +1,613 @@
 {
   "name": "Canonical Platform Integration Hardening",
   "nodes": [
-    {"parameters":{"httpMethod":"POST","path":"canonical-platform-integration-hardening","responseMode":"lastNode"},"id":"cpi-a","name":"Canonical Platform Integration Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]},
-    {"parameters":{"jsCode":"const b=$json.body??$json; const eventType=String(b.eventType??b.type??'').trim().toLowerCase(); const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const idempotencyKey=String(b.idempotencyKey??('platform:'+eventType+':'+leadId+':'+dealId+':'+(b.eventId??''))).trim(); const map={lead_acquisition:'lead-seller',seller_engagement:'lead-seller',underwriting:'underwriting-risk',risk:'underwriting-risk',negotiation:'negotiation-offer',offer:'negotiation-offer',contract:'contract-esignature',esignature:'contract-esignature',buyer_disposition:'buyer-disposition',title:'title-closing',closing:'title-closing',financials:'financials-analytics',analytics:'financials-analytics'}; const engine=String(b.engine??map[eventType]??'').trim(); return [{json:{...b,eventType,leadId,dealId,idempotencyKey,engine,receivedAt:new Date().toISOString()}}];"},"id":"cpi-b","name":"Normalize Platform Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]},
-    {"parameters":{"conditions":{"string":[{"value1":"={{$json.eventType}}","operation":"notEmpty"},{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.idempotencyKey}}","operation":"notEmpty"},{"value1":"={{$json.engine}}","operation":"notEmpty"}]}},"id":"cpi-c","name":"Validate Platform Event","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]},
-    {"parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/platform/idempotency/check","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"},{"name":"eventType","value":"={{$json.eventType}}"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"}]}},"id":"cpi-d","name":"Check Canonical Idempotency","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]},
-    {"parameters":{"jsCode":"const input=$('Normalize Platform Event').first().json; const r=$json.result??$json; const alreadyProcessed=r.alreadyProcessed===true||r.processed===true; const protectedState=['closed','cancelled','disputed'].includes(String(input.dealStatus??r.dealStatus??'').toLowerCase()); const allowed=['lead-seller','underwriting-risk','negotiation-offer','contract-esignature','buyer-disposition','title-closing','financials-analytics'].includes(input.engine); const action=alreadyProcessed?'replay_blocked':protectedState?'protected_state_blocked':allowed?'dispatch_engine':'invalid_engine'; return [{json:{...input,canonicalIntegration:{alreadyProcessed,protectedState,allowed,action,dispatchAllowed:action==='dispatch_engine',route:'/canonical-'+input.engine+'-engine'}}}];"},"id":"cpi-e","name":"Apply Integration Guardrails","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]},
-    {"parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/platform/idempotency/record","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"},{"name":"eventType","value":"={{$json.eventType}}"},{"name":"engine","value":"={{$json.engine}}"},{"name":"action","value":"={{$json.canonicalIntegration.action}}"}]}},"id":"cpi-f","name":"Record Canonical Integration Event","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]},
-    {"parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/platform/state-transition","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"eventType","value":"={{$json.eventType}}"},{"name":"engine","value":"={{$json.engine}}"},{"name":"dispatchAllowed","value":"={{$json.canonicalIntegration.dispatchAllowed}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]}},"id":"cpi-g","name":"Request Atomic State Transition","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]},
-    {"parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"canonical_platform_integration_guardrail"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"engine","value":"={{$json.engine}}"},{"name":"action","value":"={{$json.canonicalIntegration.action}}"},{"name":"idempotencyKey","value":"={{'platform:activity:'+$json.idempotencyKey}}"}]}},"id":"cpi-h","name":"Record Platform Guardrail Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]},
-    {"parameters":{"respondWith":"json","responseBody":"={{$json}}"},"id":"cpi-i","name":"Respond Platform Integration Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]},
-    {"parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'eventType, leadId, idempotencyKey and engine are required'} }}"},"id":"cpi-j","name":"Respond Invalid Platform Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]}
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "canonical-platform-integration-hardening",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "cpi-a",
+      "name": "Canonical Platform Integration Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const eventType=String(b.eventType??b.type??'').trim().toLowerCase(); const ids={leadId:String(b.leadId??b.entity?.leadId??'').trim(),sellerId:String(b.sellerId??b.entity?.sellerId??'').trim(),propertyId:String(b.propertyId??b.entity?.propertyId??'').trim(),dealId:String(b.dealId??b.entity?.dealId??'').trim(),buyerId:String(b.buyerId??b.entity?.buyerId??'').trim(),portfolioId:String(b.portfolioId??b.entity?.portfolioId??'').trim()}; const idempotencyKey=String(b.idempotencyKey??('platform:'+eventType+':'+ids.leadId+':'+ids.dealId+':'+(b.eventId??''))).trim(); const family=eventType.split('.')[0]||eventType; const map={lead:'lead-seller',seller:'lead-seller',outreach:'lead-seller',appointment:'lead-seller',property:'underwriting-risk',comp:'underwriting-risk',arv:'underwriting-risk',repair:'underwriting-risk',underwriting:'underwriting-risk',risk:'underwriting-risk',mao:'underwriting-risk',offer:'negotiation-offer',counteroffer:'negotiation-offer',negotiation:'negotiation-offer',contract:'contract-esignature',esignature:'contract-esignature',signature:'contract-esignature',execution:'contract-esignature',buyer:'buyer-disposition',assignment:'buyer-disposition',disposition:'buyer-disposition',pof:'buyer-disposition',title:'title-closing',lien:'title-closing',tax:'title-closing',closing:'title-closing',settlement:'title-closing',funds:'title-closing',profit:'financials-analytics',payout:'financials-analytics',finance:'financials-analytics',analytics:'financials-analytics',kpi:'financials-analytics',forecast:'financials-analytics'}; const engine=String(b.engine??map[family]??'').trim(); const correlationId=String(b.metadata?.correlationId??b.correlationId??('corr:'+idempotencyKey)).trim(); return [{json:{...b,...ids,eventType,idempotencyKey,engine,correlationId,receivedAt:new Date().toISOString(),canonicalEnvelope:{schemaVersion:'1.0',eventId:String(b.eventId??''),eventType,occurredAt:String(b.occurredAt??new Date().toISOString()),source:String(b.source??'n8n'),idempotencyKey,entity:ids,payload:b.payload??{},metadata:{...(b.metadata??{}),correlationId}}}}];"
+      },
+      "id": "cpi-b",
+      "name": "Normalize Canonical Event Envelope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.eventType}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.idempotencyKey}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.engine}}",
+              "operation": "notEmpty"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cpi-c",
+      "name": "Validate Canonical Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/platform/idempotency/check",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "correlationId",
+              "value": "={{$json.correlationId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cpi-d",
+      "name": "Check Idempotency",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Canonical Event Envelope').first().json; const r=$json.result??$json; const alreadyProcessed=r.alreadyProcessed===true||r.processed===true; const protectedState=['closed','cancelled','disputed'].includes(String(input.dealStatus??r.dealStatus??'').toLowerCase()); const allowed=['lead-seller','underwriting-risk','negotiation-offer','contract-esignature','buyer-disposition','title-closing','financials-analytics'].includes(input.engine); const action=alreadyProcessed?'replay_blocked':protectedState?'protected_state_blocked':allowed?'dispatch_engine':'invalid_engine'; return [{json:{...input,idempotencyCheck:r,canonicalIntegration:{alreadyProcessed,protectedState,allowed,action,dispatchAllowed:action==='dispatch_engine',route:'/canonical-'+input.engine+'-engine'}}}];"
+      },
+      "id": "cpi-e",
+      "name": "Apply Replay & State Guardrails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/platform/idempotency/claim",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "engine",
+              "value": "={{$json.engine}}"
+            },
+            {
+              "name": "correlationId",
+              "value": "={{$json.correlationId}}"
+            },
+            {
+              "name": "dispatchAllowed",
+              "value": "={{$json.canonicalIntegration.dispatchAllowed}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cpi-f",
+      "name": "Claim Idempotency Before Dispatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Apply Replay & State Guardrails').first().json; const r=$json.result??$json; const claimed=r.claimed!==false&&r.alreadyProcessed!==true; const dispatchAllowed=input.canonicalIntegration.dispatchAllowed===true&&claimed; return [{json:{...input,idempotencyClaim:r,canonicalIntegration:{...input.canonicalIntegration,claimed,dispatchAllowed,action:dispatchAllowed?'dispatch_engine':input.canonicalIntegration.action==='dispatch_engine'?'claim_failed':input.canonicalIntegration.action}}}];"
+      },
+      "id": "cpi-g",
+      "name": "Evaluate Idempotency Claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/platform/state-transition",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "engine",
+              "value": "={{$json.engine}}"
+            },
+            {
+              "name": "dispatchAllowed",
+              "value": "={{$json.canonicalIntegration.dispatchAllowed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            },
+            {
+              "name": "correlationId",
+              "value": "={{$json.correlationId}}"
+            },
+            {
+              "name": "event",
+              "value": "={{JSON.stringify($json.canonicalEnvelope)}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cpi-h",
+      "name": "Request Atomic State Transition",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Evaluate Idempotency Claim').first().json; const r=$json.result??$json; const transitionOk=r.success===true||r.status==='applied'||r.transitionApplied===true; return [{json:{...input,stateTransition:r,canonicalIntegration:{...input.canonicalIntegration,stateTransitionApplied:transitionOk,dispatchAllowed:input.canonicalIntegration.dispatchAllowed===true&&transitionOk}}}];"
+      },
+      "id": "cpi-i",
+      "name": "Preserve Context After State Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/platform/engine-dispatch",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "canonicalEngine",
+              "value": "={{$json.engine}}"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            },
+            {
+              "name": "correlationId",
+              "value": "={{$json.correlationId}}"
+            },
+            {
+              "name": "event",
+              "value": "={{JSON.stringify($json.canonicalEnvelope)}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cpi-j",
+      "name": "Dispatch Canonical Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1980,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Preserve Context After State Transition').first().json; const r=$json.result??$json; return [{json:{...input,engineDispatch:r,canonicalIntegration:{...input.canonicalIntegration,engineDispatchAccepted:r.accepted!==false&&r.success!==false}}}];"
+      },
+      "id": "cpi-k",
+      "name": "Preserve Context After Engine Dispatch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "canonical_platform_integration"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "engine",
+              "value": "={{$json.engine}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.canonicalIntegration.action}}"
+            },
+            {
+              "name": "stateTransitionApplied",
+              "value": "={{$json.canonicalIntegration.stateTransitionApplied}}"
+            },
+            {
+              "name": "engineDispatchAccepted",
+              "value": "={{$json.canonicalIntegration.engineDispatchAccepted}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'platform:activity:'+$json.idempotencyKey}}"
+            },
+            {
+              "name": "correlationId",
+              "value": "={{$json.correlationId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cpi-l",
+      "name": "Record Integration Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2420,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Preserve Context After Engine Dispatch').first().json; return [{json:{...input,activityWrite:$json.result??$json}}];"
+      },
+      "id": "cpi-m",
+      "name": "Preserve Final Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "cpi-n",
+      "name": "Respond Integration Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'eventType, leadId, idempotencyKey and engine are required'} }}",
+        "options": {}
+      },
+      "id": "cpi-o",
+      "name": "Respond Invalid Canonical Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
+    }
   ],
-  "connections":{"Canonical Platform Integration Webhook":{"main":[[{"node":"Normalize Platform Event","type":"main","index":0}]]},"Normalize Platform Event":{"main":[[{"node":"Validate Platform Event","type":"main","index":0}]]},"Validate Platform Event":{"main":[[{"node":"Check Canonical Idempotency","type":"main","index":0}],[{"node":"Respond Invalid Platform Event","type":"main","index":0}]]},"Check Canonical Idempotency":{"main":[[{"node":"Apply Integration Guardrails","type":"main","index":0}]]},"Apply Integration Guardrails":{"main":[[{"node":"Record Canonical Integration Event","type":"main","index":0}]]},"Record Canonical Integration Event":{"main":[[{"node":"Request Atomic State Transition","type":"main","index":0}]]},"Request Atomic State Transition":{"main":[[{"node":"Record Platform Guardrail Activity","type":"main","index":0}]]},"Record Platform Guardrail Activity":{"main":[[{"node":"Respond Platform Integration Result","type":"main","index":0}]]}},
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"canonical-engine"},{"name":"platform"},{"name":"integration"},{"name":"idempotency"},{"name":"state-transitions"},{"name":"guardrails"},{"name":"InsulaCRM"}],
-  "meta":{"engine":"platform_integration_hardening","contractStatus":"scaffolded","purpose":"Central integration boundary for replay protection, engine routing, protected lifecycle states and atomic state-transition requests.","productionRequirements":["verified InsulaCRM API base URL","canonical event schema","real idempotency store","real atomic state-transition endpoint","verified canonical engine endpoints","end-to-end integration tests"]}}
+  "connections": {
+    "Canonical Platform Integration Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Canonical Event Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Canonical Event Envelope": {
+      "main": [
+        [
+          {
+            "node": "Validate Canonical Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Canonical Event": {
+      "main": [
+        [
+          {
+            "node": "Check Idempotency",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Canonical Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Idempotency": {
+      "main": [
+        [
+          {
+            "node": "Apply Replay & State Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Replay & State Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Claim Idempotency Before Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Idempotency Before Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Idempotency Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Idempotency Claim": {
+      "main": [
+        [
+          {
+            "node": "Request Atomic State Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Atomic State Transition": {
+      "main": [
+        [
+          {
+            "node": "Preserve Context After State Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Context After State Transition": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Canonical Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Canonical Engine": {
+      "main": [
+        [
+          {
+            "node": "Preserve Context After Engine Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Context After Engine Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Record Integration Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Integration Activity": {
+      "main": [
+        [
+          {
+            "node": "Preserve Final Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Final Context": {
+      "main": [
+        [
+          {
+            "node": "Respond Integration Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "canonical-engine"
+    },
+    {
+      "name": "platform"
+    },
+    {
+      "name": "integration"
+    },
+    {
+      "name": "idempotency"
+    },
+    {
+      "name": "atomic-state"
+    },
+    {
+      "name": "context-preservation"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "engine": "platform_integration_hardening",
+    "contractStatus": "scaffolded",
+    "purpose": "Central integration boundary with durable idempotency claim, authoritative state transition, context preservation and canonical engine dispatch.",
+    "productionRequirements": [
+      "verified InsulaCRM API base URL",
+      "real atomic idempotency check-and-claim semantics",
+      "real atomic state-transition endpoint",
+      "verified canonical engine endpoints",
+      "provider credentials",
+      "end-to-end lifecycle tests"
+    ]
+  }
 }

@@ -1,0 +1,57 @@
+{
+  "name": "Canonical Lead + Seller Engagement Engine — Intake, Qualification, Routing & Outreach",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"canonical-lead-seller-engagement-engine","responseMode":"lastNode","options":{}},
+      "id":"cse-a","name":"Canonical Lead Seller Event Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const eventType=String(b.eventType??b.type??'').trim().toLowerCase(); const leadId=String(b.leadId??'').trim(); const sellerId=String(b.sellerId??b.ownerId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const campaignId=String(b.campaignId??'').trim(); const source=String(b.source??b.leadSource??'').trim(); const idempotencyKey=String(b.idempotencyKey??('lead-seller:'+eventType+':'+leadId+':'+(b.eventId??campaignId))).trim(); return [{json:{...b,eventType,leadId,sellerId,propertyId,portfolioId,campaignId,source,idempotencyKey,receivedAt:new Date().toISOString()}}];"},
+      "id":"cse-b","name":"Normalize Lead Seller Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.eventType}}","operation":"notEmpty"},{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.idempotencyKey}}","operation":"notEmpty"}]}},
+      "id":"cse-c","name":"Validate Canonical Event","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/canonical-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"sellerId","value":"={{$json.sellerId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"campaignId","value":"={{$json.campaignId}}"}]},"options":{}},
+      "id":"cse-d","name":"Fetch Canonical Lead Seller Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Lead Seller Event').first().json; const ctx=$json.context??$json; const text=String(input.responseText??input.message??'').toLowerCase(); const consent=ctx.consentStatus??input.consentStatus??'unknown'; const dnc=ctx.dnc===true||ctx.suppressed===true||/do not contact|unsubscribe|stop contacting/.test(text); const closed=['closed','cancelled','disputed'].includes(String(ctx.leadStatus??ctx.dealStatus??'').toLowerCase()); const duplicate=ctx.eventAlreadyProcessed===true; const priority=Math.max(0,Math.min(100,Number(ctx.priorityScore??ctx.aiPriorityScore??0))); const motivation=Math.max(0,Math.min(100,Number(ctx.motivationScore??0))); const distress=Math.max(0,Math.min(100,Number(ctx.distressScore??0))); const equity=Math.max(0,Math.min(100,Number(ctx.equityScore??0))); const urgency=Math.max(0,Math.min(100,Number(ctx.urgencyScore??ctx.timelineScore??0))); const baseScore=priority||Math.round((distress*0.25+equity*0.2+motivation*0.2+urgency*0.15+Number(ctx.contactabilityScore??50)*0.1+Number(ctx.sourceQualityScore??50)*0.1)); let tier=baseScore>=80?'A':baseScore>=60?'B':baseScore>=40?'C':'D'; let queue=tier==='A'?'hot':tier==='B'?'warm':tier==='C'?'standard':'nurture'; let route='outreach'; let nextAction='start_or_continue_seller_sequence'; const flags=[]; if(dnc){route='do_not_contact';nextAction='suppress_future_outreach';flags.push('dnc_or_suppressed');} else if(closed){route='closed_or_blocked';nextAction='no_further_outreach';flags.push('closed_or_blocked');} else if(duplicate){route='duplicate';nextAction='do_not_reprocess';flags.push('duplicate_event');} else if(consent==='denied'){route='consent_blocked';nextAction='do_not_contact';flags.push('consent_denied');} else if(consent==='unknown'&&['sms','email','voice','automated_outreach'].includes(String(input.channel??'').toLowerCase())){route='consent_review';nextAction='verify_consent_before_outreach';flags.push('consent_unknown');} else if(tier==='A'){route='priority_outreach';nextAction='immediate_seller_contact';} else if(tier==='B'){route='outreach';nextAction='seller_contact_within_4_hours';} else if(tier==='C'){route='outreach';nextAction='seller_contact_within_24_hours';} else {route='nurture';nextAction='seller_nurture_within_72_hours';} const idempotencyKey=input.idempotencyKey; return [{json:{...input,canonicalLeadSeller:{route,nextAction,priorityScore:baseScore,tier,queue,motivationScore:motivation,distressScore:distress,equityScore:equity,urgencyScore:urgency,consentStatus:consent,flags,requiresHumanReview:route==='consent_review'||tier==='A',confidenceScore:priority?85:65},idempotencyKey}}];"},
+      "id":"cse-e","name":"Canonical Qualification Routing Decision","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/canonical-routing-decision","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"campaignId","value":"={{$json.campaignId}}"},{"name":"source","value":"={{$json.source}}"},{"name":"route","value":"={{$json.canonicalLeadSeller.route}}"},{"name":"nextAction","value":"={{$json.canonicalLeadSeller.nextAction}}"},{"name":"priorityScore","value":"={{$json.canonicalLeadSeller.priorityScore}}"},{"name":"tier","value":"={{$json.canonicalLeadSeller.tier}}"},{"name":"queue","value":"={{$json.canonicalLeadSeller.queue}}"},{"name":"motivationScore","value":"={{$json.canonicalLeadSeller.motivationScore}}"},{"name":"consentStatus","value":"={{$json.canonicalLeadSeller.consentStatus}}"},{"name":"flags","value":"={{JSON.stringify($json.canonicalLeadSeller.flags)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"cse-f","name":"Persist Canonical Lead Routing","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/communications/canonical-seller-outreach","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"sellerId","value":"={{$json.sellerId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"campaignId","value":"={{$json.campaignId}}"},{"name":"route","value":"={{$json.canonicalLeadSeller.route}}"},{"name":"nextAction","value":"={{$json.canonicalLeadSeller.nextAction}}"},{"name":"queue","value":"={{$json.canonicalLeadSeller.queue}}"},{"name":"consentStatus","value":"={{$json.canonicalLeadSeller.consentStatus}}"},{"name":"requiresHumanReview","value":"={{$json.canonicalLeadSeller.requiresHumanReview}}"},{"name":"idempotencyKey","value":"={{'lead-seller:outreach:'+$json.idempotencyKey}}"}]},"options":{}},
+      "id":"cse-g","name":"Dispatch Canonical Seller Outreach","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"canonical_lead_seller_engine_decision"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"route","value":"={{$json.canonicalLeadSeller.route}}"},{"name":"tier","value":"={{$json.canonicalLeadSeller.tier}}"},{"name":"priorityScore","value":"={{$json.canonicalLeadSeller.priorityScore}}"},{"name":"idempotencyKey","value":"={{'lead-seller:activity:'+$json.idempotencyKey}}"}]},"options":{}},
+      "id":"cse-h","name":"Record Canonical Lead Seller Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"cse-i","name":"Respond Canonical Engine Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'eventType, leadId and idempotencyKey are required'} }}","options":{}},
+      "id":"cse-j","name":"Respond Invalid Canonical Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Canonical Lead Seller Event Webhook":{"main":[[{"node":"Normalize Lead Seller Event","type":"main","index":0}]]},
+    "Normalize Lead Seller Event":{"main":[[{"node":"Validate Canonical Event","type":"main","index":0}]]},
+    "Validate Canonical Event":{"main":[[{"node":"Fetch Canonical Lead Seller Context","type":"main","index":0}],[{"node":"Respond Invalid Canonical Event","type":"main","index":0}]]},
+    "Fetch Canonical Lead Seller Context":{"main":[[{"node":"Canonical Qualification Routing Decision","type":"main","index":0}]]},
+    "Canonical Qualification Routing Decision":{"main":[[{"node":"Persist Canonical Lead Routing","type":"main","index":0}]]},
+    "Persist Canonical Lead Routing":{"main":[[{"node":"Dispatch Canonical Seller Outreach","type":"main","index":0}]]},
+    "Dispatch Canonical Seller Outreach":{"main":[[{"node":"Record Canonical Lead Seller Activity","type":"main","index":0}]]},
+    "Record Canonical Lead Seller Activity":{"main":[[{"node":"Respond Canonical Engine Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"canonical-engine"},{"name":"lead-acquisition"},{"name":"seller-engagement"},{"name":"qualification"},{"name":"routing"},{"name":"outreach"},{"name":"InsulaCRM"}],
+  "meta":{"engine":"lead_acquisition_intake+seller_engagement","contractStatus":"scaffolded","purpose":"Canonical production boundary combining lead qualification/routing with seller engagement handoff. Historical WF-404 through WF-409 and WF-433 through WF-457 are reference logic; production execution should converge here rather than chaining every historical workflow.","productionRequirements":["verified InsulaCRM API base URL","canonical lead/seller schema","consent and suppression policy","communication provider","central idempotency/replay service","verified API contracts"]}}

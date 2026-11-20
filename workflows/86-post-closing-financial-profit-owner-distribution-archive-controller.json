@@ -1,0 +1,58 @@
+{
+  "name": "WF-448 — Post-Closing Financial Reconciliation → Profit, Owner Distribution & Archive Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"post-closing-financial-profit-owner-distribution-archive","responseMode":"lastNode","options":{}},
+      "id":"w448a","name":"Post-Closing Financial Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const settlementId=String(b.settlementId??'').trim(); const closingEventId=String(b.closingEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,settlementId,closingEventId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w448b","name":"Normalize Post-Closing Financial Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"},{"value1":"={{$json.settlementId}}","operation":"notEmpty"},{"value1":"={{$json.closingEventId}}","operation":"notEmpty"}]}},
+      "id":"w448c","name":"Validate Post-Closing Financial Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/finance/post-closing-profit-distribution-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"closingEventId","value":"={{$json.closingEventId}}"}]},"options":{}},
+      "id":"w448d","name":"Fetch Post-Closing Financial Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Post-Closing Financial Request').first().json; const ctx=$json.context??$json; const flags=[]; const state=String(ctx.dealState??ctx.lifecycleState??ctx.status??'').toLowerCase(); if(!['closed','settled','completed'].includes(state))flags.push('deal_not_closed_or_settled'); if(ctx.fundsConfirmed!==true)flags.push('funds_not_confirmed'); if(ctx.settlementReconciled!==true&&ctx.settlementState!=='reconciled')flags.push('settlement_not_reconciled'); const n=v=>Number.isFinite(Number(v))?Number(v):0; const grossRevenue=n(ctx.grossRevenue??ctx.assignmentFee??ctx.actualAssignmentFee); const purchasePrice=n(ctx.purchasePrice); const closingCosts=n(ctx.closingCosts); const otherCosts=n(ctx.otherCosts); const totalCosts=Math.round((purchasePrice+closingCosts+otherCosts)*100)/100; const netProfit=Math.round((grossRevenue-totalCosts)*100)/100; const ownerSharePercent=n(ctx.ownerSharePercent??100); const reservePercent=n(ctx.reservePercent??0); const ownerShareAmount=Math.round((netProfit*Math.max(0,Math.min(ownerSharePercent,100))/100)*100)/100; const reserveAmount=Math.round((netProfit*Math.max(0,Math.min(reservePercent,100))/100)*100)/100; const expectedOwnerDistribution=Math.round((ownerShareAmount-reserveAmount)*100)/100; const recordedOwnerDistribution=n(ctx.recordedOwnerDistribution??ctx.ownerDistribution); const distributionDelta=Math.round((recordedOwnerDistribution-expectedOwnerDistribution)*100)/100; const tol=Math.max(0.01,n(ctx.reconciliationTolerance??0.01)); const distributionReconciled=Math.abs(distributionDelta)<=tol; if(!distributionReconciled)flags.push('owner_distribution_mismatch'); if(ownerSharePercent<0||ownerSharePercent>100)flags.push('invalid_owner_share_percent'); if(reservePercent<0||reservePercent>100)flags.push('invalid_reserve_percent'); if(netProfit<0)flags.push('negative_net_profit'); let decision='hold_for_financial_reconciliation',nextAction='resolve_financial_or_distribution_exceptions',status='exception'; if(flags.includes('deal_not_closed_or_settled')||flags.includes('funds_not_confirmed')){decision='blocked_pending_closing_evidence';nextAction='complete_closing_and_funds_confirmation';status='blocked';}else if(flags.includes('invalid_owner_share_percent')||flags.includes('invalid_reserve_percent')){decision='human_review_required';nextAction='correct_owner_distribution_rules';status='review';}else if(distributionReconciled&&!flags.includes('settlement_not_reconciled')){decision='post_closing_financials_reconciled';nextAction='archive_closed_deal_and_update_portfolio_kpis';status='reconciled';} const idempotencyKey='wf448:'+input.leadId+':'+input.dealId+':'+input.settlementId+':'+input.closingEventId; return [{json:{...input,postClosingFinancialReconciliation:{status,decision,nextAction,grossRevenue,purchasePrice,closingCosts,otherCosts,totalCosts,netProfit,ownerSharePercent,reservePercent,ownerShareAmount,reserveAmount,expectedOwnerDistribution,recordedOwnerDistribution,distributionDelta,reconciliationTolerance:tol,distributionReconciled,flags,requiresHumanReview:['exception','review'].includes(status),confidenceScore:status==='reconciled'?99:status==='blocked'?20:55},idempotencyKey}}];"},
+      "id":"w448e","name":"Reconcile Profit Owner Distribution & Archive Readiness","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/finance/post-closing-profit-distribution-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"postClosingFinancialReconciliation","value":"={{JSON.stringify($json.postClosingFinancialReconciliation)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w448f","name":"Persist Post-Closing Financial Reconciliation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/closed-archive-readiness","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"archiveReady","value":"={{$json.postClosingFinancialReconciliation.status==='reconciled'}}"},{"name":"decision","value":"={{$json.postClosingFinancialReconciliation.decision}}"},{"name":"netProfit","value":"={{$json.postClosingFinancialReconciliation.netProfit}}"},{"name":"expectedOwnerDistribution","value":"={{$json.postClosingFinancialReconciliation.expectedOwnerDistribution}}"},{"name":"idempotencyKey","value":"={{'wf448:archive:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.closingEventId}}"}]},"options":{}},
+      "id":"w448g","name":"Persist Closed Archive Readiness","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"post_closing_financial_profit_owner_distribution_archive_readiness"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"decision","value":"={{$json.postClosingFinancialReconciliation.decision}}"},{"name":"status","value":"={{$json.postClosingFinancialReconciliation.status}}"},{"name":"netProfit","value":"={{$json.postClosingFinancialReconciliation.netProfit}}"},{"name":"idempotencyKey","value":"={{'wf448:activity:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.closingEventId}}"}]},"options":{}},
+      "id":"w448h","name":"Record Post-Closing Financial Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w448i","name":"Respond Post-Closing Financial Reconciliation","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, contractId, settlementId and closingEventId are required'} }}","options":{}},
+      "id":"w448j","name":"Respond Invalid Post-Closing Financial Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Post-Closing Financial Webhook":{"main":[[{"node":"Normalize Post-Closing Financial Request","type":"main","index":0}]]},
+    "Normalize Post-Closing Financial Request":{"main":[[{"node":"Validate Post-Closing Financial Request","type":"main","index":0}]]},
+    "Validate Post-Closing Financial Request":{"main":[[{"node":"Fetch Post-Closing Financial Context","type":"main","index":0}],[{"node":"Respond Invalid Post-Closing Financial Request","type":"main","index":0}]]},
+    "Fetch Post-Closing Financial Context":{"main":[[{"node":"Reconcile Profit Owner Distribution & Archive Readiness","type":"main","index":0}]]},
+    "Reconcile Profit Owner Distribution & Archive Readiness":{"main":[[{"node":"Persist Post-Closing Financial Reconciliation","type":"main","index":0}]]},
+    "Persist Post-Closing Financial Reconciliation":{"main":[[{"node":"Persist Closed Archive Readiness","type":"main","index":0}]]},
+    "Persist Closed Archive Readiness":{"main":[[{"node":"Record Post-Closing Financial Activity","type":"main","index":0}]]},
+    "Record Post-Closing Financial Activity":{"main":[[{"node":"Respond Post-Closing Financial Reconciliation","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-448"},{"name":"post-closing"},{"name":"profit"},{"name":"owner-distribution"},{"name":"archive"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-448","contractStatus":"scaffolded","idempotency":"wf448:{leadId}:{dealId}:{settlementId}:{closingEventId}","notes":"Reconciles post-closing gross revenue, costs, net profit, owner distribution and reserve before closed-deal archive readiness. Production use requires authoritative accounting records, payout controls, verified InsulaCRM financial schema and production API contracts."}
+}

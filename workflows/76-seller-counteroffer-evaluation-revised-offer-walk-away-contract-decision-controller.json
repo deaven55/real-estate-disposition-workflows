@@ -1,0 +1,58 @@
+{
+  "name": "WF-438 — Seller Counteroffer Evaluation → Revised Offer / Walk-Away / Contract Decision Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"seller-counteroffer-evaluation-revised-offer-walk-away-contract-decision","responseMode":"lastNode","options":{}},
+      "id":"w438a","name":"Seller Counteroffer Decision Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const counterofferId=String(b.counterofferId??'').trim(); const eventType=String(b.eventType??'counteroffer').trim().toLowerCase(); return [{json:{...b,leadId,dealId,counterofferId,eventType,receivedAt:new Date().toISOString()}}];"},
+      "id":"w438b","name":"Normalize Seller Counteroffer","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.counterofferId}}","operation":"notEmpty"}]}},
+      "id":"w438c","name":"Validate Seller Counteroffer","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-counteroffer-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"}]},"options":{}},
+      "id":"w438d","name":"Fetch Seller Counteroffer Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Seller Counteroffer').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const counter=n(ctx.counterofferAmount??input.counterofferAmount); const currentOffer=n(ctx.currentOfferAmount??input.currentOfferAmount); const protectedMao=n(ctx.protectedMao); const arv=n(ctx.arv); const repairs=n(ctx.repairs); const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); const blockedStates=['closed','cancelled','disputed','dnc','suppressed']; const flags=[]; if(blockedStates.includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); if(counter<=0)flags.push('invalid_counteroffer_amount'); if(protectedMao>0&&counter>protectedMao)flags.push('counteroffer_above_protected_mao'); const gap=currentOffer>0?counter-currentOffer:null; const gapPct=currentOffer>0?gap/currentOffer:null; const maoGap=protectedMao>0?protectedMao-counter:null; const maoUtilization=protectedMao>0?counter/protectedMao:null; const sellerMotivation=n(ctx.sellerMotivationScore??ctx.motivationScore); const risk=String(ctx.riskLevel??'medium').toLowerCase(); let decision='human_review',nextAction='review_counteroffer',revisedOffer=null,walkAway=false,contractReady=false; if(flags.includes('deal_or_contact_blocked')){decision='blocked';nextAction='stop_negotiation';}else if(flags.includes('invalid_counteroffer_amount')){decision='human_review';nextAction='request_valid_counteroffer';}else if(protectedMao>0&&counter>protectedMao){decision='walk_away_or_reengage';nextAction='reject_above_mao_and_reengage';walkAway=true;}else if(protectedMao>0&&counter<=protectedMao){if(counter<=currentOffer&&currentOffer>0){decision='contract_ready';nextAction='accept_and_prepare_contract';contractReady=true;}else if(counter>=protectedMao*0.95){decision='contract_ready';nextAction='accept_within_protected_mao_and_prepare_contract';contractReady=true;}else if(sellerMotivation>=75&&risk!=='high'){const floor=Math.max(currentOffer,protectedMao*0.90);revisedOffer=Math.min(counter-1>0?counter-1:counter,floor);revisedOffer=Math.max(revisedOffer,currentOffer||0);decision='revised_offer';nextAction='send_controlled_revised_offer';}else{decision='human_review';nextAction='review_negotiation_gap_before_reoffer';}}else{decision='human_review';nextAction='validate_protected_mao_before_decision';} const investorProfit=arv>0&&repairs>=0&&protectedMao>0?arv-repairs-counter:null; const idempotencyKey='wf438:'+input.leadId+':'+input.dealId+':'+input.counterofferId; return [{json:{...input,sellerCounterofferDecision:{status:flags.length?'review_required':'evaluated',decision,nextAction,counterofferAmount:counter,currentOfferAmount:currentOffer,protectedMao,negotiationGap:gap,negotiationGapPercent:gapPct,maoGap,maoUtilization,sellerMotivationScore:sellerMotivation,riskLevel:risk,revisedOfferAmount:revisedOffer,walkAway,contractReady,projectedInvestorProfit:investorProfit,flags,requiresHumanReview:decision==='human_review',confidenceScore:flags.length?25:(decision==='human_review'?60:94)},idempotencyKey}}];"},
+      "id":"w438e","name":"Evaluate Counteroffer Decision","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-counteroffer-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"sellerCounterofferDecision","value":"={{JSON.stringify($json.sellerCounterofferDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w438f","name":"Persist Counteroffer Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-counteroffer-action","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"decision","value":"={{$json.sellerCounterofferDecision.decision}}"},{"name":"nextAction","value":"={{$json.sellerCounterofferDecision.nextAction}}"},{"name":"revisedOfferAmount","value":"={{$json.sellerCounterofferDecision.revisedOfferAmount}}"},{"name":"idempotencyKey","value":"={{'wf438:action:'+$json.leadId+':'+$json.dealId+':'+$json.counterofferId}}"}]},"options":{}},
+      "id":"w438g","name":"Persist Counteroffer Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_counteroffer_evaluation_revised_offer_walk_away_contract_decision"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"decision","value":"={{$json.sellerCounterofferDecision.decision}}"},{"name":"nextAction","value":"={{$json.sellerCounterofferDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf438:activity:'+$json.leadId+':'+$json.dealId+':'+$json.counterofferId}}"}]},"options":{}},
+      "id":"w438h","name":"Record Counteroffer Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w438i","name":"Respond Counteroffer Decision","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId and counterofferId are required'} }}","options":{}},
+      "id":"w438j","name":"Respond Invalid Counteroffer","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Seller Counteroffer Decision Webhook":{"main":[[{"node":"Normalize Seller Counteroffer","type":"main","index":0}]]},
+    "Normalize Seller Counteroffer":{"main":[[{"node":"Validate Seller Counteroffer","type":"main","index":0}]]},
+    "Validate Seller Counteroffer":{"main":[[{"node":"Fetch Seller Counteroffer Context","type":"main","index":0}],[{"node":"Respond Invalid Counteroffer","type":"main","index":0}]]},
+    "Fetch Seller Counteroffer Context":{"main":[[{"node":"Evaluate Counteroffer Decision","type":"main","index":0}]]},
+    "Evaluate Counteroffer Decision":{"main":[[{"node":"Persist Counteroffer Decision","type":"main","index":0}]]},
+    "Persist Counteroffer Decision":{"main":[[{"node":"Persist Counteroffer Action","type":"main","index":0}]]},
+    "Persist Counteroffer Action":{"main":[[{"node":"Record Counteroffer Activity","type":"main","index":0}]]},
+    "Record Counteroffer Activity":{"main":[[{"node":"Respond Counteroffer Decision","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-438"},{"name":"seller-counteroffer"},{"name":"negotiation"},{"name":"revised-offer"},{"name":"walk-away"},{"name":"contract-decision"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-438","contractStatus":"scaffolded","idempotency":"wf438:{leadId}:{dealId}:{counterofferId}","notes":"Counteroffer decisioning is scaffolding pending verified InsulaCRM negotiation schema, canonical protected-MAO source, underwriting economics, seller-response classification, and production communication/API contracts."}
+}

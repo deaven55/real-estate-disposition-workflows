@@ -1,0 +1,53 @@
+{
+  "name": "WF-411 — Comps, ARV & Repair Estimate Analysis Controller",
+  "nodes": [
+    {
+      "parameters": {"httpMethod":"POST","path":"comps-arv-repair-analysis","responseMode":"lastNode","options":{}},
+      "id":"w411a","name":"Comps Analysis Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,address:String(b.address??b.propertyAddress??'').trim(),receivedAt:new Date().toISOString()}}];"},
+      "id":"w411b","name":"Normalize Comps Analysis Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"}]}},
+      "id":"w411c","name":"Validate Analysis Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/properties/comps-analysis-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"address","value":"={{$json.address}}"}]},"options":{}},
+      "id":"w411d","name":"Fetch Comps ARV Repair Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Comps Analysis Request').first().json; const ctx=$json.context??$json; const p=ctx.property??input.property??{}; const comps=Array.isArray(ctx.comps)?ctx.comps:[]; const num=v=>Number.isFinite(Number(v))?Number(v):null; const subjectSqft=num(p.sqft??p.squareFeet); const subjectBeds=num(p.beds??p.bedrooms); const subjectBaths=num(p.baths??p.bathrooms); const subjectYear=num(p.yearBuilt); const subjectValue=num(p.currentValue??p.estimatedValue??p.arv); const valid=comps.map(c=>({...c,salePrice:num(c.salePrice??c.price),sqft:num(c.sqft??c.squareFeet),beds:num(c.beds??c.bedrooms),baths:num(c.baths??c.bathrooms),yearBuilt:num(c.yearBuilt),distanceMiles:num(c.distanceMiles??c.distance)})).filter(c=>c.salePrice!==null&&c.salePrice>0); const weighted=[]; for(const c of valid){let score=1; if(subjectSqft&&c.sqft)score*=Math.max(.2,1-Math.min(.5,Math.abs(c.sqft-subjectSqft)/subjectSqft)); if(subjectBeds!==null&&c.beds!==null)score*=Math.max(.4,1-Math.min(.3,Math.abs(c.beds-subjectBeds)*.15)); if(subjectBaths!==null&&c.baths!==null)score*=Math.max(.5,1-Math.min(.25,Math.abs(c.baths-subjectBaths)*.12)); if(subjectYear&&c.yearBuilt)score*=Math.max(.5,1-Math.min(.2,Math.abs(c.yearBuilt-subjectYear)/50)); if(c.distanceMiles!==null)score*=Math.max(.25,1-Math.min(.5,c.distanceMiles/10)); weighted.push({...c,weight:score,pricePerSqft:c.sqft?c.salePrice/c.sqft:null}); } const wsum=weighted.reduce((s,c)=>s+c.weight,0); const weightedValue=wsum?weighted.reduce((s,c)=>s+c.salePrice*c.weight,0)/wsum:null; const ppsf=weighted.filter(c=>c.pricePerSqft!==null); const median=(a)=>{if(!a.length)return null;const x=[...a].sort((a,b)=>a-b);const m=Math.floor(x.length/2);return x.length%2?x[m]:(x[m-1]+x[m])/2}; const medianPpsf=median(ppsf.map(c=>c.pricePerSqft)); const sqftArv=subjectSqft&&medianPpsf?subjectSqft*medianPpsf:null; const arvCandidates=[weightedValue,sqftArv,subjectValue].filter(v=>v!==null&&v>0); const arv=arvCandidates.length?arvCandidates.reduce((a,b)=>a+b,0)/arvCandidates.length:null; const repairInputs=Array.isArray(ctx.repairEstimates)?ctx.repairEstimates:[]; const repairTotal=repairInputs.map(r=>num(r.amount??r.cost)).filter(v=>v!==null&&v>=0).reduce((a,b)=>a+b,0); const providedRepair=num(p.repairs??ctx.repairs); const repairs=repairInputs.length?repairTotal:providedRepair; const confidence=Math.max(0,Math.min(100,(valid.length>=3?45:valid.length*15)+(weightedValue!==null?20:0)+(medianPpsf!==null?15:0)+(repairs!==null?10:0)+(subjectSqft?10:0))); const flags=[]; if(valid.length<3)flags.push('limited_comps'); if(valid.length===0)flags.push('no_valid_comps'); if(arv===null)flags.push('arv_unavailable'); if(repairs===null)flags.push('repair_estimate_unavailable'); if(repairs!==null&&arv&&repairs/arv>=.2)flags.push('high_repair_burden'); const status=arv!==null&&repairs!==null&&valid.length>=3?'analysis_ready':arv!==null?'partial_analysis':'insufficient_data'; const idempotencyKey='wf411:'+input.leadId+':'+input.propertyId; return [{json:{...input,analysis:{status,arv,repairEstimate:repairs,compCount:valid.length,weightedCompValue:weightedValue,medianPricePerSqft:medianPpsf,confidenceScore:Math.round(confidence),flags,comparables:weighted.map(c=>({id:c.id??null,address:c.address??null,salePrice:c.salePrice,sqft:c.sqft,pricePerSqft:c.pricePerSqft,weight:Number(c.weight.toFixed(4))}))},idempotencyKey}}];"},
+      "id":"w411e","name":"Calculate Comps ARV & Repair Analysis","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/properties/comps-analysis","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"analysis","value":"={{JSON.stringify($json.analysis)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w411f","name":"Persist Comps ARV Repair Analysis","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"comps_arv_repair_analysis"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"status","value":"={{$json.analysis.status}}"},{"name":"confidenceScore","value":"={{$json.analysis.confidenceScore}}"},{"name":"compCount","value":"={{$json.analysis.compCount}}"},{"name":"idempotencyKey","value":"={{'wf411:activity:'+$json.leadId+':'+$json.propertyId}}"}]},"options":{}},
+      "id":"w411g","name":"Record Comps Analysis Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w411h","name":"Respond Comps Analysis","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId and propertyId are required'} }}","options":{}},
+      "id":"w411i","name":"Respond Invalid Analysis Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Comps Analysis Webhook":{"main":[[{"node":"Normalize Comps Analysis Request","type":"main","index":0}]]},
+    "Normalize Comps Analysis Request":{"main":[[{"node":"Validate Analysis Identity","type":"main","index":0}]]},
+    "Validate Analysis Identity":{"main":[[{"node":"Fetch Comps ARV Repair Context","type":"main","index":0}],[{"node":"Respond Invalid Analysis Request","type":"main","index":0}]]},
+    "Fetch Comps ARV Repair Context":{"main":[[{"node":"Calculate Comps ARV & Repair Analysis","type":"main","index":0}]]},
+    "Calculate Comps ARV & Repair Analysis":{"main":[[{"node":"Persist Comps ARV Repair Analysis","type":"main","index":0}]]},
+    "Persist Comps ARV Repair Analysis":{"main":[[{"node":"Record Comps Analysis Activity","type":"main","index":0}]]},
+    "Record Comps Analysis Activity":{"main":[[{"node":"Respond Comps Analysis","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-411"},{"name":"comps"},{"name":"ARV"},{"name":"repair-estimate"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-411","contractStatus":"scaffolded","idempotency":"wf411:{leadId}:{propertyId}","notes":"Comparable selection, ARV and repair calculations are deterministic scaffolding pending production comp provider, repair estimation provider, verified InsulaCRM field mappings, and final API contracts."}
+}

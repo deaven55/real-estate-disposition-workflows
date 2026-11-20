@@ -119,6 +119,19 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "boolean": [{"value1":"={{$json.canonicalIntegration.dispatchAllowed}}","operation":"isTrue"}]
+        },
+        "options": {}
+      },
+      "id": "cpi-f-gate",
+      "name": "Gate Idempotency Claim",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 80]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/platform/idempotency/claim",
         "sendBody": true,
@@ -388,6 +401,18 @@
     {
       "parameters": {
         "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:$json.canonicalIntegration.action,idempotencyKey:$json.idempotencyKey,engine:$json.engine,eventType:$json.eventType} }}",
+        "options": {}
+      },
+      "id": "cpi-p",
+      "name": "Respond Guardrail Block",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1320, 140]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
         "responseBody": "={{$json}}",
         "options": {}
       },
@@ -471,11 +496,17 @@
     "Apply Replay & State Guardrails": {
       "main": [
         [
-          {
-            "node": "Claim Idempotency Before Dispatch",
-            "type": "main",
-            "index": 0
-          }
+          {"node":"Gate Idempotency Claim","type":"main","index":0}
+        ]
+      ]
+    },
+    "Gate Idempotency Claim": {
+      "main": [
+        [
+          {"node":"Claim Idempotency Before Dispatch","type":"main","index":0}
+        ],
+        [
+          {"node":"Respond Guardrail Block","type":"main","index":0}
         ]
       ]
     },

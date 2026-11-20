@@ -1,0 +1,16 @@
+name: Canonical Contract Validation
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  validate-canonical-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate canonical workflow contracts
+        run: node tests/canonical-contract-validation.js

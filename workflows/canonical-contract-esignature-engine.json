@@ -2,56 +2,561 @@
   "name": "Canonical Contract & E-Signature Engine — Readiness, Package, Routing & Execution Reconciliation",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"canonical-contract-esignature-engine","responseMode":"lastNode","options":{}},
-      "id":"cces-a","name":"Canonical Contract ESignature Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "canonical-contract-esignature-engine",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "cces-a",
+      "name": "Canonical Contract ESignature Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const eventType=String(b.eventType??b.type??'contract_readiness').trim().toLowerCase(); const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const assignmentId=String(b.assignmentId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const idempotencyKey=String(b.idempotencyKey??('contract:'+eventType+':'+leadId+':'+dealId+':'+contractId+':'+(b.providerEventId??b.eventId??''))).trim(); return [{json:{...b,eventType,leadId,propertyId,dealId,contractId,assignmentId,portfolioId,idempotencyKey,receivedAt:new Date().toISOString()}}];"},
-      "id":"cces-b","name":"Normalize Contract Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const eventType=String(b.eventType??b.type??'contract_readiness').trim().toLowerCase(); const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const assignmentId=String(b.assignmentId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const idempotencyKey=String(b.idempotencyKey??('contract:'+eventType+':'+leadId+':'+dealId+':'+contractId+':'+(b.providerEventId??b.eventId??''))).trim(); return [{json:{...b,eventType,leadId,propertyId,dealId,contractId,assignmentId,portfolioId,idempotencyKey,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "cces-b",
+      "name": "Normalize Contract Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.eventType}}","operation":"notEmpty"},{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.idempotencyKey}}","operation":"notEmpty"}]}},
-      "id":"cces-c","name":"Validate Contract Event","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.eventType}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.idempotencyKey}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "cces-c",
+      "name": "Validate Contract Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/contracts/canonical-contract-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"}]},"options":{}},
-      "id":"cces-d","name":"Fetch Canonical Contract Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/contracts/canonical-contract-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cces-d",
+      "name": "Fetch Canonical Contract Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Contract Event').first().json; const c=$json.context??$json; const status=String(c.dealStatus??c.contractStatus??'').toLowerCase(); const executed=String(c.executionStatus??'').toLowerCase()==='executed'||c.executed===true; const sellerSigned=c.sellerSigned===true||c.requiredSellerSignaturePresent===true; const buyerSigned=c.buyerSigned===true||c.requiredBuyerSignaturePresent===true; const identityVerified=c.sellerIdentityVerified===true&&c.propertyIdentityVerified===true; const economicsReady=c.purchasePrice>0&&((c.protectedMao??0)<=0||Number(c.purchasePrice)<=Number(c.protectedMao)); const titleConfirmed=c.titleCompanyConfirmed===true||c.titleCompanyId!=null; const requiredDocs=Array.isArray(c.requiredDocuments)?c.requiredDocuments:[]; const missingDocs=requiredDocs.filter(d=>d.required!==false&&!['complete','verified','signed'].includes(String(d.status??'').toLowerCase())).map(d=>d.id??d.name??'unknown'); const event=String(input.eventType).toLowerCase(); let decision='contract_readiness_pending'; let action='collect_missing_contract_requirements'; const flags=[]; if(['closed','cancelled','disputed'].includes(status)){decision='blocked';action='no_contract_action';flags.push('protected_deal_state');} else if(event==='dnc'){decision='blocked';action='suppress_contract_communications';flags.push('dnc');} else if(event.includes('esign')||event.includes('signature')||event==='provider_event'){ if(event==='completed'||event==='executed'||executed){ if(sellerSigned&&buyerSigned&&identityVerified&&economicsReady){decision='executed';action='advance_to_title_closing';} else {decision='execution_review';action='reconcile_missing_execution_evidence';flags.push('execution_evidence_incomplete');}} else if(['declined','rejected','voided','cancelled','expired','failed'].includes(event)){decision='signature_failed';action='reissue_or_human_review';flags.push('signature_event_failed');} else {decision='signature_pending';action='await_required_signatures';}} else { if(!identityVerified)flags.push('identity_verification_missing'); if(!economicsReady)flags.push('economics_not_ready'); if(missingDocs.length)flags.push('documents_missing'); if(!titleConfirmed)flags.push('title_company_unconfirmed'); if(sellerSigned){} if(identityVerified&&economicsReady&&missingDocs.length===0&&titleConfirmed){decision='ready_for_signature';action='generate_and_route_signature_package';} else {decision='contract_readiness_pending';action='collect_missing_contract_requirements';}} const readinessScore=Math.max(0,Math.min(100,Math.round((identityVerified?25:0)+(economicsReady?25:0)+(missingDocs.length===0?20:0)+(titleConfirmed?10:0)+(sellerSigned?10:0)+(buyerSigned?10:0)))); return [{json:{...input,canonicalContract:{decision,action,readinessScore,executed, sellerSigned,buyerSigned,identityVerified,economicsReady,titleConfirmed,missingDocuments:missingDocs,flags,requiresHumanReview:['execution_review','signature_failed'].includes(decision),nextEvent:decision==='executed'?'title_closing':decision==='ready_for_signature'?'signature_request':'none',confidenceScore:executed?90:readinessScore},idempotencyKey}}];"},
-      "id":"cces-e","name":"Evaluate Canonical Contract Readiness & Execution","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Contract Event').first().json; const c=$json.context??$json; const status=String(c.dealStatus??c.contractStatus??'').toLowerCase(); const executed=String(c.executionStatus??'').toLowerCase()==='executed'||c.executed===true; const sellerSigned=c.sellerSigned===true||c.requiredSellerSignaturePresent===true; const buyerSigned=c.buyerSigned===true||c.requiredBuyerSignaturePresent===true; const identityVerified=c.sellerIdentityVerified===true&&c.propertyIdentityVerified===true; const economicsReady=c.purchasePrice>0&&((c.protectedMao??0)<=0||Number(c.purchasePrice)<=Number(c.protectedMao)); const titleConfirmed=c.titleCompanyConfirmed===true||c.titleCompanyId!=null; const requiredDocs=Array.isArray(c.requiredDocuments)?c.requiredDocuments:[]; const missingDocs=requiredDocs.filter(d=>d.required!==false&&!['complete','verified','signed'].includes(String(d.status??'').toLowerCase())).map(d=>d.id??d.name??'unknown'); const event=String(input.eventType).toLowerCase(); let decision='contract_readiness_pending'; let action='collect_missing_contract_requirements'; const flags=[]; if(['closed','cancelled','disputed'].includes(status)){decision='blocked';action='no_contract_action';flags.push('protected_deal_state');} else if(event==='dnc'){decision='blocked';action='suppress_contract_communications';flags.push('dnc');} else if(event.includes('esign')||event.includes('signature')||event==='provider_event'){ if(event==='completed'||event==='executed'||executed){ if(sellerSigned&&buyerSigned&&identityVerified&&economicsReady){decision='executed';action='advance_to_title_closing';} else {decision='execution_review';action='reconcile_missing_execution_evidence';flags.push('execution_evidence_incomplete');}} else if(['declined','rejected','voided','cancelled','expired','failed'].includes(event)){decision='signature_failed';action='reissue_or_human_review';flags.push('signature_event_failed');} else {decision='signature_pending';action='await_required_signatures';}} else { if(!identityVerified)flags.push('identity_verification_missing'); if(!economicsReady)flags.push('economics_not_ready'); if(missingDocs.length)flags.push('documents_missing'); if(!titleConfirmed)flags.push('title_company_unconfirmed'); if(sellerSigned){} if(identityVerified&&economicsReady&&missingDocs.length===0&&titleConfirmed){decision='ready_for_signature';action='generate_and_route_signature_package';} else {decision='contract_readiness_pending';action='collect_missing_contract_requirements';}} const readinessScore=Math.max(0,Math.min(100,Math.round((identityVerified?25:0)+(economicsReady?25:0)+(missingDocs.length===0?20:0)+(titleConfirmed?10:0)+(sellerSigned?10:0)+(buyerSigned?10:0)))); return [{json:{...input,canonicalContract:{decision,action,readinessScore,executed, sellerSigned,buyerSigned,identityVerified,economicsReady,titleConfirmed,missingDocuments:missingDocs,flags,requiresHumanReview:['execution_review','signature_failed'].includes(decision),nextEvent:decision==='executed'?'title_closing':decision==='ready_for_signature'?'signature_request':'none',confidenceScore:executed?90:readinessScore},idempotencyKey}}];"
+      },
+      "id": "cces-e",
+      "name": "Evaluate Canonical Contract Readiness & Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/contracts/canonical-contract-decision","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"decision","value":"={{$json.canonicalContract.decision}}"},{"name":"action","value":"={{$json.canonicalContract.action}}"},{"name":"readinessScore","value":"={{$json.canonicalContract.readinessScore}}"},{"name":"sellerSigned","value":"={{$json.canonicalContract.sellerSigned}}"},{"name":"buyerSigned","value":"={{$json.canonicalContract.buyerSigned}}"},{"name":"executed","value":"={{$json.canonicalContract.executed}}"},{"name":"missingDocuments","value":"={{JSON.stringify($json.canonicalContract.missingDocuments)}}"},{"name":"flags","value":"={{JSON.stringify($json.canonicalContract.flags)}}"},{"name":"nextEvent","value":"={{$json.canonicalContract.nextEvent}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"cces-f","name":"Persist Canonical Contract Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/contracts/canonical-contract-decision",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.canonicalContract.decision}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.canonicalContract.action}}"
+            },
+            {
+              "name": "readinessScore",
+              "value": "={{$json.canonicalContract.readinessScore}}"
+            },
+            {
+              "name": "sellerSigned",
+              "value": "={{$json.canonicalContract.sellerSigned}}"
+            },
+            {
+              "name": "buyerSigned",
+              "value": "={{$json.canonicalContract.buyerSigned}}"
+            },
+            {
+              "name": "executed",
+              "value": "={{$json.canonicalContract.executed}}"
+            },
+            {
+              "name": "missingDocuments",
+              "value": "={{JSON.stringify($json.canonicalContract.missingDocuments)}}"
+            },
+            {
+              "name": "flags",
+              "value": "={{JSON.stringify($json.canonicalContract.flags)}}"
+            },
+            {
+              "name": "nextEvent",
+              "value": "={{$json.canonicalContract.nextEvent}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cces-f",
+      "name": "Persist Canonical Contract Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/contracts/canonical-signature-dispatch","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"sellerId","value":"={{$json.sellerId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"action","value":"={{$json.canonicalContract.action}}"},{"name":"decision","value":"={{$json.canonicalContract.decision}}"},{"name":"requiresHumanReview","value":"={{$json.canonicalContract.requiresHumanReview}}"},{"name":"nextEvent","value":"={{$json.canonicalContract.nextEvent}}"},{"name":"idempotencyKey","value":"={{'contract:dispatch:'+$json.idempotencyKey}}"}]},"options":{}},
-      "id":"cces-g","name":"Dispatch Canonical Contract Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/contracts/canonical-signature-dispatch",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.canonicalContract.action}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.canonicalContract.decision}}"
+            },
+            {
+              "name": "requiresHumanReview",
+              "value": "={{$json.canonicalContract.requiresHumanReview}}"
+            },
+            {
+              "name": "nextEvent",
+              "value": "={{$json.canonicalContract.nextEvent}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'contract:dispatch:'+$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cces-g",
+      "name": "Dispatch Canonical Contract Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"canonical_contract_esignature_decision"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"decision","value":"={{$json.canonicalContract.decision}}"},{"name":"readinessScore","value":"={{$json.canonicalContract.readinessScore}}"},{"name":"executed","value":"={{$json.canonicalContract.executed}}"},{"name":"idempotencyKey","value":"={{'contract:activity:'+$json.idempotencyKey}}"}]},"options":{}},
-      "id":"cces-h","name":"Record Contract ESignature Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "canonical_contract_esignature_decision"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.canonicalContract.decision}}"
+            },
+            {
+              "name": "readinessScore",
+              "value": "={{$json.canonicalContract.readinessScore}}"
+            },
+            {
+              "name": "executed",
+              "value": "={{$json.canonicalContract.executed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'contract:activity:'+$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cces-h",
+      "name": "Record Contract ESignature Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"cces-i","name":"Respond Contract ESignature Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "cces-i",
+      "name": "Respond Contract ESignature Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'eventType, leadId, dealId and idempotencyKey are required'} }}","options":{}},
-      "id":"cces-j","name":"Respond Invalid Contract Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'eventType, leadId, dealId and idempotencyKey are required'} }}",
+        "options": {}
+      },
+      "id": "cces-j",
+      "name": "Respond Invalid Contract Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_N8N_BASE_URL/webhook/canonical-lifecycle-handoff",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "contract-esignature"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId??''}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId??''}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId??''}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId??''}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            },
+            {
+              "name": "correlationId",
+              "value": "={{$json.correlationId??('corr:'+$json.idempotencyKey)}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.canonicalContract?.decision}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cces-lh",
+      "name": "Emit Next Canonical Lifecycle Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        120
+      ]
     }
   ],
-  "connections":{
-    "Canonical Contract ESignature Webhook":{"main":[[{"node":"Normalize Contract Event","type":"main","index":0}]]},
-    "Normalize Contract Event":{"main":[[{"node":"Validate Contract Event","type":"main","index":0}]]},
-    "Validate Contract Event":{"main":[[{"node":"Fetch Canonical Contract Context","type":"main","index":0}],[{"node":"Respond Invalid Contract Event","type":"main","index":0}]]},
-    "Fetch Canonical Contract Context":{"main":[[{"node":"Evaluate Canonical Contract Readiness & Execution","type":"main","index":0}]]},
-    "Evaluate Canonical Contract Readiness & Execution":{"main":[[{"node":"Persist Canonical Contract Decision","type":"main","index":0}]]},
-    "Persist Canonical Contract Decision":{"main":[[{"node":"Dispatch Canonical Contract Action","type":"main","index":0}]]},
-    "Dispatch Canonical Contract Action":{"main":[[{"node":"Record Contract ESignature Activity","type":"main","index":0}]]},
-    "Record Contract ESignature Activity":{"main":[[{"node":"Respond Contract ESignature Result","type":"main","index":0}]]}
+  "connections": {
+    "Canonical Contract ESignature Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Contract Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Contract Event": {
+      "main": [
+        [
+          {
+            "node": "Validate Contract Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Contract Event": {
+      "main": [
+        [
+          {
+            "node": "Fetch Canonical Contract Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Contract Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Canonical Contract Context": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Canonical Contract Readiness & Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Canonical Contract Readiness & Execution": {
+      "main": [
+        [
+          {
+            "node": "Persist Canonical Contract Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Canonical Contract Decision": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Canonical Contract Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Emit Next Canonical Lifecycle Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Canonical Contract Action": {
+      "main": [
+        [
+          {
+            "node": "Record Contract ESignature Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Contract ESignature Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Contract ESignature Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"canonical-engine"},{"name":"contracts"},{"name":"esignature"},{"name":"contract-readiness"},{"name":"execution"},{"name":"InsulaCRM"}],
-  "meta":{"engine":"contract_and_esignature","contractStatus":"scaffolded","purpose":"Canonical production boundary combining contract readiness, document/package routing, e-signature initiation, signature evidence reconciliation and executed-contract handoff. Historical WF-415, WF-419, WF-420, WF-441 and WF-442 are reference implementations.","productionRequirements":["verified InsulaCRM API base URL","canonical contract/document schema","verified e-signature provider","verified identity evidence","canonical protected-MAO source","atomic contract lifecycle transitions","central idempotency/replay service"]}}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "canonical-engine"
+    },
+    {
+      "name": "contracts"
+    },
+    {
+      "name": "esignature"
+    },
+    {
+      "name": "contract-readiness"
+    },
+    {
+      "name": "execution"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "engine": "contract_and_esignature",
+    "contractStatus": "scaffolded",
+    "purpose": "Canonical production boundary combining contract readiness, document/package routing, e-signature initiation, signature evidence reconciliation and executed-contract handoff. Historical WF-415, WF-419, WF-420, WF-441 and WF-442 are reference implementations.",
+    "productionRequirements": [
+      "verified InsulaCRM API base URL",
+      "canonical contract/document schema",
+      "verified e-signature provider",
+      "verified identity evidence",
+      "canonical protected-MAO source",
+      "atomic contract lifecycle transitions",
+      "central idempotency/replay service",
+      "verified n8n lifecycle handoff webhook",
+      "live end-to-end lifecycle verification"
+    ]
+  }
+}

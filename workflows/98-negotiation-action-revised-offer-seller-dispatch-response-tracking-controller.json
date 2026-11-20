@@ -1,0 +1,58 @@
+{
+  "name": "WF-460 — Negotiation Action → Revised Offer Generation, Seller Dispatch & Response Tracking Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"negotiation-action-revised-offer-seller-dispatch-response-tracking","responseMode":"lastNode","options":{}},
+      "id":"w460a","name":"Negotiation Action Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const dealId=String(b.dealId??'').trim(); const counterofferId=String(b.counterofferId??'').trim(); const action=String(b.action??b.nextAction??'').trim().toLowerCase(); return [{json:{...b,leadId,portfolioId,dealId,counterofferId,action,receivedAt:new Date().toISOString()}}];"},
+      "id":"w460b","name":"Normalize Negotiation Action","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.action}}","operation":"notEmpty"}]}},
+      "id":"w460c","name":"Validate Negotiation Action","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/negotiation-action-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"action","value":"={{$json.action}}"}]},"options":{}},
+      "id":"w460d","name":"Fetch Negotiation Action Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Negotiation Action').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const protectedMao=n(ctx.protectedMAO??ctx.protectedMao); const currentOffer=n(ctx.currentOffer); const latestCounteroffer=n(ctx.latestCounteroffer??ctx.counteroffer); const maxConcession=Math.max(0,n(ctx.maxConcession??(protectedMao-currentOffer))); const configuredStep=Math.max(0,n(ctx.concessionStep??(maxConcession*0.25))); const sellerMotivation=Math.max(0,Math.min(100,n(ctx.motivationScore??50))); const risk=String(ctx.riskLevel??'medium').toLowerCase(); const dnc=ctx.dnc===true||ctx.suppressed===true; const blocked=ctx.closed===true||['closed','cancelled','disputed'].includes(String(ctx.dealStatus??'').toLowerCase()); let revisedOffer=currentOffer; let dispatchAllowed=false; let status='blocked'; let nextFollowUpMinutes=1440; let template='negotiation_follow_up'; let rationale=''; const flags=[]; if(dnc)flags.push('dnc_or_suppressed'); if(blocked)flags.push('closed_or_blocked_deal'); if(protectedMao<=0)flags.push('missing_protected_mao'); if(latestCounteroffer>protectedMao)flags.push('counteroffer_above_protected_mao'); if(input.action.includes('concession')||input.action.includes('revised')){const remaining=Math.max(0,protectedMao-currentOffer); const step=Math.min(configuredStep,remaining); revisedOffer=Math.min(protectedMao,currentOffer+step); status=revisedOffer>currentOffer?'revised_offer_ready':'hold_or_review'; dispatchAllowed=!dnc&&!blocked&&protectedMao>0&&revisedOffer>0&&revisedOffer<=protectedMao; rationale=sellerMotivation>=70?'Higher motivation supports a controlled concession within the protected ceiling.':'Use a measured concession while preserving the protected ceiling.'; nextFollowUpMinutes=sellerMotivation>=70?240:1440;} else if(input.action.includes('accept')||input.action.includes('contract')){revisedOffer=latestCounteroffer>0?Math.min(latestCounteroffer,protectedMao):currentOffer; status='contract_ready'; dispatchAllowed=false; template='acceptance_and_contract_next_steps'; rationale='Seller acceptance path detected; move to contract readiness rather than negotiating beyond the protected ceiling.'; nextFollowUpMinutes=60;} else if(input.action.includes('walk')||input.action.includes('reengage')){status='reengagement_or_walkaway';dispatchAllowed=!dnc&&!blocked;template='reengagement_or_value_follow_up';nextFollowUpMinutes=sellerMotivation>=70?1440:4320;rationale=sellerMotivation>=70?'Re-engage because motivation remains meaningful.':'Pause and re-engage later rather than exceeding the protected ceiling.';} else {status='human_review';rationale='Unrecognized negotiation action requires review.';} if(risk==='high'||risk==='critical')flags.push('elevated_deal_risk'); const confidence=status==='human_review'||flags.includes('missing_protected_mao')?35:90; const idempotencyKey='wf460:'+input.leadId+':'+input.dealId+':'+(input.counterofferId||'none')+':'+input.action; return [{json:{...input,revisedOfferPlan:{status,revisedOffer,currentOffer,latestCounteroffer,protectedMAO,concessionAmount:Math.max(0,revisedOffer-currentOffer),dispatchAllowed,template,rationale,nextFollowUpMinutes,flags,requiresHumanReview:status==='human_review'||risk==='high'||risk==='critical',confidenceScore:confidence},idempotencyKey}}];"},
+      "id":"w460e","name":"Build Revised Offer & Dispatch Decision","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/communications/revised-offer-package","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"revisedOffer","value":"={{$json.revisedOfferPlan.revisedOffer}}"},{"name":"template","value":"={{$json.revisedOfferPlan.template}}"},{"name":"rationale","value":"={{$json.revisedOfferPlan.rationale}}"},{"name":"dispatchAllowed","value":"={{$json.revisedOfferPlan.dispatchAllowed}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w460f","name":"Build & Dispatch Revised Offer Package","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/negotiation-response-tracking","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"status","value":"={{$json.revisedOfferPlan.status}}"},{"name":"revisedOffer","value":"={{$json.revisedOfferPlan.revisedOffer}}"},{"name":"followUpMinutes","value":"={{$json.revisedOfferPlan.nextFollowUpMinutes}}"},{"name":"requiresHumanReview","value":"={{$json.revisedOfferPlan.requiresHumanReview}}"},{"name":"idempotencyKey","value":"={{'wf460:tracking:'+$json.leadId+':'+$json.dealId+':'+($json.counterofferId||'none')}}"}]},"options":{}},
+      "id":"w460g","name":"Track Negotiation Response","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"negotiation_revised_offer_dispatch_response_tracking"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"action","value":"={{$json.action}}"},{"name":"status","value":"={{$json.revisedOfferPlan.status}}"},{"name":"revisedOffer","value":"={{$json.revisedOfferPlan.revisedOffer}}"},{"name":"dispatchAllowed","value":"={{$json.revisedOfferPlan.dispatchAllowed}}"},{"name":"idempotencyKey","value":"={{'wf460:activity:'+$json.leadId+':'+$json.dealId+':'+($json.counterofferId||'none')+':'+$json.action}}"}]},"options":{}},
+      "id":"w460h","name":"Record Negotiation Action Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w460i","name":"Respond Negotiation Action Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, portfolioId, dealId and action are required'} }}","options":{}},
+      "id":"w460j","name":"Respond Invalid Negotiation Action","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Negotiation Action Webhook":{"main":[[{"node":"Normalize Negotiation Action","type":"main","index":0}]]},
+    "Normalize Negotiation Action":{"main":[[{"node":"Validate Negotiation Action","type":"main","index":0}]]},
+    "Validate Negotiation Action":{"main":[[{"node":"Fetch Negotiation Action Context","type":"main","index":0}],[{"node":"Respond Invalid Negotiation Action","type":"main","index":0}]]},
+    "Fetch Negotiation Action Context":{"main":[[{"node":"Build Revised Offer & Dispatch Decision","type":"main","index":0}]]},
+    "Build Revised Offer & Dispatch Decision":{"main":[[{"node":"Build & Dispatch Revised Offer Package","type":"main","index":0}]]},
+    "Build & Dispatch Revised Offer Package":{"main":[[{"node":"Track Negotiation Response","type":"main","index":0}]]},
+    "Track Negotiation Response":{"main":[[{"node":"Record Negotiation Action Activity","type":"main","index":0}]]},
+    "Record Negotiation Action Activity":{"main":[[{"node":"Respond Negotiation Action Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-460"},{"name":"revised-offer"},{"name":"negotiation"},{"name":"seller-dispatch"},{"name":"response-tracking"},{"name":"protected-mao"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-460","contractStatus":"scaffolded","idempotency":"wf460:{leadId}:{dealId}:{counterofferId}:{action}","notes":"Turns an approved negotiation action into a controlled revised-offer package, seller dispatch decision and response-tracking sequence. Revised offers cannot exceed the canonical protected MAO. Production use requires verified communication provider, canonical MAO source, negotiation history schema, seller consent policy and InsulaCRM API contracts."}
+}

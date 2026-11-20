@@ -1,0 +1,58 @@
+{
+  "name": "WF-435 — Seller Appointment Scheduling, Confirmation & No-Show Recovery Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"seller-appointment-scheduling-confirmation-no-show-recovery","responseMode":"lastNode","options":{}},
+      "id":"w435a","name":"Seller Appointment Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const appointmentId=String(b.appointmentId??'').trim(); const eventType=String(b.eventType??b.status??'').trim().toLowerCase(); return [{json:{...b,leadId,appointmentId,eventType,receivedAt:new Date().toISOString()}}];"},
+      "id":"w435b","name":"Normalize Appointment Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.appointmentId}}","operation":"notEmpty"},{"value1":"={{$json.eventType}}","operation":"notEmpty"}]}},
+      "id":"w435c","name":"Validate Appointment Event","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/appointment-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"appointmentId","value":"={{$json.appointmentId}}"},{"name":"eventType","value":"={{$json.eventType}}"}]},"options":{}},
+      "id":"w435d","name":"Fetch Appointment Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Appointment Event').first().json; const ctx=$json.context??$json; const blocked=['dnc','suppressed','closed','cancelled']; const event=input.eventType; const leadStatus=String(ctx.leadStatus??ctx.status??'').toLowerCase(); const flags=[]; if(blocked.includes(leadStatus)||ctx.dnc===true||ctx.suppressed===true)flags.push('contact_blocked'); const validEvents=['scheduled','confirmed','rescheduled','cancelled','completed','no_show','late_cancel','seller_cancelled','buyer_or_agent_cancelled']; if(!validEvents.includes(event))flags.push('unknown_event'); const appointment=ctx.appointment??{}; const scheduledAt=appointment.scheduledAt??input.scheduledAt??null; const now=Date.now(); const scheduledTime=scheduledAt?new Date(scheduledAt).getTime():null; const minutesUntil=scheduledTime!==null?(scheduledTime-now)/60000:null; let state='manual_review',nextAction='review_appointment_event',recovery=null; if(flags.length){state='blocked';nextAction='stop_appointment_follow_up';} else if(event==='scheduled'){state='scheduled';nextAction='send_confirmation_and_reminder';} else if(event==='confirmed'){state='confirmed';nextAction='send_final_reminder_and_prepare_call';} else if(event==='rescheduled'){state='rescheduled';nextAction='send_updated_confirmation';} else if(event==='completed'){state='completed';nextAction='route_to_seller_qualification_or_offer';} else if(event==='cancelled'||event==='seller_cancelled'||event==='buyer_or_agent_cancelled'){state='cancelled';nextAction='offer_reschedule_and_resume_follow_up';recovery={type:'reschedule_recovery',priority:'high'};} else if(event==='no_show'||event==='late_cancel'){state='no_show_recovery';nextAction='trigger_no_show_recovery_sequence';recovery={type:'no_show_recovery',priority:'high',attempts:3,cadenceMinutes:[30,240,1440]};} const idempotencyKey='wf435:'+input.leadId+':'+input.appointmentId+':'+event; return [{json:{...input,appointmentDecision:{status:flags.length?'blocked':'evaluated',state,nextAction,scheduledAt,minutesUntil,confirmationRequired:['scheduled','rescheduled'].includes(event),reminderRequired:['scheduled','confirmed','rescheduled'].includes(event),recovery,flags,requiresHumanReview:state==='manual_review',confidenceScore:flags.length?10:(state==='manual_review'?55:94)},idempotencyKey}}];"},
+      "id":"w435e","name":"Evaluate Appointment & No-Show Recovery","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/appointment-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"appointmentId","value":"={{$json.appointmentId}}"},{"name":"appointmentDecision","value":"={{JSON.stringify($json.appointmentDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w435f","name":"Persist Appointment Reconciliation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/appointment-communications","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"appointmentId","value":"={{$json.appointmentId}}"},{"name":"action","value":"={{$json.appointmentDecision.nextAction}}"},{"name":"recovery","value":"={{JSON.stringify($json.appointmentDecision.recovery)}}"},{"name":"idempotencyKey","value":"={{'wf435:communications:'+$json.leadId+':'+$json.appointmentId+':'+$json.eventType}}"}]},"options":{}},
+      "id":"w435g","name":"Dispatch Appointment Communications","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_appointment_scheduling_confirmation_no_show_recovery"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"appointmentId","value":"={{$json.appointmentId}}"},{"name":"eventType","value":"={{$json.eventType}}"},{"name":"state","value":"={{$json.appointmentDecision.state}}"},{"name":"nextAction","value":"={{$json.appointmentDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf435:activity:'+$json.leadId+':'+$json.appointmentId+':'+$json.eventType}}"}]},"options":{}},
+      "id":"w435h","name":"Record Appointment Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w435i","name":"Respond Appointment Decision","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, appointmentId and eventType are required'} }}","options":{}},
+      "id":"w435j","name":"Respond Invalid Appointment Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Seller Appointment Webhook":{"main":[[{"node":"Normalize Appointment Event","type":"main","index":0}]]},
+    "Normalize Appointment Event":{"main":[[{"node":"Validate Appointment Event","type":"main","index":0}]]},
+    "Validate Appointment Event":{"main":[[{"node":"Fetch Appointment Context","type":"main","index":0}],[{"node":"Respond Invalid Appointment Event","type":"main","index":0}]]},
+    "Fetch Appointment Context":{"main":[[{"node":"Evaluate Appointment & No-Show Recovery","type":"main","index":0}]]},
+    "Evaluate Appointment & No-Show Recovery":{"main":[[{"node":"Persist Appointment Reconciliation","type":"main","index":0}]]},
+    "Persist Appointment Reconciliation":{"main":[[{"node":"Dispatch Appointment Communications","type":"main","index":0}]]},
+    "Dispatch Appointment Communications":{"main":[[{"node":"Record Appointment Activity","type":"main","index":0}]]},
+    "Record Appointment Activity":{"main":[[{"node":"Respond Appointment Decision","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-435"},{"name":"seller-appointment"},{"name":"confirmation"},{"name":"no-show-recovery"},{"name":"lead-management"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-435","contractStatus":"scaffolded","idempotency":"wf435:{leadId}:{appointmentId}:{eventType}","notes":"Appointment scheduling and no-show recovery is scaffolding pending verified InsulaCRM appointment schema, calendar/communication provider, consent policy, timezone handling, and production escalation contracts."}
+}

@@ -1,0 +1,53 @@
+{
+  "name": "WF-429 — Portfolio Deal Performance, Source Attribution & ROI Intelligence Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"portfolio-deal-performance-source-attribution-roi-intelligence","responseMode":"lastNode","options":{}},
+      "id":"w429a","name":"Portfolio ROI Intelligence Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'default').trim(); const period=String(b.period??'all_time').trim(); const asOfDate=b.asOfDate??new Date().toISOString(); return [{json:{...b,portfolioId,period,asOfDate,receivedAt:new Date().toISOString()}}];"},
+      "id":"w429b","name":"Normalize Portfolio ROI Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.period}}","operation":"notEmpty"}]}},
+      "id":"w429c","name":"Validate Portfolio ROI Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-deal-performance-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"}]},"options":{}},
+      "id":"w429d","name":"Fetch Portfolio Deal Performance Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Portfolio ROI Request').first().json; const ctx=$json.context??$json; const deals=Array.isArray(ctx.closedDeals)?ctx.closedDeals:[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const groups=new Map(); for(const d of deals){if(String(d.status??d.lifecycleState??'').toLowerCase()!=='closed')continue; const source=String(d.source??d.leadSource??'unknown').trim()||'unknown'; const channel=String(d.channel??d.marketingChannel??'unknown').trim()||'unknown'; const campaign=String(d.campaignId??d.campaign??'unattributed').trim()||'unattributed'; const key=source+'|'+channel+'|'+campaign; if(!groups.has(key))groups.set(key,{source,channel,campaign,closedDeals:0,grossRevenue:0,netProfit:0,spend:0,investment:0}); const g=groups.get(key); g.closedDeals++; g.grossRevenue+=n(d.grossRevenue??d.financials?.grossRevenue); g.netProfit+=n(d.netProfit??d.financials?.netProfit); g.spend+=n(d.sourceSpend??d.spend??d.marketingSpend); g.investment+=n(d.totalInvestment??d.purchasePrice??d.financials?.purchasePrice);} const rows=[...groups.values()].map(g=>{const roiBase=g.investment+g.spend; return {...g,costPerClosedDeal:g.closedDeals?g.spend/g.closedDeals:null,profitPerClosedDeal:g.closedDeals?g.netProfit/g.closedDeals:null,roi:roiBase?g.netProfit/roiBase:null,profitMultiple:g.spend?g.netProfit/g.spend:null};}).sort((a,b)=>(b.netProfit-a.netProfit)); const total=rows.reduce((a,g)=>({closedDeals:a.closedDeals+g.closedDeals,grossRevenue:a.grossRevenue+g.grossRevenue,netProfit:a.netProfit+g.netProfit,spend:a.spend+g.spend}),{closedDeals:0,grossRevenue:0,netProfit:0,spend:0}); const top=rows.slice(0,5); const bottom=[...rows].sort((a,b)=>a.netProfit-b.netProfit).slice(0,5); const actions=rows.map(g=>{if(g.roi!==null&&g.roi>=1&&g.netProfit>0)return{...g,recommendation:'scale_or_expand'};if(g.roi!==null&&g.roi<0)return{...g,recommendation:'reduce_or_pause'};if(g.closedDeals<2)return{...g,recommendation:'collect_more_data'};return{...g,recommendation:'maintain_and_optimize'};}); const idempotencyKey='wf429:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,portfolioROIIntelligence:{status:rows.length?'aggregated':'blocked',summary:total,sourceChannelCampaignPerformance:rows,topPerformers:top,underperformers:bottom,recommendations:actions,flags:rows.length?[]:['no_attributed_closed_deals'],nextAction:rows.length?'apply_source_and_campaign_optimization':'reconcile_closed_deal_attribution',confidenceScore:rows.length?94:30},idempotencyKey}}];"},
+      "id":"w429e","name":"Analyze Source Attribution & ROI","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-source-roi-intelligence","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"portfolioROIIntelligence","value":"={{JSON.stringify($json.portfolioROIIntelligence)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w429f","name":"Persist Portfolio Source ROI Intelligence","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"portfolio_deal_performance_source_attribution_roi_intelligence"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"closedDeals","value":"={{$json.portfolioROIIntelligence.summary.closedDeals}}"},{"name":"netProfit","value":"={{$json.portfolioROIIntelligence.summary.netProfit}}"},{"name":"spend","value":"={{$json.portfolioROIIntelligence.summary.spend}}"},{"name":"idempotencyKey","value":"={{'wf429:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"}]},"options":{}},
+      "id":"w429g","name":"Record Portfolio ROI Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w429h","name":"Respond Portfolio ROI Intelligence","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId and period are required'} }}","options":{}},
+      "id":"w429i","name":"Respond Invalid Portfolio ROI Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Portfolio ROI Intelligence Webhook":{"main":[[{"node":"Normalize Portfolio ROI Request","type":"main","index":0}]]},
+    "Normalize Portfolio ROI Request":{"main":[[{"node":"Validate Portfolio ROI Request","type":"main","index":0}]]},
+    "Validate Portfolio ROI Request":{"main":[[{"node":"Fetch Portfolio Deal Performance Context","type":"main","index":0}],[{"node":"Respond Invalid Portfolio ROI Request","type":"main","index":0}]]},
+    "Fetch Portfolio Deal Performance Context":{"main":[[{"node":"Analyze Source Attribution & ROI","type":"main","index":0}]]},
+    "Analyze Source Attribution & ROI":{"main":[[{"node":"Persist Portfolio Source ROI Intelligence","type":"main","index":0}]]},
+    "Persist Portfolio Source ROI Intelligence":{"main":[[{"node":"Record Portfolio ROI Activity","type":"main","index":0}]]},
+    "Record Portfolio ROI Activity":{"main":[[{"node":"Respond Portfolio ROI Intelligence","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-429"},{"name":"portfolio-roi"},{"name":"source-attribution"},{"name":"campaign-performance"},{"name":"analytics"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-429","contractStatus":"scaffolded","idempotency":"wf429:{portfolioId}:{period}:{asOfDate}","notes":"Portfolio source attribution and ROI intelligence is scaffolding pending verified InsulaCRM attribution schema, canonical spend source, accounting definitions, and production analytics API contracts."}
+}

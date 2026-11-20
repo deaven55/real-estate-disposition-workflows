@@ -1,0 +1,52 @@
+{
+  "name": "Canonical Underwriting & Risk Engine — Enrichment, Comps, ARV, Repairs, MAO & Risk",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"canonical-underwriting-risk-engine","responseMode":"lastNode","options":{}},
+      "id":"cure-a","name":"Canonical Underwriting Risk Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const eventType=String(b.eventType??b.type??'underwrite').trim().toLowerCase(); const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const idempotencyKey=String(b.idempotencyKey??('underwriting:'+eventType+':'+leadId+':'+propertyId+':'+dealId)).trim(); return [{json:{...b,eventType,leadId,propertyId,dealId,portfolioId,idempotencyKey,receivedAt:new Date().toISOString()}}];"},
+      "id":"cure-b","name":"Normalize Underwriting Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.eventType}}","operation":"notEmpty"},{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.idempotencyKey}}","operation":"notEmpty"}]}},
+      "id":"cure-c","name":"Validate Underwriting Event","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/canonical-underwriting-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"}]},"options":{}},
+      "id":"cure-d","name":"Fetch Canonical Underwriting Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Underwriting Event').first().json; const c=$json.context??$json; const n=x=>Number.isFinite(Number(x))?Number(x):0; const arv=n(c.arv??input.arv); const repairs=n(c.repairs??c.repairEstimate??input.repairs); const repairCont=n(c.repairContingencyPct??input.repairContingencyPct??10); const closingPct=n(c.closingCostPct??input.closingCostPct??3); const holding=n(c.holdingCosts??input.holdingCosts); const wholesale=n(c.wholesaleCosts??input.wholesaleCosts); const purchase=n(c.purchasePrice??input.purchasePrice); const investorMarginPct=n(c.investorMarginPct??input.investorMarginPct??15); const conventionalRule=n(c.conventionalMaoPct??input.conventionalMaoPct??70); const contingency=repairs*(repairCont/100); const totalCosts=repairs+contingency+(arv*(closingPct/100))+holding+wholesale; const conventionalMao=Math.max(0,arv*(conventionalRule/100)-repairs-contingency-holding-wholesale); const investorMarginMao=Math.max(0,arv-totalCosts-(arv*(investorMarginPct/100))); const protectedMao=Math.min(conventionalMao,investorMarginMao); const recommendedMao=Math.min(protectedMao,n(c.recommendedMao??protectedMao)); const projectedProfit=arv-purchase-totalCosts; const spreadToMao=recommendedMao-purchase; const marginPct=arv>0?(projectedProfit/arv)*100:0; const completeness=[arv>0,repairs>=0,purchase>=0].filter(Boolean).length/3; const flags=[]; if(arv<=0)flags.push('missing_arv'); if(repairs<0)flags.push('invalid_repairs'); if(purchase<0)flags.push('invalid_purchase_price'); if(purchase>protectedMao&&protectedMao>0)flags.push('purchase_above_protected_mao'); if(projectedProfit<0)flags.push('negative_projected_profit'); if(marginPct<10&&arv>0)flags.push('thin_projected_margin'); if(repairs/arv>0.35&&arv>0)flags.push('high_repair_burden'); const riskScore=Math.min(100,Math.round((flags.includes('negative_projected_profit')?40:0)+(flags.includes('purchase_above_protected_mao')?25:0)+(flags.includes('high_repair_burden')?15:0)+(flags.includes('thin_projected_margin')?15:0)+(completeness<1?20:0))); const riskLevel=riskScore>=60?'critical':riskScore>=35?'high':riskScore>=15?'medium':'low'; const decision=flags.includes('missing_arv')||flags.includes('invalid_repairs')||flags.includes('invalid_purchase_price')?'human_review':flags.includes('negative_projected_profit')||flags.includes('purchase_above_protected_mao')?'reprice_or_exit':riskLevel==='high'||riskLevel==='critical'?'proceed_with_caution':purchase>0&&purchase<=recommendedMao?'approved_for_offer':'prepare_underwriting'; return [{json:{...input,canonicalUnderwriting:{arv,repairs,repairContingencyPct:repairCont,repairContingency:contingency,closingCostPct:closingPct,holdingCosts:holding,wholesaleCosts:wholesale,totalCosts,conventionalMao,investorMarginMao,protectedMao,recommendedMao,purchasePrice:purchase,spreadToMao,projectedInvestorProfit:projectedProfit,projectedMarginPct:marginPct,dataCompleteness:completeness,riskScore,riskLevel,flags,decision,confidenceScore:Math.round(completeness*70+(flags.length===0?30:10))},idempotencyKey}}];"},
+      "id":"cure-e","name":"Calculate Canonical Underwriting & Risk","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/canonical-underwriting-decision","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"arv","value":"={{$json.canonicalUnderwriting.arv}}"},{"name":"repairs","value":"={{$json.canonicalUnderwriting.repairs}}"},{"name":"protectedMao","value":"={{$json.canonicalUnderwriting.protectedMao}}"},{"name":"recommendedMao","value":"={{$json.canonicalUnderwriting.recommendedMao}}"},{"name":"purchasePrice","value":"={{$json.canonicalUnderwriting.purchasePrice}}"},{"name":"projectedInvestorProfit","value":"={{$json.canonicalUnderwriting.projectedInvestorProfit}}"},{"name":"riskScore","value":"={{$json.canonicalUnderwriting.riskScore}}"},{"name":"riskLevel","value":"={{$json.canonicalUnderwriting.riskLevel}}"},{"name":"decision","value":"={{$json.canonicalUnderwriting.decision}}"},{"name":"flags","value":"={{JSON.stringify($json.canonicalUnderwriting.flags)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"cure-f","name":"Persist Canonical Underwriting Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"canonical_underwriting_risk_decision"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"decision","value":"={{$json.canonicalUnderwriting.decision}}"},{"name":"riskLevel","value":"={{$json.canonicalUnderwriting.riskLevel}}"},{"name":"riskScore","value":"={{$json.canonicalUnderwriting.riskScore}}"},{"name":"protectedMao","value":"={{$json.canonicalUnderwriting.protectedMao}}"},{"name":"idempotencyKey","value":"={{'underwriting:activity:'+$json.idempotencyKey}}"}]},"options":{}},
+      "id":"cure-g","name":"Record Underwriting Risk Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"cure-h","name":"Respond Underwriting Risk Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'eventType, leadId, propertyId and idempotencyKey are required'} }}","options":{}},
+      "id":"cure-i","name":"Respond Invalid Underwriting Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Canonical Underwriting Risk Webhook":{"main":[[{"node":"Normalize Underwriting Event","type":"main","index":0}]]},
+    "Normalize Underwriting Event":{"main":[[{"node":"Validate Underwriting Event","type":"main","index":0}]]},
+    "Validate Underwriting Event":{"main":[[{"node":"Fetch Canonical Underwriting Context","type":"main","index":0}],[{"node":"Respond Invalid Underwriting Event","type":"main","index":0}]]},
+    "Fetch Canonical Underwriting Context":{"main":[[{"node":"Calculate Canonical Underwriting & Risk","type":"main","index":0}]]},
+    "Calculate Canonical Underwriting & Risk":{"main":[[{"node":"Persist Canonical Underwriting Decision","type":"main","index":0}]]},
+    "Persist Canonical Underwriting Decision":{"main":[[{"node":"Record Underwriting Risk Activity","type":"main","index":0}]]},
+    "Record Underwriting Risk Activity":{"main":[[{"node":"Respond Underwriting Risk Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"canonical-engine"},{"name":"underwriting"},{"name":"risk"},{"name":"mao"},{"name":"arv"},{"name":"repairs"},{"name":"InsulaCRM"}],
+  "meta":{"engine":"underwriting_and_risk","contractStatus":"scaffolded","purpose":"Canonical production boundary combining property/deal enrichment, comps/ARV/repair analysis, underwriting, MAO protection and profitability/risk validation. Historical WF-410 through WF-413 and related underwriting logic are reference implementations.","productionRequirements":["verified InsulaCRM API base URL","canonical property/deal schema","verified comp and repair data providers","canonical accounting assumptions","central idempotency/replay service","atomic deal-state transitions"]}}

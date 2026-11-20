@@ -2,56 +2,604 @@
   "name": "Canonical Title & Closing Engine — Title Order, Risk, Clearance, Settlement & Closing Finalization",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"canonical-title-closing-engine","responseMode":"lastNode","options":{}},
-      "id":"ctc-a","name":"Canonical Title Closing Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "canonical-title-closing-engine",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "ctc-a",
+      "name": "Canonical Title Closing Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const eventType=String(b.eventType??b.type??'executed_contract').trim().toLowerCase(); const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const assignmentId=String(b.assignmentId??'').trim(); const titleOrderId=String(b.titleOrderId??'').trim(); const settlementId=String(b.settlementId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const idempotencyKey=String(b.idempotencyKey??('title-closing:'+eventType+':'+leadId+':'+dealId+':'+assignmentId+':'+(b.eventId??titleOrderId??settlementId))).trim(); return [{json:{...b,eventType,leadId,propertyId,dealId,contractId,assignmentId,titleOrderId,settlementId,portfolioId,idempotencyKey,receivedAt:new Date().toISOString()}}];"},
-      "id":"ctc-b","name":"Normalize Title Closing Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const eventType=String(b.eventType??b.type??'executed_contract').trim().toLowerCase(); const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const assignmentId=String(b.assignmentId??'').trim(); const titleOrderId=String(b.titleOrderId??'').trim(); const settlementId=String(b.settlementId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const idempotencyKey=String(b.idempotencyKey??('title-closing:'+eventType+':'+leadId+':'+dealId+':'+assignmentId+':'+(b.eventId??titleOrderId??settlementId))).trim(); return [{json:{...b,eventType,leadId,propertyId,dealId,contractId,assignmentId,titleOrderId,settlementId,portfolioId,idempotencyKey,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "ctc-b",
+      "name": "Normalize Title Closing Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.eventType}}","operation":"notEmpty"},{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.idempotencyKey}}","operation":"notEmpty"}]}},
-      "id":"ctc-c","name":"Validate Title Closing Event","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.eventType}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.idempotencyKey}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "ctc-c",
+      "name": "Validate Title Closing Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closings/canonical-closing-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"}]},"options":{}},
-      "id":"ctc-d","name":"Fetch Canonical Closing Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closings/canonical-closing-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "titleOrderId",
+              "value": "={{$json.titleOrderId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ctc-d",
+      "name": "Fetch Canonical Closing Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Title Closing Event').first().json; const c=$json.context??$json; const n=x=>Number.isFinite(Number(x))?Number(x):0; const event=String(input.eventType).toLowerCase(); const dealStatus=String(c.dealStatus??'').toLowerCase(); const contractExecuted=c.contractExecuted===true||String(c.contractStatus??'').toLowerCase()==='executed'; const titleStarted=c.titleSearchStarted===true||c.titleOrderId!=null; const titleClear=c.titleCleared===true||String(c.titleStatus??'').toLowerCase()==='cleared'; const liens=n(c.openLiens??c.lienCount); const judgments=n(c.openJudgments??c.judgmentCount); const taxIssues=n(c.taxIssues??c.taxLienCount); const titleExposure=n(c.titleExposure??0); const settlementReady=c.settlementStatementReady===true; const settlementReconciled=c.settlementReconciled===true; const closingCompleted=c.closingCompleted===true; const fundsConfirmed=c.fundsConfirmed===true; const buyerFundsConfirmed=c.buyerFundsConfirmed===true; const sellerPayoffConfirmed=c.sellerPayoffConfirmed===true; const purchasePrice=n(c.purchasePrice); const assignmentFee=n(c.assignmentFee); const totalFunds=n(c.totalFunds); const expectedFunds=purchasePrice+Math.max(0,assignmentFee); const tolerance=0.01; const fundsBalanced=Math.abs(totalFunds-expectedFunds)<=tolerance||c.fundsBalanced===true; const flags=[]; let decision='review'; let action='human_review'; if(['cancelled','disputed'].includes(dealStatus)){decision='blocked';action='hold_closing';flags.push('protected_deal_state');} else if(!contractExecuted){decision='contract_not_executed';action='return_to_contract_engine';flags.push('executed_contract_missing');} else if(event==='title_order'||event==='executed_contract'){decision=titleStarted?'title_in_progress':'initiate_title_order';action=titleStarted?'await_title_results':'start_title_search_and_closing_order';} else if(['title_result','title_search_completed'].includes(event)){ if(liens+judgments+taxIssues>0||titleExposure>0){const severity=titleExposure>10000||liens+judgments+taxIssues>=3?'critical':liens+judgments+taxIssues>=1?'high':'medium'; decision=severity==='critical'?'title_hold_critical':'title_resolution_required';action=severity==='critical'?'halt_and_escalate_title':'resolve_liens_tax_or_encumbrances';flags.push('title_risk_detected');} else {decision='title_cleared';action='prepare_closing_date_and_settlement';}} else if(event==='title_clearance'||titleClear){ if(!settlementReady){decision='settlement_pending';action='complete_settlement_statement';flags.push('settlement_not_ready');} else if(!settlementReconciled){decision='settlement_reconciliation_required';action='reconcile_assignment_fee_costs_and_funds';flags.push('settlement_not_reconciled');} else {decision='closing_ready';action='coordinate_buyer_seller_title_company_closing';}} else if(['settlement','settlement_event'].includes(event)){ if(!settlementReady){decision='settlement_pending';action='complete_settlement_statement';} else if(!settlementReconciled){decision='settlement_reconciliation_required';action='reconcile_settlement';} else {decision='closing_ready';action='coordinate_closing';}} else if(['closing_completed','funds_confirmed','close'].includes(event)){ if(!titleClear||!settlementReconciled||!closingCompleted||!fundsConfirmed||!buyerFundsConfirmed||!sellerPayoffConfirmed||!fundsBalanced){decision='closing_completion_pending';action='collect_missing_closing_evidence'; if(!titleClear)flags.push('title_not_cleared'); if(!settlementReconciled)flags.push('settlement_not_reconciled'); if(!closingCompleted)flags.push('closing_completion_missing'); if(!fundsConfirmed||!buyerFundsConfirmed||!sellerPayoffConfirmed||!fundsBalanced)flags.push('funds_evidence_incomplete');} else {decision='closed';action='finalize_deal_and_trigger_financial_reconciliation';}} else if(event==='rescheduled'){decision='closing_rescheduled';action='update_closing_date_and_notify_parties';} else if(event==='cancelled'){decision='closing_cancelled';action='hold_and_recovery_review';} else {decision=titleClear&&settlementReconciled?'closing_ready':'closing_review';action=titleClear?'complete_settlement_and_closing_requirements':'review_title_and_closing_requirements';} const titleRiskScore=Math.min(100,(liens+judgments+taxIssues)*20+(titleExposure>0?20:0)); const readinessScore=Math.round((contractExecuted?15:0)+(titleClear?20:0)+(settlementReady?15:0)+(settlementReconciled?15:0)+(closingCompleted?10:0)+(fundsConfirmed?10:0)+(buyerFundsConfirmed?5:0)+(sellerPayoffConfirmed?5:0)+(fundsBalanced?5:0)); return [{json:{...input,canonicalTitleClosing:{decision,action,titleRiskScore,titleExposure,liens,judgments,taxIssues,contractExecuted,titleStarted,titleCleared:titleClear,settlementReady,settlementReconciled,closingCompleted,fundsConfirmed,buyerFundsConfirmed,sellerPayoffConfirmed,totalFunds,expectedFunds,fundsBalanced,tolerance,readinessScore,flags,nextEvent:decision==='closed'?'financial_reconciliation':decision==='title_cleared'?'closing_coordination':'none',requiresHumanReview:decision.includes('critical')||decision==='title_resolution_required'||decision==='closing_completion_pending',confidenceScore:Math.min(95,40+readinessScore)},idempotencyKey}}];"},
-      "id":"ctc-e","name":"Evaluate Canonical Title Closing Risk & Readiness","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Title Closing Event').first().json; const c=$json.context??$json; const n=x=>Number.isFinite(Number(x))?Number(x):0; const event=String(input.eventType).toLowerCase(); const dealStatus=String(c.dealStatus??'').toLowerCase(); const contractExecuted=c.contractExecuted===true||String(c.contractStatus??'').toLowerCase()==='executed'; const titleStarted=c.titleSearchStarted===true||c.titleOrderId!=null; const titleClear=c.titleCleared===true||String(c.titleStatus??'').toLowerCase()==='cleared'; const liens=n(c.openLiens??c.lienCount); const judgments=n(c.openJudgments??c.judgmentCount); const taxIssues=n(c.taxIssues??c.taxLienCount); const titleExposure=n(c.titleExposure??0); const settlementReady=c.settlementStatementReady===true; const settlementReconciled=c.settlementReconciled===true; const closingCompleted=c.closingCompleted===true; const fundsConfirmed=c.fundsConfirmed===true; const buyerFundsConfirmed=c.buyerFundsConfirmed===true; const sellerPayoffConfirmed=c.sellerPayoffConfirmed===true; const purchasePrice=n(c.purchasePrice); const assignmentFee=n(c.assignmentFee); const totalFunds=n(c.totalFunds); const expectedFunds=purchasePrice+Math.max(0,assignmentFee); const tolerance=0.01; const fundsBalanced=Math.abs(totalFunds-expectedFunds)<=tolerance||c.fundsBalanced===true; const flags=[]; let decision='review'; let action='human_review'; if(['cancelled','disputed'].includes(dealStatus)){decision='blocked';action='hold_closing';flags.push('protected_deal_state');} else if(!contractExecuted){decision='contract_not_executed';action='return_to_contract_engine';flags.push('executed_contract_missing');} else if(event==='title_order'||event==='executed_contract'){decision=titleStarted?'title_in_progress':'initiate_title_order';action=titleStarted?'await_title_results':'start_title_search_and_closing_order';} else if(['title_result','title_search_completed'].includes(event)){ if(liens+judgments+taxIssues>0||titleExposure>0){const severity=titleExposure>10000||liens+judgments+taxIssues>=3?'critical':liens+judgments+taxIssues>=1?'high':'medium'; decision=severity==='critical'?'title_hold_critical':'title_resolution_required';action=severity==='critical'?'halt_and_escalate_title':'resolve_liens_tax_or_encumbrances';flags.push('title_risk_detected');} else {decision='title_cleared';action='prepare_closing_date_and_settlement';}} else if(event==='title_clearance'||titleClear){ if(!settlementReady){decision='settlement_pending';action='complete_settlement_statement';flags.push('settlement_not_ready');} else if(!settlementReconciled){decision='settlement_reconciliation_required';action='reconcile_assignment_fee_costs_and_funds';flags.push('settlement_not_reconciled');} else {decision='closing_ready';action='coordinate_buyer_seller_title_company_closing';}} else if(['settlement','settlement_event'].includes(event)){ if(!settlementReady){decision='settlement_pending';action='complete_settlement_statement';} else if(!settlementReconciled){decision='settlement_reconciliation_required';action='reconcile_settlement';} else {decision='closing_ready';action='coordinate_closing';}} else if(['closing_completed','funds_confirmed','close'].includes(event)){ if(!titleClear||!settlementReconciled||!closingCompleted||!fundsConfirmed||!buyerFundsConfirmed||!sellerPayoffConfirmed||!fundsBalanced){decision='closing_completion_pending';action='collect_missing_closing_evidence'; if(!titleClear)flags.push('title_not_cleared'); if(!settlementReconciled)flags.push('settlement_not_reconciled'); if(!closingCompleted)flags.push('closing_completion_missing'); if(!fundsConfirmed||!buyerFundsConfirmed||!sellerPayoffConfirmed||!fundsBalanced)flags.push('funds_evidence_incomplete');} else {decision='closed';action='finalize_deal_and_trigger_financial_reconciliation';}} else if(event==='rescheduled'){decision='closing_rescheduled';action='update_closing_date_and_notify_parties';} else if(event==='cancelled'){decision='closing_cancelled';action='hold_and_recovery_review';} else {decision=titleClear&&settlementReconciled?'closing_ready':'closing_review';action=titleClear?'complete_settlement_and_closing_requirements':'review_title_and_closing_requirements';} const titleRiskScore=Math.min(100,(liens+judgments+taxIssues)*20+(titleExposure>0?20:0)); const readinessScore=Math.round((contractExecuted?15:0)+(titleClear?20:0)+(settlementReady?15:0)+(settlementReconciled?15:0)+(closingCompleted?10:0)+(fundsConfirmed?10:0)+(buyerFundsConfirmed?5:0)+(sellerPayoffConfirmed?5:0)+(fundsBalanced?5:0)); return [{json:{...input,canonicalTitleClosing:{decision,action,titleRiskScore,titleExposure,liens,judgments,taxIssues,contractExecuted,titleStarted,titleCleared:titleClear,settlementReady,settlementReconciled,closingCompleted,fundsConfirmed,buyerFundsConfirmed,sellerPayoffConfirmed,totalFunds,expectedFunds,fundsBalanced,tolerance,readinessScore,flags,nextEvent:decision==='closed'?'financial_reconciliation':decision==='title_cleared'?'closing_coordination':'none',requiresHumanReview:decision.includes('critical')||decision==='title_resolution_required'||decision==='closing_completion_pending',confidenceScore:Math.min(95,40+readinessScore)},idempotencyKey}}];"
+      },
+      "id": "ctc-e",
+      "name": "Evaluate Canonical Title Closing Risk & Readiness",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closings/canonical-closing-decision","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"decision","value":"={{$json.canonicalTitleClosing.decision}}"},{"name":"action","value":"={{$json.canonicalTitleClosing.action}}"},{"name":"titleRiskScore","value":"={{$json.canonicalTitleClosing.titleRiskScore}}"},{"name":"titleCleared","value":"={{$json.canonicalTitleClosing.titleCleared}}"},{"name":"settlementReady","value":"={{$json.canonicalTitleClosing.settlementReady}}"},{"name":"settlementReconciled","value":"={{$json.canonicalTitleClosing.settlementReconciled}}"},{"name":"closingCompleted","value":"={{$json.canonicalTitleClosing.closingCompleted}}"},{"name":"fundsConfirmed","value":"={{$json.canonicalTitleClosing.fundsConfirmed}}"},{"name":"fundsBalanced","value":"={{$json.canonicalTitleClosing.fundsBalanced}}"},{"name":"readinessScore","value":"={{$json.canonicalTitleClosing.readinessScore}}"},{"name":"nextEvent","value":"={{$json.canonicalTitleClosing.nextEvent}}"},{"name":"flags","value":"={{JSON.stringify($json.canonicalTitleClosing.flags)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"ctc-f","name":"Persist Canonical Title Closing Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closings/canonical-closing-decision",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "titleOrderId",
+              "value": "={{$json.titleOrderId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.canonicalTitleClosing.decision}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.canonicalTitleClosing.action}}"
+            },
+            {
+              "name": "titleRiskScore",
+              "value": "={{$json.canonicalTitleClosing.titleRiskScore}}"
+            },
+            {
+              "name": "titleCleared",
+              "value": "={{$json.canonicalTitleClosing.titleCleared}}"
+            },
+            {
+              "name": "settlementReady",
+              "value": "={{$json.canonicalTitleClosing.settlementReady}}"
+            },
+            {
+              "name": "settlementReconciled",
+              "value": "={{$json.canonicalTitleClosing.settlementReconciled}}"
+            },
+            {
+              "name": "closingCompleted",
+              "value": "={{$json.canonicalTitleClosing.closingCompleted}}"
+            },
+            {
+              "name": "fundsConfirmed",
+              "value": "={{$json.canonicalTitleClosing.fundsConfirmed}}"
+            },
+            {
+              "name": "fundsBalanced",
+              "value": "={{$json.canonicalTitleClosing.fundsBalanced}}"
+            },
+            {
+              "name": "readinessScore",
+              "value": "={{$json.canonicalTitleClosing.readinessScore}}"
+            },
+            {
+              "name": "nextEvent",
+              "value": "={{$json.canonicalTitleClosing.nextEvent}}"
+            },
+            {
+              "name": "flags",
+              "value": "={{JSON.stringify($json.canonicalTitleClosing.flags)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ctc-f",
+      "name": "Persist Canonical Title Closing Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closings/canonical-closing-coordination","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"sellerId","value":"={{$json.sellerId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"decision","value":"={{$json.canonicalTitleClosing.decision}}"},{"name":"action","value":"={{$json.canonicalTitleClosing.action}}"},{"name":"nextEvent","value":"={{$json.canonicalTitleClosing.nextEvent}}"},{"name":"requiresHumanReview","value":"={{$json.canonicalTitleClosing.requiresHumanReview}}"},{"name":"idempotencyKey","value":"={{'title-closing:dispatch:'+$json.idempotencyKey}}"}]},"options":{}},
-      "id":"ctc-g","name":"Dispatch Canonical Closing Coordination","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closings/canonical-closing-coordination",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "titleOrderId",
+              "value": "={{$json.titleOrderId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.canonicalTitleClosing.decision}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.canonicalTitleClosing.action}}"
+            },
+            {
+              "name": "nextEvent",
+              "value": "={{$json.canonicalTitleClosing.nextEvent}}"
+            },
+            {
+              "name": "requiresHumanReview",
+              "value": "={{$json.canonicalTitleClosing.requiresHumanReview}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'title-closing:dispatch:'+$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ctc-g",
+      "name": "Dispatch Canonical Closing Coordination",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"canonical_title_closing_decision"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"decision","value":"={{$json.canonicalTitleClosing.decision}}"},{"name":"titleRiskScore","value":"={{$json.canonicalTitleClosing.titleRiskScore}}"},{"name":"readinessScore","value":"={{$json.canonicalTitleClosing.readinessScore}}"},{"name":"nextEvent","value":"={{$json.canonicalTitleClosing.nextEvent}}"},{"name":"idempotencyKey","value":"={{'title-closing:activity:'+$json.idempotencyKey}}"}]},"options":{}},
-      "id":"ctc-h","name":"Record Title Closing Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "canonical_title_closing_decision"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.canonicalTitleClosing.decision}}"
+            },
+            {
+              "name": "titleRiskScore",
+              "value": "={{$json.canonicalTitleClosing.titleRiskScore}}"
+            },
+            {
+              "name": "readinessScore",
+              "value": "={{$json.canonicalTitleClosing.readinessScore}}"
+            },
+            {
+              "name": "nextEvent",
+              "value": "={{$json.canonicalTitleClosing.nextEvent}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'title-closing:activity:'+$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ctc-h",
+      "name": "Record Title Closing Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"ctc-i","name":"Respond Title Closing Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "ctc-i",
+      "name": "Respond Title Closing Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'eventType, leadId, dealId and idempotencyKey are required'} }}","options":{}},
-      "id":"ctc-j","name":"Respond Invalid Title Closing Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'eventType, leadId, dealId and idempotencyKey are required'} }}",
+        "options": {}
+      },
+      "id": "ctc-j",
+      "name": "Respond Invalid Title Closing Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_N8N_BASE_URL/webhook/canonical-lifecycle-handoff",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "title-closing"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "sellerId",
+              "value": "={{$json.sellerId??''}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "buyerId",
+              "value": "={{$json.buyerId??''}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId??''}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId??''}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            },
+            {
+              "name": "correlationId",
+              "value": "={{$json.correlationId??('corr:'+$json.idempotencyKey)}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.canonicalTitleClosing?.decision}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ctc-lh",
+      "name": "Emit Next Canonical Lifecycle Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        120
+      ]
     }
   ],
-  "connections":{
-    "Canonical Title Closing Webhook":{"main":[[{"node":"Normalize Title Closing Event","type":"main","index":0}]]},
-    "Normalize Title Closing Event":{"main":[[{"node":"Validate Title Closing Event","type":"main","index":0}]]},
-    "Validate Title Closing Event":{"main":[[{"node":"Fetch Canonical Closing Context","type":"main","index":0}],[{"node":"Respond Invalid Title Closing Event","type":"main","index":0}]]},
-    "Fetch Canonical Closing Context":{"main":[[{"node":"Evaluate Canonical Title Closing Risk & Readiness","type":"main","index":0}]]},
-    "Evaluate Canonical Title Closing Risk & Readiness":{"main":[[{"node":"Persist Canonical Title Closing Decision","type":"main","index":0}]]},
-    "Persist Canonical Title Closing Decision":{"main":[[{"node":"Dispatch Canonical Closing Coordination","type":"main","index":0}]]},
-    "Dispatch Canonical Closing Coordination":{"main":[[{"node":"Record Title Closing Activity","type":"main","index":0}]]},
-    "Record Title Closing Activity":{"main":[[{"node":"Respond Title Closing Result","type":"main","index":0}]]}
+  "connections": {
+    "Canonical Title Closing Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Title Closing Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Title Closing Event": {
+      "main": [
+        [
+          {
+            "node": "Validate Title Closing Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Title Closing Event": {
+      "main": [
+        [
+          {
+            "node": "Fetch Canonical Closing Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Title Closing Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Canonical Closing Context": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Canonical Title Closing Risk & Readiness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Canonical Title Closing Risk & Readiness": {
+      "main": [
+        [
+          {
+            "node": "Persist Canonical Title Closing Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Canonical Title Closing Decision": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Canonical Closing Coordination",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Emit Next Canonical Lifecycle Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Canonical Closing Coordination": {
+      "main": [
+        [
+          {
+            "node": "Record Title Closing Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Title Closing Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Title Closing Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"canonical-engine"},{"name":"title"},{"name":"closing"},{"name":"settlement"},{"name":"liens"},{"name":"escrow"},{"name":"InsulaCRM"}],
-  "meta":{"engine":"title_and_closing","contractStatus":"scaffolded","purpose":"Canonical production boundary combining executed-contract handoff, title order/search, lien/tax/encumbrance risk, clearance, settlement reconciliation, buyer/seller/title coordination and closing/funds finalization. Historical WF-421 through WF-425 and WF-443 through WF-447 are reference implementations.","productionRequirements":["verified InsulaCRM API base URL","canonical title/closing schema","verified title and closing provider integrations","jurisdiction-specific title/tax rules","authoritative settlement and funds evidence","atomic deal lifecycle transitions","central idempotency/replay service"]}}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "canonical-engine"
+    },
+    {
+      "name": "title"
+    },
+    {
+      "name": "closing"
+    },
+    {
+      "name": "settlement"
+    },
+    {
+      "name": "liens"
+    },
+    {
+      "name": "escrow"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "engine": "title_and_closing",
+    "contractStatus": "scaffolded",
+    "purpose": "Canonical production boundary combining executed-contract handoff, title order/search, lien/tax/encumbrance risk, clearance, settlement reconciliation, buyer/seller/title coordination and closing/funds finalization. Historical WF-421 through WF-425 and WF-443 through WF-447 are reference implementations.",
+    "productionRequirements": [
+      "verified InsulaCRM API base URL",
+      "canonical title/closing schema",
+      "verified title and closing provider integrations",
+      "jurisdiction-specific title/tax rules",
+      "authoritative settlement and funds evidence",
+      "atomic deal lifecycle transitions",
+      "central idempotency/replay service",
+      "verified n8n lifecycle handoff webhook",
+      "live end-to-end lifecycle verification"
+    ]
+  }
+}

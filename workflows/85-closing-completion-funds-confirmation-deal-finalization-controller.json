@@ -1,0 +1,58 @@
+{
+  "name": "WF-447 — Closing Completion → Funds Confirmation & Deal Finalization Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"closing-completion-funds-confirmation-deal-finalization","responseMode":"lastNode","options":{}},
+      "id":"w447a","name":"Closing Completion Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const settlementId=String(b.settlementId??'').trim(); const closingEventId=String(b.closingEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,settlementId,closingEventId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w447b","name":"Normalize Closing Completion Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"},{"value1":"={{$json.settlementId}}","operation":"notEmpty"},{"value1":"={{$json.closingEventId}}","operation":"notEmpty"}]}},
+      "id":"w447c","name":"Validate Closing Completion Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/completion-finalization-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"closingEventId","value":"={{$json.closingEventId}}"}]},"options":{}},
+      "id":"w447d","name":"Fetch Closing Completion Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Closing Completion Request').first().json; const ctx=$json.context??$json; const flags=[]; const state=String(ctx.dealState??ctx.status??'').toLowerCase(); if(['cancelled','disputed','dnc','suppressed'].includes(state)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); const executionState=String(ctx.contractExecutionState??'').toLowerCase(); if(!['executed','fully_executed','contract_executed'].includes(executionState))flags.push('contract_not_executed'); const titleCleared=ctx.titleCleared===true||ctx.titleClearanceState==='cleared'; if(!titleCleared)flags.push('title_not_cleared'); const settlementReconciled=ctx.settlementReconciled===true||ctx.settlementState==='reconciled'; if(!settlementReconciled)flags.push('settlement_not_reconciled'); const n=v=>Number.isFinite(Number(v))?Number(v):0; const closing=ctx.closing??{}; const closingCompleted=closing.completed===true||['completed','closed','funds_confirmed'].includes(String(closing.status??'').toLowerCase()); const completionAt=String(closing.completedAt??ctx.closingCompletedAt??'').trim(); const fundsConfirmed=closing.fundsConfirmed===true||ctx.fundsConfirmed===true; const buyerFundsConfirmed=closing.buyerFundsConfirmed===true||ctx.buyerFundsConfirmed===true; const sellerPayoffConfirmed=closing.sellerPayoffConfirmed===true||ctx.sellerPayoffConfirmed===true; const totalFunds=n(closing.totalFunds??ctx.totalFunds); if(!closingCompleted)flags.push('closing_not_completed'); if(!completionAt)flags.push('closing_completion_timestamp_missing'); if(!fundsConfirmed)flags.push('funds_not_confirmed'); if(!buyerFundsConfirmed)flags.push('buyer_funds_not_confirmed'); if(!sellerPayoffConfirmed)flags.push('seller_payoff_not_confirmed'); if(!(totalFunds>0))flags.push('total_funds_missing'); const finalizable=flags.length===0; let decision='hold_for_closing_completion',nextAction='resolve_closing_completion_requirements',lifecycleState='closing_pending'; if(flags.includes('deal_or_contact_blocked')){decision='blocked';nextAction='stop_deal_finalization';lifecycleState='blocked';}else if(finalizable){decision='deal_finalized_closed';nextAction='trigger_post_closing_reconciliation_and_archive';lifecycleState='closed';} const evidence={closingCompleted,completionAt:completionAt||null,fundsConfirmed,buyerFundsConfirmed,sellerPayoffConfirmed,totalFunds}; const idempotencyKey='wf447:'+input.leadId+':'+input.dealId+':'+input.settlementId+':'+input.closingEventId; return [{json:{...input,closingFinalizationDecision:{status:lifecycleState,decision,nextAction,executionState,titleCleared,settlementReconciled,evidence,flags,requiresHumanReview:!finalizable,confidenceScore:finalizable?99:25},idempotencyKey}}];"},
+      "id":"w447e","name":"Validate Closing Completion Funds & Finalization","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/completion-finalization-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"closingEventId","value":"={{$json.closingEventId}}"},{"name":"closingFinalizationDecision","value":"={{JSON.stringify($json.closingFinalizationDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w447f","name":"Persist Closing Finalization","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/lifecycle-finalization","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"lifecycleState","value":"={{$json.closingFinalizationDecision.lifecycleState}}"},{"name":"nextAction","value":"={{$json.closingFinalizationDecision.nextAction}}"},{"name":"closingEvidence","value":"={{JSON.stringify($json.closingFinalizationDecision.evidence)}}"},{"name":"idempotencyKey","value":"={{'wf447:lifecycle:'+$json.leadId+':'+$json.dealId+':'+$json.closingEventId}}"}]},"options":{}},
+      "id":"w447g","name":"Finalize Deal Lifecycle","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"closing_completion_funds_confirmation_deal_finalization"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"closingEventId","value":"={{$json.closingEventId}}"},{"name":"decision","value":"={{$json.closingFinalizationDecision.decision}}"},{"name":"lifecycleState","value":"={{$json.closingFinalizationDecision.status}}"},{"name":"idempotencyKey","value":"={{'wf447:activity:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.closingEventId}}"}]},"options":{}},
+      "id":"w447h","name":"Record Closing Finalization Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w447i","name":"Respond Closing Finalization","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, contractId, settlementId and closingEventId are required'} }}","options":{}},
+      "id":"w447j","name":"Respond Invalid Closing Completion Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Closing Completion Webhook":{"main":[[{"node":"Normalize Closing Completion Request","type":"main","index":0}]]},
+    "Normalize Closing Completion Request":{"main":[[{"node":"Validate Closing Completion Request","type":"main","index":0}]]},
+    "Validate Closing Completion Request":{"main":[[{"node":"Fetch Closing Completion Context","type":"main","index":0}],[{"node":"Respond Invalid Closing Completion Request","type":"main","index":0}]]},
+    "Fetch Closing Completion Context":{"main":[[{"node":"Validate Closing Completion Funds & Finalization","type":"main","index":0}]]},
+    "Validate Closing Completion Funds & Finalization":{"main":[[{"node":"Persist Closing Finalization","type":"main","index":0}]]},
+    "Persist Closing Finalization":{"main":[[{"node":"Finalize Deal Lifecycle","type":"main","index":0}]]},
+    "Finalize Deal Lifecycle":{"main":[[{"node":"Record Closing Finalization Activity","type":"main","index":0}]]},
+    "Record Closing Finalization Activity":{"main":[[{"node":"Respond Closing Finalization","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-447"},{"name":"closing-completion"},{"name":"funds-confirmation"},{"name":"deal-finalization"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-447","contractStatus":"scaffolded","idempotency":"wf447:{leadId}:{dealId}:{settlementId}:{closingEventId}","notes":"Finalizes a deal only after executed-contract evidence, title clearance, settlement reconciliation and closing/funds evidence are verified. Production use requires authoritative funds evidence, accounting controls, jurisdiction-specific closing rules and verified InsulaCRM lifecycle contracts."}
+}

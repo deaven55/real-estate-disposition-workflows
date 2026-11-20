@@ -1,0 +1,53 @@
+{
+  "name": "WF-417 — Buyer Offer Comparison & Selection Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"buyer-offer-comparison-selection","responseMode":"lastNode","options":{}},
+      "id":"w417a","name":"Buyer Offer Comparison Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w417b","name":"Normalize Buyer Offer Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"}]}},
+      "id":"w417c","name":"Validate Offer Comparison Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/buyer-offer-comparison-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"}]},"options":{}},
+      "id":"w417d","name":"Fetch Buyer Offer Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Buyer Offer Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const offers=Array.isArray(ctx.offers)?ctx.offers:[]; const num=v=>Number.isFinite(Number(v))?Number(v):null; const purchasePrice=num(d.purchasePrice??d.contractPrice); const assignmentFee=num(d.assignmentFee); const arv=num(d.arv); const repairs=num(d.repairs); const closingCosts=num(d.closingCosts)??0; const holdingCosts=num(d.holdingCosts)??0; const buyerOffers=offers.map(o=>{const amount=num(o.offerAmount??o.amount); const fee=num(o.assignmentFee)??assignmentFee??0; const total=amount===null?null:amount+fee; const buyerProfit=(arv!==null&&repairs!==null&&total!==null)?arv-repairs-closingCosts-holdingCosts-total:null; const spread=(purchasePrice!==null&&amount!==null)?amount-purchasePrice:null; const pof=o.proofOfFundsVerified===true; const eligible=o.assignmentEligible!==false; const blocked=o.active===false||o.suppressed===true||o.dnc===true||!eligible; let score=0; if(amount!==null&&purchasePrice!==null)score+=amount>=purchasePrice?30:0; if(fee!==null)score+=Math.min(20,Math.max(0,fee/1000)); if(pof)score+=20; if(eligible)score+=15; if(o.responseSpeedHours!==undefined)score+=Math.max(0,Math.min(10,10-(Number(o.responseSpeedHours)||10))); if(o.closingCertainty!==undefined)score+=Math.max(0,Math.min(5,Number(o.closingCertainty)*5)); if(buyerProfit!==null&&buyerProfit>0)score+=10; if(blocked)score=0; return {...o,totalBuyerCost:total,buyerProfit,assignmentSpread:spread,selectionScore:Math.round(score*100)/100,blockedReason:blocked?(o.active===false?'inactive':o.suppressed?'suppressed':o.dnc?'dnc':!eligible?'assignment_ineligible':'blocked'):null};}).filter(o=>!o.blockedReason&&o.totalBuyerCost!==null).sort((a,b)=>b.selectionScore-a.selectionScore); const top=buyerOffers[0]??null; const flags=[]; if(!offers.length)flags.push('no_buyer_offers'); if(!top)flags.push('no_selectable_offer'); if(purchasePrice===null)flags.push('missing_purchase_price'); if(arv===null)flags.push('missing_arv'); if(top&&top.buyerProfit!==null&&top.buyerProfit<0)flags.push('negative_buyer_profit'); const decision=!top?'hold_for_more_offers':(top.buyerProfit!==null&&top.buyerProfit<0?'reject_unprofitable_offer':(top.assignmentSpread!==null&&top.assignmentSpread<0?'reject_below_purchase_price':(top.selectionScore>=75?'select_top_buyer':'select_with_review'))); const confidence=Math.round(Math.max(0,Math.min(100,(offers.length?25:0)+(top?30:0)+(purchasePrice!==null?15:0)+(arv!==null?15:0)+(repairs!==null?10:0)+(top?.proofOfFundsVerified?5:0)))); return [{json:{...input,buyerOfferComparison:{decision,selectedBuyer:top?{buyerId:top.buyerId??top.id??null,name:top.name??null,offerAmount:top.offerAmount??top.amount,assignmentFee:top.assignmentFee??assignmentFee,selectionScore:top.selectionScore,proofOfFundsVerified:!!top.proofOfFundsVerified,buyerProfit:top.buyerProfit,assignmentSpread:top.assignmentSpread}:null,rankedOffers:buyerOffers.slice(0,10).map(o=>({buyerId:o.buyerId??o.id??null,name:o.name??null,offerAmount:o.offerAmount??o.amount,assignmentFee:o.assignmentFee??assignmentFee,totalBuyerCost:o.totalBuyerCost,buyerProfit:o.buyerProfit,assignmentSpread:o.assignmentSpread,selectionScore:o.selectionScore})),offerCount:buyerOffers.length,flags,confidenceScore:confidence},idempotencyKey:'wf417:'+input.leadId+':'+input.propertyId+':'+input.dealId}}];"},
+      "id":"w417e","name":"Compare Rank & Select Buyer Offer","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/buyer-offer-selection","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerOfferComparison","value":"={{JSON.stringify($json.buyerOfferComparison)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w417f","name":"Persist Buyer Offer Selection","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"buyer_offer_comparison_selection"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"decision","value":"={{$json.buyerOfferComparison.decision}}"},{"name":"selectedBuyerId","value":"={{$json.buyerOfferComparison.selectedBuyer.buyerId}}"},{"name":"confidenceScore","value":"={{$json.buyerOfferComparison.confidenceScore}}"},{"name":"idempotencyKey","value":"={{'wf417:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId}}"}]},"options":{}},
+      "id":"w417g","name":"Record Buyer Offer Selection Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w417h","name":"Respond Buyer Offer Selection","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId and dealId are required'} }}","options":{}},
+      "id":"w417i","name":"Respond Invalid Buyer Offer Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Buyer Offer Comparison Webhook":{"main":[[{"node":"Normalize Buyer Offer Request","type":"main","index":0}]]},
+    "Normalize Buyer Offer Request":{"main":[[{"node":"Validate Offer Comparison Identity","type":"main","index":0}]]},
+    "Validate Offer Comparison Identity":{"main":[[{"node":"Fetch Buyer Offer Context","type":"main","index":0}],[{"node":"Respond Invalid Buyer Offer Request","type":"main","index":0}]]},
+    "Fetch Buyer Offer Context":{"main":[[{"node":"Compare Rank & Select Buyer Offer","type":"main","index":0}]]},
+    "Compare Rank & Select Buyer Offer":{"main":[[{"node":"Persist Buyer Offer Selection","type":"main","index":0}]]},
+    "Persist Buyer Offer Selection":{"main":[[{"node":"Record Buyer Offer Selection Activity","type":"main","index":0}]]},
+    "Record Buyer Offer Selection Activity":{"main":[[{"node":"Respond Buyer Offer Selection","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-417"},{"name":"buyer-offer"},{"name":"selection"},{"name":"disposition"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-417","contractStatus":"scaffolded","idempotency":"wf417:{leadId}:{propertyId}:{dealId}","notes":"Buyer offer comparison and selection is deterministic scaffolding pending verified InsulaCRM offer schema, buyer financial verification, live offer history, and production selection/contract APIs."}
+}

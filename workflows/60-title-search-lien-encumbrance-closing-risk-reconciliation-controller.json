@@ -1,0 +1,53 @@
+{
+  "name": "WF-422 — Title Search, Lien/Encumbrance & Closing Risk Reconciliation Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"title-search-lien-encumbrance-closing-risk-reconciliation","responseMode":"lastNode","options":{}},
+      "id":"w422a","name":"Title Risk Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const assignmentId=String(b.assignmentId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,assignmentId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w422b","name":"Normalize Title Risk Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.assignmentId}}","operation":"notEmpty"}]}},
+      "id":"w422c","name":"Validate Title Risk Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/title-risk-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"}]},"options":{}},
+      "id":"w422d","name":"Fetch Title Risk Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Title Risk Request').first().json; const ctx=$json.context??$json; const title=ctx.title??{}; const liens=Array.isArray(ctx.liens)?ctx.liens:[]; const enc=Array.isArray(ctx.encumbrances)?ctx.encumbrances:[]; const judgments=Array.isArray(ctx.judgments)?ctx.judgments:[]; const taxes=Array.isArray(ctx.taxLiens)?ctx.taxLiens:[]; const flags=[]; const status=String(title.status??'').toLowerCase(); if(['failed','rejected','cancelled'].includes(status))flags.push('title_search_failed'); if(title.clearToClose===false)flags.push('title_not_clear_to_close'); if(title.searchCompleted!==true)flags.push('title_search_incomplete'); if(liens.some(x=>x.valid===true||x.open===true))flags.push('open_liens'); if(enc.some(x=>x.valid===true||x.active===true))flags.push('active_encumbrances'); if(judgments.some(x=>x.valid===true||x.open===true))flags.push('outstanding_judgments'); if(taxes.some(x=>x.valid===true||x.open===true))flags.push('tax_lien_or_tax_issue'); const materialLiens=liens.filter(x=>Number(x.amount??0)>0); const materialEnc=enc.filter(x=>Number(x.amount??0)>0); const totalLienExposure=materialLiens.reduce((s,x)=>s+Number(x.amount||0),0)+materialEnc.reduce((s,x)=>s+Number(x.amount||0),0); const severity=flags.includes('title_search_failed')?'critical':(flags.includes('open_liens')||flags.includes('outstanding_judgments')||flags.includes('tax_lien_or_tax_issue')?'high':flags.includes('active_encumbrances')||flags.includes('title_not_clear_to_close')?'medium':'low'); const decision=severity==='critical'?'halt_and_research':severity==='high'?'hold_closing_and_resolve_title':severity==='medium'?'proceed_with_title_resolution':'title_clear_for_closing'; const idempotencyKey='wf422:'+input.leadId+':'+input.propertyId+':'+input.dealId+':'+input.assignmentId; return [{json:{...input,titleRisk:{status:severity==='low'?'clear':'exception',severity,decision,flags,counts:{liens:liens.length,encumbrances:enc.length,judgments:judgments.length,taxIssues:taxes.length},financialExposure:{totalLienAndEncumbranceAmount:Math.round(totalLienExposure*100)/100},requiredActions:decision==='title_clear_for_closing'?['confirm_final_title_clearance','release_to_closing']:['obtain_lien_payoff_or_release','resolve_judgments_and_encumbrances','confirm_tax_status','obtain_updated_title_commitment'],confidenceScore:title.searchCompleted===true?90:55},idempotencyKey}}];"},
+      "id":"w422e","name":"Reconcile Title Liens Encumbrances & Closing Risk","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/title-risk-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"titleRisk","value":"={{JSON.stringify($json.titleRisk)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w422f","name":"Persist Title Risk Reconciliation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"title_search_lien_encumbrance_closing_risk_reconciliation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"severity","value":"={{$json.titleRisk.severity}}"},{"name":"decision","value":"={{$json.titleRisk.decision}}"},{"name":"idempotencyKey","value":"={{'wf422:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId+':'+$json.assignmentId}}"}]},"options":{}},
+      "id":"w422g","name":"Record Title Risk Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w422h","name":"Respond Title Risk Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId, dealId and assignmentId are required'} }}","options":{}},
+      "id":"w422i","name":"Respond Invalid Title Risk Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Title Risk Webhook":{"main":[[{"node":"Normalize Title Risk Request","type":"main","index":0}]]},
+    "Normalize Title Risk Request":{"main":[[{"node":"Validate Title Risk Identity","type":"main","index":0}]]},
+    "Validate Title Risk Identity":{"main":[[{"node":"Fetch Title Risk Context","type":"main","index":0}],[{"node":"Respond Invalid Title Risk Request","type":"main","index":0}]]},
+    "Fetch Title Risk Context":{"main":[[{"node":"Reconcile Title Liens Encumbrances & Closing Risk","type":"main","index":0}]]},
+    "Reconcile Title Liens Encumbrances & Closing Risk":{"main":[[{"node":"Persist Title Risk Reconciliation","type":"main","index":0}]]},
+    "Persist Title Risk Reconciliation":{"main":[[{"node":"Record Title Risk Activity","type":"main","index":0}]]},
+    "Record Title Risk Activity":{"main":[[{"node":"Respond Title Risk Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-422"},{"name":"title-search"},{"name":"liens"},{"name":"encumbrances"},{"name":"closing-risk"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-422","contractStatus":"scaffolded","idempotency":"wf422:{leadId}:{propertyId}:{dealId}:{assignmentId}","notes":"Title search and closing risk reconciliation is workflow scaffolding pending verified title provider data, lien/judgment/tax schema, payoff/release evidence, and production InsulaCRM/title API contracts."}
+}

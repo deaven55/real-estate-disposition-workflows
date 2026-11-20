@@ -39,7 +39,7 @@
               "operation": "notEmpty"
             },
             {
-              "value1": "={{$json.leadId}}",
+              "value1": "={{$json.leadId || $json.sellerId || $json.propertyId || $json.dealId || $json.buyerId || $json.portfolioId}}",
               "operation": "notEmpty"
             },
             {
@@ -428,7 +428,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ {status:'blocked',reason:'eventType, leadId, idempotencyKey and engine are required'} }}",
+        "responseBody": "={{ {status:'blocked',reason:'eventType, at least one canonical entity ID, idempotencyKey and engine are required'} }}",
         "options": {}
       },
       "id": "cpi-o",

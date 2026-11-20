@@ -1,0 +1,58 @@
+{
+  "name": "WF-434 — Seller Contact Attempt Outcome & Automated Follow-Up Sequencing Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"seller-contact-attempt-outcome-follow-up-sequencing","responseMode":"lastNode","options":{}},
+      "id":"w434a","name":"Seller Contact Outcome Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const contactAttemptId=String(b.contactAttemptId??b.attemptId??'').trim(); const channel=String(b.channel??'unknown').trim().toLowerCase(); const outcome=String(b.outcome??'').trim().toLowerCase(); return [{json:{...b,leadId,contactAttemptId,channel,outcome,receivedAt:new Date().toISOString()}}];"},
+      "id":"w434b","name":"Normalize Contact Attempt Outcome","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.contactAttemptId}}","operation":"notEmpty"},{"value1":"={{$json.outcome}}","operation":"notEmpty"}]}},
+      "id":"w434c","name":"Validate Contact Outcome Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/contact-attempt-outcome-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"contactAttemptId","value":"={{$json.contactAttemptId}}"},{"name":"channel","value":"={{$json.channel}}"},{"name":"outcome","value":"={{$json.outcome}}"}]},"options":{}},
+      "id":"w434d","name":"Fetch Contact Outcome Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Contact Attempt Outcome').first().json; const ctx=$json.context??$json; const blocked=['dnc','do_not_contact','suppressed','closed','cancelled']; const terminal=['not_interested','wrong_number','invalid_contact','dnc']; const positive=['interested','appointment_set','call_back_requested','offer_requested','qualified']; const neutral=['no_answer','voicemail','busy','message_sent','email_sent','sms_sent']; const o=input.outcome; const leadStatus=String(ctx.leadStatus??ctx.status??'').toLowerCase(); const flags=[]; if(blocked.includes(leadStatus)||o==='dnc')flags.push('contact_blocked'); const prior=Array.isArray(ctx.recentAttempts)?ctx.recentAttempts:[]; const sameAttempt=prior.some(x=>String(x.contactAttemptId??x.id??'')===input.contactAttemptId); if(sameAttempt)flags.push('duplicate_contact_attempt'); const suppression=ctx.suppressed===true||ctx.dnc===true; if(suppression)flags.push('suppressed_or_dnc'); let state='manual_review',nextAction='review_contact_outcome'; if(flags.length){state='blocked';nextAction='stop_all_follow_up';} else if(terminal.includes(o)){state=o==='dnc'?'dnc':'closed_lost';nextAction=o==='dnc'?'stop_all_follow_up':'mark_lead_closed_lost';} else if(positive.includes(o)){state=o==='appointment_set'?'appointment_follow_up':'sales_follow_up';nextAction=o==='appointment_set'?'confirm_appointment':'priority_human_follow_up';} else if(neutral.includes(o)){state='follow_up_sequence';nextAction='schedule_next_sequence_step';} const sequence=ctx.sequence??{}; const currentStep=Number(sequence.currentStep??input.sequenceStep??0); const maxSteps=Math.max(1,Number(sequence.maxSteps??7)); const cadenceMinutes=Array.isArray(sequence.cadenceMinutes)?sequence.cadenceMinutes:[60,240,1440,4320,10080]; const nextStep=currentStep+1; const delayMinutes=cadenceMinutes[Math.min(nextStep-1,cadenceMinutes.length-1)]??1440; const shouldSchedule=state==='follow_up_sequence'&&nextStep<=maxSteps; const scheduledFor=shouldSchedule?new Date(Date.now()+delayMinutes*60000).toISOString():null; const idempotencyKey='wf434:'+input.leadId+':'+input.contactAttemptId; return [{json:{...input,contactOutcomeDecision:{status:flags.length?'blocked':'evaluated',state,nextAction,contactClassification:positive.includes(o)?'positive':terminal.includes(o)?'negative':neutral.includes(o)?'neutral':'unknown',sequence:{currentStep,nextStep,maxSteps,delayMinutes,scheduledFor,shouldSchedule},flags,requiresHumanReview:state==='manual_review',confidenceScore:flags.length?15:(state==='manual_review'?55:92)},idempotencyKey}}];"},
+      "id":"w434e","name":"Classify Contact Outcome & Build Follow-Up Sequence","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/contact-outcome-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"contactAttemptId","value":"={{$json.contactAttemptId}}"},{"name":"contactOutcomeDecision","value":"={{JSON.stringify($json.contactOutcomeDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w434f","name":"Persist Contact Outcome","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/follow-up-sequence","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"sequence","value":"={{JSON.stringify($json.contactOutcomeDecision.sequence)}}"},{"name":"nextAction","value":"={{$json.contactOutcomeDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf434:sequence:'+$json.leadId+':'+$json.contactAttemptId}}"}]},"options":{}},
+      "id":"w434g","name":"Persist Follow-Up Sequence","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_contact_attempt_outcome_follow_up_sequence"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"contactAttemptId","value":"={{$json.contactAttemptId}}"},{"name":"outcome","value":"={{$json.outcome}}"},{"name":"state","value":"={{$json.contactOutcomeDecision.state}}"},{"name":"nextAction","value":"={{$json.contactOutcomeDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf434:activity:'+$json.leadId+':'+$json.contactAttemptId}}"}]},"options":{}},
+      "id":"w434h","name":"Record Contact Outcome Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w434i","name":"Respond Contact Outcome","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, contactAttemptId and outcome are required'} }}","options":{}},
+      "id":"w434j","name":"Respond Invalid Contact Outcome Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Seller Contact Outcome Webhook":{"main":[[{"node":"Normalize Contact Attempt Outcome","type":"main","index":0}]]},
+    "Normalize Contact Attempt Outcome":{"main":[[{"node":"Validate Contact Outcome Request","type":"main","index":0}]]},
+    "Validate Contact Outcome Request":{"main":[[{"node":"Fetch Contact Outcome Context","type":"main","index":0}],[{"node":"Respond Invalid Contact Outcome Request","type":"main","index":0}]]},
+    "Fetch Contact Outcome Context":{"main":[[{"node":"Classify Contact Outcome & Build Follow-Up Sequence","type":"main","index":0}]]},
+    "Classify Contact Outcome & Build Follow-Up Sequence":{"main":[[{"node":"Persist Contact Outcome","type":"main","index":0}]]},
+    "Persist Contact Outcome":{"main":[[{"node":"Persist Follow-Up Sequence","type":"main","index":0}]]},
+    "Persist Follow-Up Sequence":{"main":[[{"node":"Record Contact Outcome Activity","type":"main","index":0}]]},
+    "Record Contact Outcome Activity":{"main":[[{"node":"Respond Contact Outcome","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-434"},{"name":"seller-contact"},{"name":"follow-up-sequence"},{"name":"lead-management"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-434","contractStatus":"scaffolded","idempotency":"wf434:{leadId}:{contactAttemptId}","notes":"Contact outcome and follow-up sequencing is scaffolding pending verified InsulaCRM contact-attempt schema, communication provider, consent/suppression rules, sequence policy, and production API contracts."}
+}

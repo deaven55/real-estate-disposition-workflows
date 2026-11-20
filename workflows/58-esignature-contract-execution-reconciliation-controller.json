@@ -1,0 +1,53 @@
+{
+  "name": "WF-420 — E-Signature Completion & Contract Execution Reconciliation Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"esignature-contract-execution-reconciliation","responseMode":"lastNode","options":{}},
+      "id":"w420a","name":"E-Signature Completion Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const buyerId=String(b.buyerId??'').trim(); const documentId=String(b.documentId??b.assignmentDocumentId??'').trim(); const eventType=String(b.eventType??b.status??'').trim().toLowerCase(); return [{json:{...b,leadId,propertyId,dealId,buyerId,documentId,eventType,receivedAt:new Date().toISOString()}}];"},
+      "id":"w420b","name":"Normalize E-Signature Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.buyerId}}","operation":"notEmpty"},{"value1":"={{$json.documentId}}","operation":"notEmpty"}]}},
+      "id":"w420c","name":"Validate E-Signature Event Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/esignature-execution-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"documentId","value":"={{$json.documentId}}"}]},"options":{}},
+      "id":"w420d","name":"Fetch E-Signature Execution Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize E-Signature Event').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const doc=ctx.document??{}; const signatures=Array.isArray(ctx.signatures)?ctx.signatures:[]; const event=input.eventType; const completedEvents=['completed','fully_signed','executed','signed']; const declinedEvents=['declined','rejected','voided','cancelled']; const requiredRoles=['seller','buyer']; const signedRoles=signatures.filter(s=>s.status==='signed'||s.completed===true).map(s=>String(s.role??'').toLowerCase()); const allRequiredSigned=requiredRoles.every(r=>signedRoles.includes(r)); const flags=[]; if(d.status&&['closed','cancelled','disputed'].includes(String(d.status).toLowerCase()))flags.push('deal_protected_state'); if(doc.voided===true)flags.push('document_voided'); if(declinedEvents.includes(event))flags.push('signature_declined_or_voided'); if(!allRequiredSigned)flags.push('required_signatures_incomplete'); if(doc.documentType&&doc.documentType!=='assignment_agreement')flags.push('unexpected_document_type'); const executionStatus=completedEvents.includes(event)&&allRequiredSigned&&!flags.includes('deal_protected_state')&&!flags.includes('document_voided')?'executed':declinedEvents.includes(event)?'failed_or_voided':allRequiredSigned?'pending_reconciliation':'awaiting_signatures'; const nextAction=executionStatus==='executed'?'reconcile_executed_contract_and_release_to_closing':executionStatus==='failed_or_voided'?'route_for_document_recovery_or_reissue':'await_required_signatures'; const idempotencyKey='wf420:'+input.leadId+':'+input.propertyId+':'+input.dealId+':'+input.buyerId+':'+input.documentId+':'+(event||'unknown'); return [{json:{...input,contractExecution:{status:executionStatus,documentId:input.documentId,eventType:event,allRequiredSignaturesComplete:allRequiredSigned,signedRoles:[...new Set(signedRoles)],requiredRoles,executionEvidence:{providerEventId:input.providerEventId??input.eventId??null,completedAt:input.completedAt??null,documentHash:input.documentHash??doc.documentHash??null},flags,nextAction,confidenceScore:executionStatus==='executed'?100:executionStatus==='failed_or_voided'?35:70},idempotencyKey}}];"},
+      "id":"w420e","name":"Reconcile Contract Execution","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/esignature-execution-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"documentId","value":"={{$json.documentId}}"},{"name":"contractExecution","value":"={{JSON.stringify($json.contractExecution)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w420f","name":"Persist Contract Execution Reconciliation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"esignature_contract_execution_reconciliation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"documentId","value":"={{$json.documentId}}"},{"name":"status","value":"={{$json.contractExecution.status}}"},{"name":"allRequiredSignaturesComplete","value":"={{$json.contractExecution.allRequiredSignaturesComplete}}"},{"name":"idempotencyKey","value":"={{'wf420:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId+':'+$json.documentId+':'+$json.eventType}}"}]},"options":{}},
+      "id":"w420g","name":"Record E-Signature Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w420h","name":"Respond E-Signature Reconciliation","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId, dealId, buyerId and documentId are required'} }}","options":{}},
+      "id":"w420i","name":"Respond Invalid E-Signature Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "E-Signature Completion Webhook":{"main":[[{"node":"Normalize E-Signature Event","type":"main","index":0}]]},
+    "Normalize E-Signature Event":{"main":[[{"node":"Validate E-Signature Event Identity","type":"main","index":0}]]},
+    "Validate E-Signature Event Identity":{"main":[[{"node":"Fetch E-Signature Execution Context","type":"main","index":0}],[{"node":"Respond Invalid E-Signature Event","type":"main","index":0}]]},
+    "Fetch E-Signature Execution Context":{"main":[[{"node":"Reconcile Contract Execution","type":"main","index":0}]]},
+    "Reconcile Contract Execution":{"main":[[{"node":"Persist Contract Execution Reconciliation","type":"main","index":0}]]},
+    "Persist Contract Execution Reconciliation":{"main":[[{"node":"Record E-Signature Activity","type":"main","index":0}]]},
+    "Record E-Signature Activity":{"main":[[{"node":"Respond E-Signature Reconciliation","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-420"},{"name":"esignature"},{"name":"contract-execution"},{"name":"reconciliation"},{"name":"assignment"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-420","contractStatus":"scaffolded","idempotency":"wf420:{leadId}:{propertyId}:{dealId}:{buyerId}:{documentId}:{eventType}","notes":"E-signature completion reconciliation is workflow scaffolding. Production use requires verified e-signature provider webhook/event schema, signature evidence, legal document controls, InsulaCRM document schema, and production API contracts."}
+}

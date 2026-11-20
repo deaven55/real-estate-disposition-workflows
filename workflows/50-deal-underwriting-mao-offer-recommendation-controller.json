@@ -1,0 +1,53 @@
+{
+  "name": "WF-412 — Deal Underwriting, MAO & Offer Recommendation Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"deal-underwriting-mao-offer","responseMode":"lastNode","options":{}},
+      "id":"w412a","name":"Deal Underwriting Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w412b","name":"Normalize Underwriting Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"}]}},
+      "id":"w412c","name":"Validate Underwriting Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/underwriting-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"}]},"options":{}},
+      "id":"w412d","name":"Fetch Canonical Underwriting Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Underwriting Request').first().json; const ctx=$json.context??$json; const p=ctx.property??{}; const d=ctx.deal??{}; const seller=ctx.seller??{}; const num=v=>Number.isFinite(Number(v))?Number(v):null; const arv=num(d.arv??p.arv??p.estimatedValue); const repairs=num(d.repairs??p.repairs); const purchasePrice=num(d.purchasePrice??d.offerAmount); const closingCosts=num(d.closingCosts??0)??0; const holdingCosts=num(d.holdingCosts??0)??0; const wholesaleCosts=num(d.wholesaleCosts??0)??0; const assignmentFeeTarget=num(d.assignmentFeeTarget??d.assignmentFee); const contingencyPct=num(d.contingencyPercent??10)??10; const repairContingency=repairs!==null?repairs*(contingencyPct/100):null; const totalCost=arv!==null&&purchasePrice!==null?(purchasePrice+closingCosts+holdingCosts+wholesaleCosts+(repairContingency??0)):null; const netSpread=arv!==null&&totalCost!==null?arv-totalCost:null; const conventionalMAO=arv!==null&&repairs!==null?arv*.70-repairs: null; const investorMarginPct=num(d.investorMarginPercent??15)??15; const marginMAO=arv!==null&&repairs!==null?arv*(1-investorMarginPct/100)-repairs-closingCosts-holdingCosts-wholesaleCosts-(repairContingency??0):null; const protectedMAO=num(d.protectedMAO??d.mao); const candidateMAOs=[conventionalMAO,marginMAO,protectedMAO].filter(v=>v!==null&&v>0); const recommendedMAO=candidateMAOs.length?Math.min(...candidateMAOs):null; const currentOffer=purchasePrice; const assignmentFee=assignmentFeeTarget??(arv!==null&&currentOffer!==null?Math.max(0,arv*.85-currentOffer):null); const projectedInvestorProfit=arv!==null&&recommendedMAO!==null?arv-recommendedMAO-repairs-closingCosts-holdingCosts-wholesaleCosts-(repairContingency??0):null; const offerGap=currentOffer!==null&&recommendedMAO!==null?recommendedMAO-currentOffer:null; const flags=[]; if(arv===null)flags.push('missing_arv'); if(repairs===null)flags.push('missing_repairs'); if(recommendedMAO===null)flags.push('mao_unavailable'); if(currentOffer!==null&&recommendedMAO!==null&&currentOffer>recommendedMAO)flags.push('offer_above_recommended_mao'); if(repairs!==null&&arv!==null&&repairs/arv>=.25)flags.push('extreme_repair_burden'); if(projectedInvestorProfit!==null&&projectedInvestorProfit<0)flags.push('negative_projected_profit'); const required=[arv,repairs,recommendedMAO].filter(v=>v!==null).length; const status=required===3?'underwriting_ready':required>=2?'partial_underwriting':'insufficient_data'; let recommendation='human_review'; if(status==='underwriting_ready'){ if(projectedInvestorProfit!==null&&projectedInvestorProfit>0&&currentOffer!==null&&currentOffer<=recommendedMAO)recommendation='proceed_to_offer'; else if(currentOffer!==null&&currentOffer>recommendedMAO)recommendation='reprice_or_negotiate'; else if(currentOffer===null)recommendation='prepare_offer'; else recommendation='human_review'; } const confidence=Math.round(Math.max(0,Math.min(100,(arv!==null?30:0)+(repairs!==null?25:0)+(recommendedMAO!==null?25:0)+(currentOffer!==null?10:0)+(ctx.compsVerified?10:0)))); const idempotencyKey='wf412:'+input.leadId+':'+input.propertyId+':'+input.dealId; return [{json:{...input,underwriting:{status,recommendation,arv,repairs,repairContingency,closingCosts,holdingCosts,wholesaleCosts,totalCost,conventionalMAO,marginMAO,protectedMAO,recommendedMAO,currentOffer,assignmentFee,projectedInvestorProfit,offerGap,confidenceScore:confidence,flags,assumptions:{conventionalMAOPercent:70,investorMarginPercent,repairContingencyPercent:contingencyPct}},seller:{sellerId:seller.id??null},idempotencyKey}}];"},
+      "id":"w412e","name":"Calculate Underwriting MAO & Offer Recommendation","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/underwriting","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"underwriting","value":"={{JSON.stringify($json.underwriting)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w412f","name":"Persist Underwriting Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"deal_underwriting_mao_offer_recommendation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"status","value":"={{$json.underwriting.status}}"},{"name":"recommendation","value":"={{$json.underwriting.recommendation}}"},{"name":"confidenceScore","value":"={{$json.underwriting.confidenceScore}}"},{"name":"idempotencyKey","value":"={{'wf412:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId}}"}]},"options":{}},
+      "id":"w412g","name":"Record Underwriting Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w412h","name":"Respond Underwriting Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId and dealId are required'} }}","options":{}},
+      "id":"w412i","name":"Respond Invalid Underwriting Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Deal Underwriting Webhook":{"main":[[{"node":"Normalize Underwriting Request","type":"main","index":0}]]},
+    "Normalize Underwriting Request":{"main":[[{"node":"Validate Underwriting Identity","type":"main","index":0}]]},
+    "Validate Underwriting Identity":{"main":[[{"node":"Fetch Canonical Underwriting Context","type":"main","index":0}],[{"node":"Respond Invalid Underwriting Request","type":"main","index":0}]]},
+    "Fetch Canonical Underwriting Context":{"main":[[{"node":"Calculate Underwriting MAO & Offer Recommendation","type":"main","index":0}]]},
+    "Calculate Underwriting MAO & Offer Recommendation":{"main":[[{"node":"Persist Underwriting Decision","type":"main","index":0}]]},
+    "Persist Underwriting Decision":{"main":[[{"node":"Record Underwriting Activity","type":"main","index":0}]]},
+    "Record Underwriting Activity":{"main":[[{"node":"Respond Underwriting Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-412"},{"name":"underwriting"},{"name":"MAO"},{"name":"offer-recommendation"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-412","contractStatus":"scaffolded","idempotency":"wf412:{leadId}:{propertyId}:{dealId}","notes":"Underwriting and MAO calculations are deterministic scaffolding pending verified InsulaCRM fields, comp validation, repair-estimation provider, financing/closing assumptions, and production API contracts. Recommended MAO is a decision aid and not a guarantee of profitability."}
+}

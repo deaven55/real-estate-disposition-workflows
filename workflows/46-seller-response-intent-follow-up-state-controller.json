@@ -1,0 +1,175 @@
+{
+  "name": "WF-408 — Seller Response Detection, Intent Classification & Follow-Up State Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seller-response-intent-follow-up-state",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w408a",
+      "name": "Seller Response Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const responseId=String(b.responseId??'').trim(); const channel=String(b.channel??'').trim().toLowerCase(); const text=String(b.message??b.text??b.body??'').trim(); return [{json:{...b,leadId,responseId,channel,responseText:text,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w408b",
+      "name": "Normalize Seller Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {"value1":"={{$json.leadId}}","operation":"notEmpty"},
+            {"value1":"={{$json.responseText}}","operation":"notEmpty"}
+          ]
+        }
+      },
+      "id": "w408c",
+      "name": "Validate Seller Response",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/response-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"responseId","value":"={{$json.responseId}}"},
+            {"name":"channel","value":"={{$json.channel}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w408d",
+      "name": "Fetch Seller Response Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [660, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Seller Response').first().json; const ctx=$json.context??$json; const text=input.responseText.toLowerCase(); const suppressed=Boolean(ctx.suppressed||ctx.dnc||input.suppressed||input.dnc); const closed=Boolean(ctx.closed||input.closed); const has=(...terms)=>terms.some(t=>text.includes(t)); let intent='other'; if(has('do not contact','stop texting','stop contacting','remove me','unsubscribe')) intent='dnc'; else if(has('yes','interested','i want to sell','let’s do it','lets do it','accept','deal')) intent='interested'; else if(has('call me','call us','give me a call','phone me')) intent='call_request'; else if(has('offer','price','how much','what can you pay','counter')) intent='offer_question'; else if(has('not interested','no thanks','no thank you','not selling')) intent='not_interested'; else if(has('later','next month','next year','not ready','maybe')) intent='nurture'; const sentiment=has('angry','mad','stop','leave me alone')?'negative':has('great','thanks','interested','yes')?'positive':'neutral'; const route=suppressed||closed?'blocked':intent==='dnc'?'dnc':intent==='interested'?'sales_follow_up':intent==='call_request'?'call_follow_up':intent==='offer_question'?'offer_follow_up':intent==='not_interested'?'closed_lost':intent==='nurture'?'nurture':'manual_review'; const nextAction=route==='dnc'?'suppress_future_outreach':route==='sales_follow_up'?'contact_seller_and_qualify':route==='call_follow_up'?'schedule_or_place_call':route==='offer_follow_up'?'prepare_offer_context':route==='closed_lost'?'stop_active_sequence':route==='nurture'?'schedule_future_follow_up':'human_review_response'; const idempotencyKey='wf408:'+input.leadId+':'+(input.responseId||input.receivedAt); return [{json:{...input,context:ctx,responseAnalysis:{intent,sentiment,route,nextAction,confidence:intent==='other'?45:75,evidence:{matchedKeywords:text.length>0?text.slice(0,240):''}},guardrails:{suppressed,closed},idempotencyKey}}}];"
+      },
+      "id": "w408e",
+      "name": "Classify Seller Intent & Follow-Up State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/response-state",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"responseId","value":"={{$json.responseId}}"},
+            {"name":"channel","value":"={{$json.channel}}"},
+            {"name":"analysis","value":"={{JSON.stringify($json.responseAnalysis)}}"},
+            {"name":"guardrails","value":"={{JSON.stringify($json.guardrails)}}"},
+            {"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w408f",
+      "name": "Persist Seller Response State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"type","value":"seller_response_intent_classification"},
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"intent","value":"={{$json.responseAnalysis.intent}}"},
+            {"name":"route","value":"={{$json.responseAnalysis.route}}"},
+            {"name":"nextAction","value":"={{$json.responseAnalysis.nextAction}}"},
+            {"name":"channel","value":"={{$json.channel}}"},
+            {"name":"idempotencyKey","value":"={{'wf408:activity:'+$json.leadId+':'+($json.responseId||'none')}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w408g",
+      "name": "Record Seller Response Analytics Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w408h",
+      "name": "Respond Seller Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId and responseText are required'} }}",
+        "options": {}
+      },
+      "id": "w408i",
+      "name": "Respond Invalid Seller Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 140]
+    }
+  ],
+  "connections": {
+    "Seller Response Webhook": {"main":[[{"node":"Normalize Seller Response","type":"main","index":0}]]},
+    "Normalize Seller Response": {"main":[[{"node":"Validate Seller Response","type":"main","index":0}]]},
+    "Validate Seller Response": {"main":[[{"node":"Fetch Seller Response Context","type":"main","index":0}],[{"node":"Respond Invalid Seller Response","type":"main","index":0}]]},
+    "Fetch Seller Response Context": {"main":[[{"node":"Classify Seller Intent & Follow-Up State","type":"main","index":0}]]},
+    "Classify Seller Intent & Follow-Up State": {"main":[[{"node":"Persist Seller Response State","type":"main","index":0}]]},
+    "Persist Seller Response State": {"main":[[{"node":"Record Seller Response Analytics Activity","type":"main","index":0}]]},
+    "Record Seller Response Analytics Activity": {"main":[[{"node":"Respond Seller Response","type":"main","index":0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {"name":"WF-408"},
+    {"name":"seller-response"},
+    {"name":"intent-classification"},
+    {"name":"follow-up"},
+    {"name":"InsulaCRM"}
+  ],
+  "meta": {
+    "workflowId":"WF-408",
+    "contractStatus":"scaffolded",
+    "idempotency":"wf408:{leadId}:{responseId|receivedAt}",
+    "notes":"Intent classification is deterministic scaffold logic pending production AI/NLP contract, response event schema, consent policy, and verified InsulaCRM API mapping."
+  }
+}

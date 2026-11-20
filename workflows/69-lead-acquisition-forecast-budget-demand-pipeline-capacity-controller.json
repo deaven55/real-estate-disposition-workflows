@@ -1,0 +1,53 @@
+{
+  "name": "WF-431 — Lead Acquisition Forecast → Budget Demand & Pipeline Capacity Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"lead-acquisition-forecast-budget-demand-pipeline-capacity","responseMode":"lastNode","options":{}},
+      "id":"w431a","name":"Acquisition Forecast Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'default').trim(); const forecastPeriods=Math.max(1,Math.min(12,Number(b.forecastPeriods??3))); const targetClosedDeals=Number.isFinite(Number(b.targetClosedDeals))?Number(b.targetClosedDeals):null; const targetNetProfit=Number.isFinite(Number(b.targetNetProfit))?Number(b.targetNetProfit):null; const availableBudget=Number.isFinite(Number(b.availableBudget))?Number(b.availableBudget):null; return [{json:{...b,portfolioId,forecastPeriods,targetClosedDeals,targetNetProfit,availableBudget,asOfDate:b.asOfDate??new Date().toISOString(),receivedAt:new Date().toISOString()}}];"},
+      "id":"w431b","name":"Normalize Acquisition Forecast Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"}]}},
+      "id":"w431c","name":"Validate Acquisition Forecast Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/lead-acquisition-forecast-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"forecastPeriods","value":"={{$json.forecastPeriods}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"}]},"options":{}},
+      "id":"w431d","name":"Fetch Acquisition Forecast Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Acquisition Forecast Request').first().json; const ctx=$json.context??$json; const hist=Array.isArray(ctx.periods)?ctx.periods:[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const avg=(key)=>hist.length?hist.reduce((s,p)=>s+n(p[key]),0)/hist.length:0; const leadsAvg=avg('leads'),qualifiedAvg=avg('qualifiedLeads'),contractsAvg=avg('contracts'),closedAvg=avg('closedDeals'),profitAvg=avg('netProfit'),spendAvg=avg('spend'); const qRate=leadsAvg?qualifiedAvg/leadsAvg:0; const cRate=qualifiedAvg?contractsAvg/qualifiedAvg:0; const closeRate=contractsAvg?closedAvg/contractsAvg:0; const leadToClose=leadsAvg?closedAvg/leadsAvg:0; const profitPerClosed=closedAvg?profitAvg/closedAvg:0; const spendPerLead=leadsAvg?spendAvg/leadsAvg:0; const forecast=[]; for(let i=1;i<=input.forecastPeriods;i++){const trend=Math.max(-0.25,Math.min(0.25,n(ctx.trendRate??0)));const factor=Math.pow(1+trend,i);const projectedLeads=leadsAvg*factor;const projectedQualified=projectedLeads*qRate;const projectedContracts=projectedQualified*cRate;const projectedClosed=projectedContracts*closeRate;const projectedProfit=projectedClosed*profitPerClosed;const projectedSpend=projectedLeads*spendPerLead;forecast.push({period:i,projectedLeads,projectedQualifiedLeads:projectedQualified,projectedContracts,projectedClosedDeals:projectedClosed,projectedNetProfit:projectedProfit,projectedSpend});} const final=forecast[forecast.length-1]??{}; const closedGap=input.targetClosedDeals!==null?input.targetClosedDeals-final.projectedClosedDeals:null; const profitGap=input.targetNetProfit!==null?input.targetNetProfit-final.projectedNetProfit:null; const additionalLeads=closedGap>0&&leadToClose>0?closedGap/leadToClose:0; const incrementalBudget=additionalLeads*spendPerLead; const budgetDemand=input.availableBudget!==null?Math.max(0,incrementalBudget-input.availableBudget):incrementalBudget; let action='maintain_current_acquisition_capacity'; if(closedGap>0||profitGap>0)action=incrementalBudget>0?'increase_acquisition_budget_and_pipeline_capacity':'improve_funnel_conversion_before_scaling'; else if(closedGap!==null&&closedGap<0&&profitGap!==null&&profitGap<0)action='maintain_or_reduce_acquisition_spend'; const idempotencyKey='wf431:'+input.portfolioId+':'+input.forecastPeriods+':'+input.asOfDate; return [{json:{...input,acquisitionForecast:{status:hist.length?'forecasted':'blocked',baseline:{leadsAvg,qualifiedAvg,contractsAvg,closedAvg,profitAvg,spendAvg,qualificationRate:qRate,contractRate:cRate,closeRate,leadToClose,profitPerClosed,spendPerLead},forecast,capacityAssessment:{targetClosedDeals:input.targetClosedDeals,targetNetProfit:input.targetNetProfit,closedDealGap:closedGap,netProfitGap:profitGap,additionalLeadsRequired:additionalLeads,incrementalBudgetRequired:incrementalBudget,budgetDemandGap:budgetDemand},recommendedAction:action,flags:hist.length?[]:['no_historical_acquisition_data'],confidenceScore:hist.length>=3?90:hist.length?72:25},idempotencyKey}}];"},
+      "id":"w431e","name":"Forecast Acquisition Demand & Pipeline Capacity","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/acquisition-forecast-capacity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"forecastPeriods","value":"={{$json.forecastPeriods}}"},{"name":"acquisitionForecast","value":"={{JSON.stringify($json.acquisitionForecast)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w431f","name":"Persist Acquisition Forecast Capacity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"lead_acquisition_forecast_budget_demand_pipeline_capacity"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"forecastPeriods","value":"={{$json.forecastPeriods}}"},{"name":"recommendedAction","value":"={{$json.acquisitionForecast.recommendedAction}}"},{"name":"closedDealGap","value":"={{$json.acquisitionForecast.capacityAssessment.closedDealGap}}"},{"name":"netProfitGap","value":"={{$json.acquisitionForecast.capacityAssessment.netProfitGap}}"},{"name":"idempotencyKey","value":"={{'wf431:activity:'+$json.portfolioId+':'+$json.forecastPeriods+':'+$json.asOfDate}}"}]},"options":{}},
+      "id":"w431g","name":"Record Acquisition Forecast Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w431h","name":"Respond Acquisition Forecast","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId is required'} }}","options":{}},
+      "id":"w431i","name":"Respond Invalid Acquisition Forecast Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Acquisition Forecast Webhook":{"main":[[{"node":"Normalize Acquisition Forecast Request","type":"main","index":0}]]},
+    "Normalize Acquisition Forecast Request":{"main":[[{"node":"Validate Acquisition Forecast Request","type":"main","index":0}]]},
+    "Validate Acquisition Forecast Request":{"main":[[{"node":"Fetch Acquisition Forecast Context","type":"main","index":0}],[{"node":"Respond Invalid Acquisition Forecast Request","type":"main","index":0}]]},
+    "Fetch Acquisition Forecast Context":{"main":[[{"node":"Forecast Acquisition Demand & Pipeline Capacity","type":"main","index":0}]]},
+    "Forecast Acquisition Demand & Pipeline Capacity":{"main":[[{"node":"Persist Acquisition Forecast Capacity","type":"main","index":0}]]},
+    "Persist Acquisition Forecast Capacity":{"main":[[{"node":"Record Acquisition Forecast Activity","type":"main","index":0}]]},
+    "Record Acquisition Forecast Activity":{"main":[[{"node":"Respond Acquisition Forecast","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-431"},{"name":"acquisition-forecast"},{"name":"budget-demand"},{"name":"pipeline-capacity"},{"name":"analytics"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-431","contractStatus":"scaffolded","idempotency":"wf431:{portfolioId}:{forecastPeriods}:{asOfDate}","notes":"Forecasting and capacity planning is recommendation scaffolding pending verified historical acquisition schema, calibrated forecasting model, canonical spend source, and production InsulaCRM analytics contracts."}
+}

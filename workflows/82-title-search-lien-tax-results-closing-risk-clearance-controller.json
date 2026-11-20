@@ -1,0 +1,58 @@
+{
+  "name": "WF-444 — Title Search / Lien / Tax Results → Closing Risk & Clearance Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"title-search-lien-tax-results-closing-risk-clearance","responseMode":"lastNode","options":{}},
+      "id":"w444a","name":"Title Results Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const titleOrderId=String(b.titleOrderId??b.orderId??'').trim(); const resultEventId=String(b.resultEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,titleOrderId,resultEventId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w444b","name":"Normalize Title Results","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"},{"value1":"={{$json.titleOrderId}}","operation":"notEmpty"},{"value1":"={{$json.resultEventId}}","operation":"notEmpty"}]}},
+      "id":"w444c","name":"Validate Title Results Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/title-results-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"resultEventId","value":"={{$json.resultEventId}}"}]},"options":{}},
+      "id":"w444d","name":"Fetch Title Results Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Title Results').first().json; const ctx=$json.context??$json; const flags=[]; const title=ctx.titleResults??ctx; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); if(['closed','cancelled','disputed','dnc','suppressed'].includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); const searchComplete=title.searchCompleted===true||String(title.searchStatus??'').toLowerCase()==='completed'; if(!searchComplete)flags.push('title_search_incomplete'); const liens=Array.isArray(title.liens)?title.liens:[]; const judgments=Array.isArray(title.judgments)?title.judgments:[]; const encumbrances=Array.isArray(title.encumbrances)?title.encumbrances:[]; const taxIssues=Array.isArray(title.taxIssues)?title.taxIssues:[]; const unresolved=[...liens,...judgments,...encumbrances,...taxIssues].filter(x=>String(x.status??'open').toLowerCase()!=='resolved'); const openLiens=unresolved.filter(x=>['lien','tax_lien'].includes(String(x.type??'lien').toLowerCase())).length; const openJudgments=unresolved.filter(x=>String(x.type??'').toLowerCase()==='judgment').length; const openEncumbrances=unresolved.filter(x=>!['judgment','lien','tax_lien'].includes(String(x.type??'encumbrance').toLowerCase())).length; const openTaxIssues=unresolved.filter(x=>['tax','tax_lien','delinquent_tax'].includes(String(x.type??'tax').toLowerCase())).length; const totalExposure=unresolved.reduce((s,x)=>s+(Number(x.amount??x.exposure??0)||0),0); const titleClear=searchComplete&&unresolved.length===0; const riskScore=Math.min(100,(openLiens*20)+(openJudgments*25)+(openEncumbrances*15)+(openTaxIssues*20)+(totalExposure>0?Math.min(20,totalExposure/10000):0)); let riskLevel=titleClear?'low':riskScore>=70?'critical':riskScore>=40?'high':riskScore>=20?'medium':'low'; let decision='hold_for_title_resolution',nextAction='resolve_title_and_tax_issues',clearanceState='pending'; if(flags.includes('deal_or_contact_blocked')){decision='blocked';nextAction='stop_closing_flow';clearanceState='blocked';}else if(titleClear){decision='clear_for_closing';nextAction='advance_to_closing_date_and_final_settlement_coordination';clearanceState='cleared';}else if(!searchComplete){decision='await_title_results';nextAction='await_completed_title_search';clearanceState='pending';}else if(riskLevel==='critical'){decision='halt_and_escalate';nextAction='escalate_critical_title_risk';clearanceState='critical_hold';} const resolutionActions=unresolved.map(x=>({id:x.id??null,type:x.type??'unknown',amount:Number(x.amount??x.exposure??0)||0,action:x.requiredAction??'obtain_release_or_resolution_evidence'})); const idempotencyKey='wf444:'+input.leadId+':'+input.dealId+':'+input.titleOrderId+':'+input.resultEventId; return [{json:{...input,titleRiskClearanceDecision:{status:clearanceState,decision,nextAction,riskLevel,riskScore,searchCompleted:searchComplete,titleClear,openIssueCount:unresolved.length,openLiens,openJudgments,openEncumbrances,openTaxIssues,totalPotentialExposure:Math.round(totalExposure*100)/100,resolutionActions,flags,requiresHumanReview:!titleClear||riskLevel==='critical',confidenceScore:titleClear?98:searchComplete?80:35},idempotencyKey}}];"},
+      "id":"w444e","name":"Assess Title Lien Tax Risk & Clearance","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/title-risk-clearance-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"titleRiskClearanceDecision","value":"={{JSON.stringify($json.titleRiskClearanceDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w444f","name":"Persist Title Risk Clearance","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/title-risk-clearance-action","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"decision","value":"={{$json.titleRiskClearanceDecision.decision}}"},{"name":"nextAction","value":"={{$json.titleRiskClearanceDecision.nextAction}}"},{"name":"clearanceState","value":"={{$json.titleRiskClearanceDecision.status}}"},{"name":"idempotencyKey","value":"={{'wf444:action:'+$json.leadId+':'+$json.dealId+':'+$json.titleOrderId+':'+$json.resultEventId}}"}]},"options":{}},
+      "id":"w444g","name":"Persist Title Clearance Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"title_search_lien_tax_results_closing_risk_clearance"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"decision","value":"={{$json.titleRiskClearanceDecision.decision}}"},{"name":"riskLevel","value":"={{$json.titleRiskClearanceDecision.riskLevel}}"},{"name":"idempotencyKey","value":"={{'wf444:activity:'+$json.leadId+':'+$json.dealId+':'+$json.titleOrderId+':'+$json.resultEventId}}"}]},"options":{}},
+      "id":"w444h","name":"Record Title Risk Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w444i","name":"Respond Title Risk Clearance","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, contractId, titleOrderId and resultEventId are required'} }}","options":{}},
+      "id":"w444j","name":"Respond Invalid Title Results Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Title Results Webhook":{"main":[[{"node":"Normalize Title Results","type":"main","index":0}]]},
+    "Normalize Title Results":{"main":[[{"node":"Validate Title Results Request","type":"main","index":0}]]},
+    "Validate Title Results Request":{"main":[[{"node":"Fetch Title Results Context","type":"main","index":0}],[{"node":"Respond Invalid Title Results Request","type":"main","index":0}]]},
+    "Fetch Title Results Context":{"main":[[{"node":"Assess Title Lien Tax Risk & Clearance","type":"main","index":0}]]},
+    "Assess Title Lien Tax Risk & Clearance":{"main":[[{"node":"Persist Title Risk Clearance","type":"main","index":0}]]},
+    "Persist Title Risk Clearance":{"main":[[{"node":"Persist Title Clearance Action","type":"main","index":0}]]},
+    "Persist Title Clearance Action":{"main":[[{"node":"Record Title Risk Activity","type":"main","index":0}]]},
+    "Record Title Risk Activity":{"main":[[{"node":"Respond Title Risk Clearance","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-444"},{"name":"title-search"},{"name":"liens"},{"name":"taxes"},{"name":"closing-risk"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-444","contractStatus":"scaffolded","idempotency":"wf444:{leadId}:{dealId}:{titleOrderId}:{resultEventId}","notes":"Evaluates title-search, lien, judgment, encumbrance and tax-result evidence for closing clearance. Production use requires verified title-provider schemas, jurisdiction-specific title/tax rules, legal review controls, and production InsulaCRM API contracts."}
+}

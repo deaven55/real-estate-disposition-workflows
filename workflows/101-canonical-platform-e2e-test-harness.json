@@ -1,0 +1,103 @@
+{
+  "name": "Canonical Platform — E2E Contract Test Harness",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "canonical-platform-e2e-test",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "e2e-a",
+      "name": "E2E Test Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const cases=Array.isArray(b.cases)?b.cases:[]; const routing={'lead.created':'lead-seller','seller.qualified':'lead-seller','underwriting.requested':'underwriting-risk','underwriting.approved':'underwriting-risk','offer.prepare':'negotiation-offer','offer.accepted':'negotiation-offer','contract.readiness.requested':'contract-esignature','contract.signed':'contract-esignature','buyer.disposition.requested':'buyer-disposition','buyer.locked':'buyer-disposition','title.order.requested':'title-closing','title.cleared':'title-closing','closing.ready':'title-closing','closing.completed':'title-closing','financials.reconcile.requested':'financials-analytics','financials.reconciled':'financials-analytics','profit.realized':'financials-analytics'}; const out=cases.map(c=>{const engine=routing[String(c.eventType||'').toLowerCase()]||'unknown'; const valid=engine===c.expectedEngine; const action=c.expectedAction||'route'; return {...c,actualEngine:engine,passed:valid,action};}); const passed=out.filter(x=>x.passed).length; return [{json:{status:passed===out.length?'passed':'failed',total:out.length,passed,failed:out.length-passed,cases:out,testedAt:new Date().toISOString()}}];"
+      },
+      "id": "e2e-b",
+      "name": "Run Routing Contract Assertions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "e2e-c",
+      "name": "Return E2E Test Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "E2E Test Webhook": {
+      "main": [
+        [
+          {
+            "node": "Run Routing Contract Assertions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Routing Contract Assertions": {
+      "main": [
+        [
+          {
+            "node": "Return E2E Test Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "canonical-engine"
+    },
+    {
+      "name": "integration-test"
+    },
+    {
+      "name": "e2e"
+    },
+    {
+      "name": "platform"
+    }
+  ],
+  "meta": {
+    "contractStatus": "scaffolded",
+    "purpose": "Deterministic local contract harness for canonical event routing. It validates routing expectations without claiming live InsulaCRM/provider connectivity.",
+    "productionRequirements": [
+      "run against deployed router",
+      "add live idempotency assertions",
+      "add live atomic state-transition assertions",
+      "add provider failure/retry assertions"
+    ]
+  }
+}

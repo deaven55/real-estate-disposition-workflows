@@ -1,0 +1,53 @@
+{
+  "name": "WF-426 — Post-Closing Settlement, Profit & Owner Distribution Reconciliation Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"post-closing-settlement-profit-owner-distribution-reconciliation","responseMode":"lastNode","options":{}},
+      "id":"w426a","name":"Post-Closing Reconciliation Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const assignmentId=String(b.assignmentId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,assignmentId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w426b","name":"Normalize Post-Closing Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.assignmentId}}","operation":"notEmpty"}]}},
+      "id":"w426c","name":"Validate Post-Closing Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/post-closing-reconciliation-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"}]},"options":{}},
+      "id":"w426d","name":"Fetch Post-Closing Financial Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Post-Closing Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const s=ctx.settlement??{}; const p=ctx.payout??{}; const flags=[]; const n=v=>Number.isFinite(Number(v))?Number(v):null; const gross=n(s.grossRevenue??d.assignmentFee??p.grossRevenue); const purchase=n(d.purchasePrice??s.purchasePrice); const closingCosts=n(s.closingCosts??p.closingCosts)??0; const otherCosts=n(s.otherCosts??p.otherCosts)??0; const assignmentFee=n(s.assignmentFee??d.assignmentFee??p.assignmentFee); const netProfit=n(p.netProfit??s.netProfit)??(gross!==null?gross-closingCosts-otherCosts-(purchase??0):null); const ownerSharePercent=n(p.ownerSharePercent??ctx.ownerSharePercent); const reserveAmount=n(p.reserveAmount??ctx.reserveAmount)??0; const expectedOwnerDistribution=ownerSharePercent!==null&&netProfit!==null?Math.max(0,netProfit*(ownerSharePercent/100)-reserveAmount):null; const recordedOwnerDistribution=n(p.ownerDistribution??ctx.ownerDistribution); const distributionDelta=expectedOwnerDistribution!==null&&recordedOwnerDistribution!==null?recordedOwnerDistribution-expectedOwnerDistribution:null; if(ctx.lifecycleState&&ctx.lifecycleState!=='closed')flags.push('deal_not_closed'); if(ctx.settlementReconciled!==true&&s.reconciled!==true)flags.push('settlement_not_reconciled'); if(ctx.fundsConfirmed!==true&&s.fundsConfirmed!==true)flags.push('funds_not_confirmed'); if(gross===null)flags.push('gross_revenue_missing'); if(netProfit===null)flags.push('net_profit_unavailable'); if(ownerSharePercent!==null&&(ownerSharePercent<0||ownerSharePercent>100))flags.push('invalid_owner_share_percent'); if(distributionDelta!==null&&Math.abs(distributionDelta)>0.01)flags.push('owner_distribution_mismatch'); const ready=flags.length===0; const decision=ready?'reconciled_and_ready_for_reporting':flags.includes('owner_distribution_mismatch')?'hold_and_correct_owner_distribution':'hold_and_complete_post_closing_reconciliation'; const idempotencyKey='wf426:'+input.leadId+':'+input.propertyId+':'+input.dealId+':'+input.assignmentId; return [{json:{...input,postClosingReconciliation:{status:ready?'reconciled':'exception',decision,flags,financials:{grossRevenue:gross,purchasePrice:purchase,assignmentFee,closingCosts,otherCosts,netProfit,ownerSharePercent,reserveAmount,expectedOwnerDistribution,recordedOwnerDistribution,distributionDelta},nextAction:ready?'release_closed_deal_for_final_reporting_and_archive':'correct_post_closing_financial_exceptions',requiresHumanReview:flags.includes('owner_distribution_mismatch')||flags.includes('invalid_owner_share_percent'),confidenceScore:ready?98:Math.max(0,72-flags.length*10)},idempotencyKey}}];"},
+      "id":"w426e","name":"Reconcile Post-Closing Profit & Owner Distribution","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/post-closing-financial-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"postClosingReconciliation","value":"={{JSON.stringify($json.postClosingReconciliation)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w426f","name":"Persist Post-Closing Financial Reconciliation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"post_closing_settlement_profit_owner_distribution_reconciliation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"status","value":"={{$json.postClosingReconciliation.status}}"},{"name":"decision","value":"={{$json.postClosingReconciliation.decision}}"},{"name":"netProfit","value":"={{$json.postClosingReconciliation.financials.netProfit}}"},{"name":"distributionDelta","value":"={{$json.postClosingReconciliation.financials.distributionDelta}}"},{"name":"idempotencyKey","value":"={{'wf426:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId+':'+$json.assignmentId}}"}]},"options":{}},
+      "id":"w426g","name":"Record Post-Closing Financial Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w426h","name":"Respond Post-Closing Reconciliation","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId, dealId and assignmentId are required'} }}","options":{}},
+      "id":"w426i","name":"Respond Invalid Post-Closing Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Post-Closing Reconciliation Webhook":{"main":[[{"node":"Normalize Post-Closing Request","type":"main","index":0}]]},
+    "Normalize Post-Closing Request":{"main":[[{"node":"Validate Post-Closing Identity","type":"main","index":0}]]},
+    "Validate Post-Closing Identity":{"main":[[{"node":"Fetch Post-Closing Financial Context","type":"main","index":0}],[{"node":"Respond Invalid Post-Closing Request","type":"main","index":0}]]},
+    "Fetch Post-Closing Financial Context":{"main":[[{"node":"Reconcile Post-Closing Profit & Owner Distribution","type":"main","index":0}]]},
+    "Reconcile Post-Closing Profit & Owner Distribution":{"main":[[{"node":"Persist Post-Closing Financial Reconciliation","type":"main","index":0}]]},
+    "Persist Post-Closing Financial Reconciliation":{"main":[[{"node":"Record Post-Closing Financial Activity","type":"main","index":0}]]},
+    "Record Post-Closing Financial Activity":{"main":[[{"node":"Respond Post-Closing Reconciliation","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-426"},{"name":"post-closing"},{"name":"profit"},{"name":"owner-distribution"},{"name":"settlement"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-426","contractStatus":"scaffolded","idempotency":"wf426:{leadId}:{propertyId}:{dealId}:{assignmentId}","notes":"Post-closing financial reconciliation is workflow scaffolding pending verified InsulaCRM financial schema, accounting rules, settlement evidence, payout records, and production API contracts."}
+}

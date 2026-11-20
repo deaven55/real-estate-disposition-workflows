@@ -1,0 +1,175 @@
+{
+  "name": "WF-409 — Seller Qualification Conversation & Motivation Extraction Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seller-qualification-motivation-extraction",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w409a",
+      "name": "Seller Qualification Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const conversationId=String(b.conversationId??'').trim(); const message=String(b.message??b.text??'').trim(); const channel=String(b.channel??'').trim().toLowerCase(); return [{json:{...b,leadId,conversationId,message,channel,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w409b",
+      "name": "Normalize Seller Qualification Conversation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {"value1":"={{$json.leadId}}","operation":"notEmpty"},
+            {"value1":"={{$json.message}}","operation":"notEmpty"}
+          ]
+        }
+      },
+      "id": "w409c",
+      "name": "Validate Qualification Conversation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/qualification-conversation-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"conversationId","value":"={{$json.conversationId}}"},
+            {"name":"channel","value":"={{$json.channel}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w409d",
+      "name": "Fetch Seller Qualification Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [660, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Seller Qualification Conversation').first().json; const ctx=$json.context??$json; const text=input.message.toLowerCase(); const lead=ctx.lead??{}; const seller=ctx.seller??{}; const property=ctx.property??{}; const suppressed=Boolean(ctx.suppressed||lead.suppressed||seller.suppressed); const dnc=Boolean(ctx.dnc||lead.dnc||seller.dnc); const closed=Boolean(ctx.closed||lead.closed); const scoreTerms=(terms)=>terms.reduce((n,t)=>n+(text.includes(t)?1:0),0); const motivationSignals={financial:scoreTerms(['need cash','money','financial','behind','debt','bills','payment']),relocation:scoreTerms(['moving','relocate','relocation','leaving town']),distress:scoreTerms(['repair','damaged','problem','vacant','foreclosure','taxes','delinquent']),timing:scoreTerms(['asap','soon','this month','next month','weeks','days']),inheritance:scoreTerms(['inherit','inherited','estate','probate']),landlord:scoreTerms(['tenant','rental','landlord','property management']),life_event:scoreTerms(['divorce','job','retire','retirement','death'])}; const motivations=Object.entries(motivationSignals).filter(([,v])=>v>0).map(([k])=>k); const urgency=motivationSignals.timing>=2?'high':motivationSignals.timing===1?'medium':'low'; const propertyCondition=scoreTerms(['needs work','needs repairs','fixer','damaged','renovation'])>=2?'distressed':scoreTerms(['good condition','updated','remodeled','renovated'])>0?'good':'unknown'; const priceMention=text.match(/\$\s?([0-9,]+(?:\.\d+)?)/); const mentionedPrice=priceMention?Number(priceMention[1].replace(/,/g,'')):null; const ownerOccupied=scoreTerms(['i live there','my home','my house'])>0; const sellerGoals=[]; if(scoreTerms(['cash','money','paid'])>0)sellerGoals.push('cash'); if(scoreTerms(['quick','fast','asap','soon'])>0)sellerGoals.push('speed'); if(scoreTerms(['close','closing'])>0)sellerGoals.push('simple_closing'); if(scoreTerms(['no repairs','as is','as-is'])>0)sellerGoals.push('as_is_sale'); const motivationScore=Math.round(Math.min(100,30+motivations.length*10+(urgency==='high'?20:urgency==='medium'?10:0)+(sellerGoals.length*5))); const qualification=motivationScore>=75?'high_motivation':motivationScore>=50?'moderate_motivation':'low_or_unclear_motivation'; const nextAction=suppressed||dnc||closed?'do_not_contact':qualification==='high_motivation'?'priority_human_conversation':qualification==='moderate_motivation'?'continue_qualification':'nurture_and_collect_information'; const idempotencyKey='wf409:'+input.leadId+':'+(input.conversationId||input.receivedAt); return [{json:{...input,context:ctx,qualificationExtraction:{status:suppressed||dnc?'blocked':closed?'closed':'active',qualification,motivationScore,motivations,urgency,sellerGoals,propertyCondition,mentionedPrice,ownerOccupied,signals:motivationSignals,nextAction,confidence:Math.round(Math.min(95,50+motivations.length*8+(input.conversationId?10:0)))},guardrails:{suppressed,dnc,closed},idempotencyKey}}}];"
+      },
+      "id": "w409e",
+      "name": "Extract Seller Motivation & Qualification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/qualification-conversation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"conversationId","value":"={{$json.conversationId}}"},
+            {"name":"channel","value":"={{$json.channel}}"},
+            {"name":"qualificationExtraction","value":"={{JSON.stringify($json.qualificationExtraction)}}"},
+            {"name":"guardrails","value":"={{JSON.stringify($json.guardrails)}}"},
+            {"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w409f",
+      "name": "Persist Seller Qualification & Motivation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"type","value":"seller_qualification_motivation_extraction"},
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"qualification","value":"={{$json.qualificationExtraction.qualification}}"},
+            {"name":"motivationScore","value":"={{$json.qualificationExtraction.motivationScore}}"},
+            {"name":"urgency","value":"={{$json.qualificationExtraction.urgency}}"},
+            {"name":"nextAction","value":"={{$json.qualificationExtraction.nextAction}}"},
+            {"name":"idempotencyKey","value":"={{'wf409:activity:'+$json.leadId+':'+($json.conversationId||'none')}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w409g",
+      "name": "Record Seller Qualification Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w409h",
+      "name": "Respond Seller Qualification",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId and message are required'} }}",
+        "options": {}
+      },
+      "id": "w409i",
+      "name": "Respond Invalid Qualification Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 140]
+    }
+  ],
+  "connections": {
+    "Seller Qualification Webhook": {"main":[[{"node":"Normalize Seller Qualification Conversation","type":"main","index":0}]]},
+    "Normalize Seller Qualification Conversation": {"main":[[{"node":"Validate Qualification Conversation","type":"main","index":0}]]},
+    "Validate Qualification Conversation": {"main":[[{"node":"Fetch Seller Qualification Context","type":"main","index":0}],[{"node":"Respond Invalid Qualification Request","type":"main","index":0}]]},
+    "Fetch Seller Qualification Context": {"main":[[{"node":"Extract Seller Motivation & Qualification","type":"main","index":0}]]},
+    "Extract Seller Motivation & Qualification": {"main":[[{"node":"Persist Seller Qualification & Motivation","type":"main","index":0}]]},
+    "Persist Seller Qualification & Motivation": {"main":[[{"node":"Record Seller Qualification Activity","type":"main","index":0}]]},
+    "Record Seller Qualification Activity": {"main":[[{"node":"Respond Seller Qualification","type":"main","index":0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {"name":"WF-409"},
+    {"name":"seller-qualification"},
+    {"name":"motivation"},
+    {"name":"conversation"},
+    {"name":"InsulaCRM"}
+  ],
+  "meta": {
+    "workflowId":"WF-409",
+    "contractStatus":"scaffolded",
+    "idempotency":"wf409:{leadId}:{conversationId|receivedAt}",
+    "notes":"Motivation extraction is deterministic scaffold logic pending production AI/NLP contract, conversation schema, consent policy, and verified InsulaCRM API mapping."
+  }
+}

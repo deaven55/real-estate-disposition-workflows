@@ -1,0 +1,58 @@
+{
+  "name": "WF-440 — Seller Negotiation Finalization → Contract Readiness / Walk-Away / Nurture Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"seller-negotiation-finalization-contract-readiness-walk-away-nurture","responseMode":"lastNode","options":{}},
+      "id":"w440a","name":"Negotiation Finalization Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const negotiationId=String(b.negotiationId??'').trim(); const outcome=String(b.outcome??b.eventType??'').trim().toLowerCase(); return [{json:{...b,leadId,dealId,negotiationId,outcome,receivedAt:new Date().toISOString()}}];"},
+      "id":"w440b","name":"Normalize Negotiation Finalization","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.negotiationId}}","operation":"notEmpty"},{"value1":"={{$json.outcome}}","operation":"notEmpty"}]}},
+      "id":"w440c","name":"Validate Negotiation Finalization","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-negotiation-finalization-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"negotiationId","value":"={{$json.negotiationId}}"},{"name":"outcome","value":"={{$json.outcome}}"}]},"options":{}},
+      "id":"w440d","name":"Fetch Negotiation Finalization Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Negotiation Finalization').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const outcome=input.outcome; const blockedStates=['closed','cancelled','disputed','dnc','suppressed']; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); const flags=[]; if(blockedStates.includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); const protectedMao=n(ctx.protectedMao); const finalPrice=n(ctx.finalPurchasePrice??ctx.purchasePrice??ctx.acceptedPrice); const sellerAccepted=ctx.sellerAccepted===true||['accepted','contract_ready','accepted_final'].includes(outcome); const contractReadiness=ctx.contractReadiness??{}; const identityVerified=contractReadiness.sellerIdentityVerified===true&&contractReadiness.propertyIdentityVerified===true; const documentsReady=contractReadiness.requiredDocumentsReady===true; const signaturesReady=contractReadiness.requiredSignaturesReady===true; const titleReady=contractReadiness.titleCompanyConfirmed===true; const economicsReady=finalPrice>0&&(protectedMao<=0||finalPrice<=protectedMao); const readinessScore=[sellerAccepted,identityVerified,documentsReady,signaturesReady,titleReady,economicsReady].filter(Boolean).length/6; let decision='human_review',nextAction='review_negotiation_finalization',pipelineState='negotiation'; if(flags.length){decision='blocked';nextAction='stop_negotiation_and_contract_flow';pipelineState='blocked';}else if(['rejected','walk_away','seller_rejected'].includes(outcome)){decision='walk_away';nextAction='move_to_reengagement_or_nurture';pipelineState='nurture';}else if(['no_response','stalled','max_rounds_reached'].includes(outcome)){decision='nurture';nextAction='schedule_reengagement_sequence';pipelineState='nurture';}else if(sellerAccepted){if(!economicsReady){decision='walk_away';nextAction='reject_or_reprice_above_protected_mao';pipelineState='walk_away';}else if(readinessScore===1){decision='contract_ready';nextAction='advance_to_contract_generation_and_signature';pipelineState='contract_ready';}else{decision='contract_readiness_pending';nextAction='collect_missing_contract_readiness_items';pipelineState='contract_readiness';}}else{decision='human_review';nextAction='resolve_unfinalized_negotiation';pipelineState='negotiation';} const missing=[]; if(!sellerAccepted)missing.push('seller_acceptance'); if(!contractReadiness.sellerIdentityVerified)missing.push('seller_identity_verification'); if(!contractReadiness.propertyIdentityVerified)missing.push('property_identity_verification'); if(!documentsReady)missing.push('required_documents'); if(!signaturesReady)missing.push('required_signatures'); if(!titleReady)missing.push('title_company_confirmation'); if(!economicsReady)missing.push('protected_mao_economics'); const idempotencyKey='wf440:'+input.leadId+':'+input.dealId+':'+input.negotiationId+':'+outcome; return [{json:{...input,negotiationFinalizationDecision:{status:flags.length?'review_required':'evaluated',decision,nextAction,pipelineState,finalPurchasePrice:finalPrice,protectedMao,economicsReady,readinessScore,missingRequirements:missing,flags,requiresHumanReview:decision==='human_review'||decision==='contract_readiness_pending',confidenceScore:flags.length?15:(decision==='human_review'?55:95)},idempotencyKey}}];"},
+      "id":"w440e","name":"Evaluate Negotiation Finalization & Contract Readiness","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-negotiation-finalization-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"negotiationId","value":"={{$json.negotiationId}}"},{"name":"negotiationFinalizationDecision","value":"={{JSON.stringify($json.negotiationFinalizationDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w440f","name":"Persist Negotiation Finalization","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-negotiation-finalization-action","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"negotiationId","value":"={{$json.negotiationId}}"},{"name":"decision","value":"={{$json.negotiationFinalizationDecision.decision}}"},{"name":"nextAction","value":"={{$json.negotiationFinalizationDecision.nextAction}}"},{"name":"pipelineState","value":"={{$json.negotiationFinalizationDecision.pipelineState}}"},{"name":"idempotencyKey","value":"={{'wf440:action:'+$json.leadId+':'+$json.dealId+':'+$json.negotiationId+':'+$json.outcome}}"}]},"options":{}},
+      "id":"w440g","name":"Persist Negotiation Finalization Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_negotiation_finalization_contract_readiness_walk_away_nurture"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"negotiationId","value":"={{$json.negotiationId}}"},{"name":"decision","value":"={{$json.negotiationFinalizationDecision.decision}}"},{"name":"pipelineState","value":"={{$json.negotiationFinalizationDecision.pipelineState}}"},{"name":"idempotencyKey","value":"={{'wf440:activity:'+$json.leadId+':'+$json.dealId+':'+$json.negotiationId+':'+$json.outcome}}"}]},"options":{}},
+      "id":"w440h","name":"Record Negotiation Finalization Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w440i","name":"Respond Negotiation Finalization","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, negotiationId and outcome are required'} }}","options":{}},
+      "id":"w440j","name":"Respond Invalid Negotiation Finalization","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Negotiation Finalization Webhook":{"main":[[{"node":"Normalize Negotiation Finalization","type":"main","index":0}]]},
+    "Normalize Negotiation Finalization":{"main":[[{"node":"Validate Negotiation Finalization","type":"main","index":0}]]},
+    "Validate Negotiation Finalization":{"main":[[{"node":"Fetch Negotiation Finalization Context","type":"main","index":0}],[{"node":"Respond Invalid Negotiation Finalization","type":"main","index":0}]]},
+    "Fetch Negotiation Finalization Context":{"main":[[{"node":"Evaluate Negotiation Finalization & Contract Readiness","type":"main","index":0}]]},
+    "Evaluate Negotiation Finalization & Contract Readiness":{"main":[[{"node":"Persist Negotiation Finalization","type":"main","index":0}]]},
+    "Persist Negotiation Finalization":{"main":[[{"node":"Persist Negotiation Finalization Action","type":"main","index":0}]]},
+    "Persist Negotiation Finalization Action":{"main":[[{"node":"Record Negotiation Finalization Activity","type":"main","index":0}]]},
+    "Record Negotiation Finalization Activity":{"main":[[{"node":"Respond Negotiation Finalization","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-440"},{"name":"seller-negotiation"},{"name":"contract-readiness"},{"name":"walk-away"},{"name":"nurture"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-440","contractStatus":"scaffolded","idempotency":"wf440:{leadId}:{dealId}:{negotiationId}:{outcome}","notes":"Negotiation finalization and contract readiness is scaffolding pending verified InsulaCRM contract-readiness schema, canonical protected-MAO source, e-signature/document provider, title/closing provider, and production API contracts."}
+}

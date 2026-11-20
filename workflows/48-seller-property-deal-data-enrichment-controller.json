@@ -1,0 +1,173 @@
+{
+  "name": "WF-410 — Seller Property & Deal Data Enrichment Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seller-property-deal-enrichment",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w410a",
+      "name": "Property Enrichment Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const address=String(b.address??b.propertyAddress??'').trim(); return [{json:{...b,leadId,propertyId,address,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w410b",
+      "name": "Normalize Property Enrichment Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {"value1":"={{$json.leadId}}","operation":"notEmpty"},
+            {"value1":"={{$json.propertyId}}","operation":"notEmpty"}
+          ]
+        }
+      },
+      "id": "w410c",
+      "name": "Validate Property Enrichment Identity",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/properties/enrichment-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"propertyId","value":"={{$json.propertyId}}"},
+            {"name":"address","value":"={{$json.address}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w410d",
+      "name": "Fetch Property & Deal Enrichment Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [660, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Property Enrichment Request').first().json; const ctx=$json.context??$json; const property=ctx.property??input.property??{}; const seller=ctx.seller??input.seller??{}; const deal=ctx.deal??input.deal??{}; const lead=ctx.lead??input.lead??{}; const numeric=(v)=>Number.isFinite(Number(v))?Number(v):null; const arv=numeric(property.arv??property.estimatedValue??ctx.arv); const repairs=numeric(property.repairs??ctx.repairs); const purchasePrice=numeric(deal.purchasePrice??deal.offerAmount); const assignmentFee=numeric(deal.assignmentFee); const equityPct=numeric(property.equityPercent??ctx.equityPercent); const sqft=numeric(property.sqft??property.squareFeet); const beds=numeric(property.beds??property.bedrooms); const baths=numeric(property.baths??property.bathrooms); const yearBuilt=numeric(property.yearBuilt); const ownershipYears=numeric(seller.ownershipYears); const occupancy=String(property.occupancy??seller.occupancy??'unknown').toLowerCase(); const propertyType=String(property.propertyType??property.type??'unknown').toLowerCase(); const distressSignals=Array.isArray(property.distressSignals)?property.distressSignals:[]; const missing=[]; for(const [k,v] of Object.entries({arv,repairs,purchasePrice,assignmentFee,equityPct,sqft,beds,baths,yearBuilt,ownershipYears})) if(v===null) missing.push(k); const dealSpread=arv!==null&&purchasePrice!==null?arv-purchasePrice:null; const estimatedGrossProfit=dealSpread!==null&&assignmentFee!==null?assignmentFee:dealSpread; const repairToValue=arv&&repairs!==null?repairs/arv:null; const enrichment={property:{propertyId:input.propertyId,address:input.address||property.address||null,propertyType,occupancy,sqft,beds,baths,yearBuilt},seller:{ownershipYears,ownerOccupied:occupancy==='owner_occupied'},deal:{purchasePrice,assignmentFee,arv,repairs,equityPercent:equityPct,dealSpread,estimatedGrossProfit,repairToValue},distress:{signals:distressSignals,count:distressSignals.length},lead:{source:lead.source??input.source??null,channel:lead.channel??input.channel??null},dataQuality:{missingFields:missing,completenessScore:Math.round(Math.max(0,100-(missing.length/10)*100))}}; const flags=[]; if(equityPct!==null&&equityPct>=40)flags.push('high_equity'); if(repairToValue!==null&&repairToValue>=0.2)flags.push('high_repair_burden'); if(occupancy==='vacant')flags.push('vacant'); if(distressSignals.length>0)flags.push('distress_signals'); if(ownershipYears!==null&&ownershipYears>=10)flags.push('long_ownership'); if(arv!==null&&purchasePrice!==null&&purchasePrice<arv*.7)flags.push('large_value_gap'); const status=missing.length<=2?'enriched':missing.length<=5?'partially_enriched':'insufficient_data'; const idempotencyKey='wf410:'+input.leadId+':'+input.propertyId; return [{json:{...input,context:ctx,enrichment:{status,enrichment,flags,sourceContext:'InsulaCRM canonical property/deal context'},idempotencyKey}}}];"
+      },
+      "id": "w410e",
+      "name": "Build Property & Deal Enrichment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/properties/enrichment",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"propertyId","value":"={{$json.propertyId}}"},
+            {"name":"enrichment","value":"={{JSON.stringify($json.enrichment)}}"},
+            {"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w410f",
+      "name": "Persist Property & Deal Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"type","value":"seller_property_deal_enrichment"},
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"propertyId","value":"={{$json.propertyId}}"},
+            {"name":"status","value":"={{$json.enrichment.status}}"},
+            {"name":"flagCount","value":"={{$json.enrichment.flags.length}}"},
+            {"name":"dataCompletenessScore","value":"={{$json.enrichment.enrichment.dataQuality.completenessScore}}"},
+            {"name":"idempotencyKey","value":"={{'wf410:activity:'+$json.leadId+':'+$json.propertyId}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w410g",
+      "name": "Record Property Enrichment Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w410h",
+      "name": "Respond Property Enrichment",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId and propertyId are required'} }}",
+        "options": {}
+      },
+      "id": "w410i",
+      "name": "Respond Invalid Enrichment Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 140]
+    }
+  ],
+  "connections": {
+    "Property Enrichment Webhook": {"main":[[{"node":"Normalize Property Enrichment Request","type":"main","index":0}]]},
+    "Normalize Property Enrichment Request": {"main":[[{"node":"Validate Property Enrichment Identity","type":"main","index":0}]]},
+    "Validate Property Enrichment Identity": {"main":[[{"node":"Fetch Property & Deal Enrichment Context","type":"main","index":0}],[{"node":"Respond Invalid Enrichment Request","type":"main","index":0}]]},
+    "Fetch Property & Deal Enrichment Context": {"main":[[{"node":"Build Property & Deal Enrichment","type":"main","index":0}]]},
+    "Build Property & Deal Enrichment": {"main":[[{"node":"Persist Property & Deal Enrichment","type":"main","index":0}]]},
+    "Persist Property & Deal Enrichment": {"main":[[{"node":"Record Property Enrichment Activity","type":"main","index":0}]]},
+    "Record Property Enrichment Activity": {"main":[[{"node":"Respond Property Enrichment","type":"main","index":0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {"name":"WF-410"},
+    {"name":"property-enrichment"},
+    {"name":"deal-enrichment"},
+    {"name":"seller"},
+    {"name":"InsulaCRM"}
+  ],
+  "meta": {
+    "workflowId":"WF-410",
+    "contractStatus":"scaffolded",
+    "idempotency":"wf410:{leadId}:{propertyId}",
+    "notes":"Enrichment is a deterministic scaffold pending production property-data providers, verified InsulaCRM field mappings, and final API contract."
+  }
+}

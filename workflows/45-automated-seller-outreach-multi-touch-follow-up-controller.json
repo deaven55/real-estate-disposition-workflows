@@ -1,0 +1,179 @@
+{
+  "name": "WF-407 — Automated Seller Outreach & Multi-Touch Follow-Up Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "automated-seller-outreach-follow-up",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w407a",
+      "name": "Seller Outreach Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const channel=String(b.channel??'sms').trim().toLowerCase(); const sequenceId=String(b.sequenceId??'default-seller-follow-up').trim(); const step=Number(b.step??1); return [{json:{...b,leadId,channel,sequenceId,step,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w407b",
+      "name": "Normalize Seller Outreach Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w407c",
+      "name": "Validate Seller Outreach Identity",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/outreach-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"sequenceId","value":"={{$json.sequenceId}}"},
+            {"name":"step","value":"={{$json.step}}"},
+            {"name":"channel","value":"={{$json.channel}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w407d",
+      "name": "Fetch Seller Outreach Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [660, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Seller Outreach Request').first().json; const ctx=$json.context??$json; const lead=ctx.lead??{}; const seller=ctx.seller??{}; const suppressed=Boolean(ctx.suppressed||lead.suppressed||seller.suppressed); const dnc=Boolean(ctx.dnc||lead.dnc||seller.dnc); const consent=String(ctx.consentStatus??lead.consentStatus??input.consentStatus??'unknown').toLowerCase(); const closed=Boolean(ctx.closed||lead.closed); const priorSteps=Array.isArray(ctx.completedSteps)?ctx.completedSteps:[]; const lastContactAt=ctx.lastContactAt??lead.lastContactAt??null; const replyPending=Boolean(ctx.replyPending||lead.replyPending); const validChannel=['sms','email','voice','mail','direct_message'].includes(input.channel); const blockedReason=suppressed?'suppressed':dnc?'dnc':closed?'closed':!validChannel?'unsupported_channel':(consent==='denied'?'consent_denied':replyPending?'reply_pending':null); const templates=ctx.templates??{}; const template=templates[input.channel]??templates.default??null; const duplicateStep=priorSteps.some(s=>String(s.sequenceId)===input.sequenceId&&Number(s.step)===input.step); const sendAllowed=!blockedReason&&!duplicateStep&&Boolean(template||input.message); const status=blockedReason?'blocked':duplicateStep?'duplicate_step':sendAllowed?'ready':'missing_message_template'; const idempotencyKey='wf407:'+input.leadId+':'+input.sequenceId+':'+input.step; return [{json:{...input,context:ctx,outreachDecision:{status,sendAllowed,blockedReason,duplicateStep,consentStatus:consent,lastContactAt,replyPending,channel:input.channel,sequenceId:input.sequenceId,step:input.step,template:template??null,message:input.message??template??null,priorStepCount:priorSteps.length},idempotencyKey}}}];"
+      },
+      "id": "w407e",
+      "name": "Determine Outreach Eligibility & Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/communications/seller-outreach",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"channel","value":"={{$json.outreachDecision.channel}}"},
+            {"name":"sequenceId","value":"={{$json.outreachDecision.sequenceId}}"},
+            {"name":"step","value":"={{$json.outreachDecision.step}}"},
+            {"name":"message","value":"={{$json.outreachDecision.message}}"},
+            {"name":"status","value":"={{$json.outreachDecision.status}}"},
+            {"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w407f",
+      "name": "Dispatch Seller Outreach",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {"name":"type","value":"seller_outreach_follow_up"},
+            {"name":"leadId","value":"={{$json.leadId}}"},
+            {"name":"channel","value":"={{$json.outreachDecision.channel}}"},
+            {"name":"sequenceId","value":"={{$json.outreachDecision.sequenceId}}"},
+            {"name":"step","value":"={{$json.outreachDecision.step}}"},
+            {"name":"status","value":"={{$json.outreachDecision.status}}"},
+            {"name":"idempotencyKey","value":"={{'wf407:activity:'+$json.leadId+':'+$json.outreachDecision.sequenceId+':'+$json.outreachDecision.step}}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "w407g",
+      "name": "Record Seller Outreach Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w407h",
+      "name": "Respond Seller Outreach",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId is required'} }}",
+        "options": {}
+      },
+      "id": "w407i",
+      "name": "Respond Invalid Outreach Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 140]
+    }
+  ],
+  "connections": {
+    "Seller Outreach Webhook": {"main":[[{"node":"Normalize Seller Outreach Request","type":"main","index":0}]]},
+    "Normalize Seller Outreach Request": {"main":[[{"node":"Validate Seller Outreach Identity","type":"main","index":0}]]},
+    "Validate Seller Outreach Identity": {"main":[[{"node":"Fetch Seller Outreach Context","type":"main","index":0}],[{"node":"Respond Invalid Outreach Request","type":"main","index":0}]]},
+    "Fetch Seller Outreach Context": {"main":[[{"node":"Determine Outreach Eligibility & Message","type":"main","index":0}]]},
+    "Determine Outreach Eligibility & Message": {"main":[[{"node":"Dispatch Seller Outreach","type":"main","index":0}]]},
+    "Dispatch Seller Outreach": {"main":[[{"node":"Record Seller Outreach Activity","type":"main","index":0}]]},
+    "Record Seller Outreach Activity": {"main":[[{"node":"Respond Seller Outreach","type":"main","index":0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {"name":"WF-407"},
+    {"name":"seller-outreach"},
+    {"name":"follow-up"},
+    {"name":"communications"},
+    {"name":"InsulaCRM"}
+  ],
+  "meta": {
+    "workflowId":"WF-407",
+    "contractStatus":"scaffolded",
+    "idempotency":"wf407:{leadId}:{sequenceId}:{step}",
+    "notes":"Outreach dispatch is scaffolded pending production communication provider, consent policy, template schema, and verified InsulaCRM API contract."
+  }
+}

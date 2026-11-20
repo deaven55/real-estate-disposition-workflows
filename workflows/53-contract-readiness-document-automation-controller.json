@@ -1,0 +1,53 @@
+{
+  "name": "WF-415 — Contract Readiness & Document Automation Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"contract-readiness-document-automation","responseMode":"lastNode","options":{}},
+      "id":"w415a","name":"Contract Readiness Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w415b","name":"Normalize Contract Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"}]}},
+      "id":"w415c","name":"Validate Contract Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/contract-readiness-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"}]},"options":{}},
+      "id":"w415d","name":"Fetch Contract Readiness Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Contract Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const p=ctx.property??{}; const s=ctx.seller??{}; const u=ctx.underwriting??{}; const num=v=>Number.isFinite(Number(v))?Number(v):null; const purchasePrice=num(d.purchasePrice??d.offerAmount??u.recommendedMAO); const arv=num(d.arv??p.arv??u.arv); const protectedMAO=num(d.protectedMAO??u.protectedMAO??u.recommendedMAO); const assignmentFee=num(d.assignmentFee??u.assignmentFee); const signedSeller=Boolean(d.sellerSigned??d.sellerSignature?.verified??ctx.sellerSigned); const signedBuyer=Boolean(d.buyerSigned??d.buyerSignature?.verified??ctx.buyerSigned); const contractDocId=String(d.contractDocumentId??ctx.contractDocumentId??'').trim(); const assignmentDocId=String(d.assignmentDocumentId??ctx.assignmentDocumentId??'').trim(); const titleCompany=String(d.titleCompany??ctx.titleCompany??'').trim(); const sellerId=String(s.id??input.sellerId??'').trim(); const sellerIdentityVerified=Boolean(s.identityVerified??ctx.sellerIdentityVerified); const propertyIdentityVerified=Boolean(p.identityVerified??ctx.propertyIdentityVerified); const requiredFields={sellerId:!!sellerId,propertyId:!!input.propertyId,purchasePrice:purchasePrice!==null,contractDocument:!!contractDocId,sellerSignature:signedSeller,sellerIdentityVerified,buyerSignature:signedBuyer,propertyIdentityVerified}; const missing=Object.entries(requiredFields).filter(([,v])=>!v).map(([k])=>k); const flags=[]; if(protectedMAO!==null&&purchasePrice!==null&&purchasePrice>protectedMAO)flags.push('purchase_price_above_protected_mao'); if(!titleCompany)flags.push('title_company_not_confirmed'); if(!assignmentDocId)flags.push('assignment_document_not_ready'); if(arv!==null&&purchasePrice!==null&&purchasePrice>arv)flags.push('purchase_price_above_arv'); const readiness=missing.length===0&&flags.filter(x=>x==='purchase_price_above_protected_mao').length===0?'ready':'not_ready'; const nextAction=readiness==='ready'?'generate_or_route_for_execution':missing.includes('sellerSignature')?'obtain_seller_signature':missing.includes('contractDocument')?'generate_contract_document':missing.includes('sellerIdentityVerified')?'verify_seller_identity':missing.includes('propertyIdentityVerified')?'verify_property_identity':missing.includes('buyerSignature')?'obtain_buyer_signature':'resolve_contract_flags'; const confidence=Math.round(Math.max(0,Math.min(100,Object.values(requiredFields).filter(Boolean).length/Object.keys(requiredFields).length*100))); const idempotencyKey='wf415:'+input.leadId+':'+input.propertyId+':'+input.dealId; return [{json:{...input,contractReadiness:{status:readiness,requiredFields,missing,flags,nextAction,documents:{contractDocumentId:contractDocId||null,assignmentDocumentId:assignmentDocId||null,titleCompany:titleCompany||null},economics:{purchasePrice,arv,protectedMAO,assignmentFee},confidenceScore:confidence,automation:{canGenerateContract:missing.length<=2&&purchasePrice!==null,canRouteForSignature:!!contractDocId&&sellerIdentityVerified,canAdvanceToAssignment:signedSeller&&signedBuyer&&!!contractDocId}},idempotencyKey}}];"},
+      "id":"w415e","name":"Evaluate Contract Readiness & Documents","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/contract-readiness","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractReadiness","value":"={{JSON.stringify($json.contractReadiness)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w415f","name":"Persist Contract Readiness","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"contract_readiness_document_automation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"status","value":"={{$json.contractReadiness.status}}"},{"name":"nextAction","value":"={{$json.contractReadiness.nextAction}}"},{"name":"confidenceScore","value":"={{$json.contractReadiness.confidenceScore}}"},{"name":"idempotencyKey","value":"={{'wf415:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId}}"}]},"options":{}},
+      "id":"w415g","name":"Record Contract Readiness Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w415h","name":"Respond Contract Readiness","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId and dealId are required'} }}","options":{}},
+      "id":"w415i","name":"Respond Invalid Contract Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Contract Readiness Webhook":{"main":[[{"node":"Normalize Contract Request","type":"main","index":0}]]},
+    "Normalize Contract Request":{"main":[[{"node":"Validate Contract Identity","type":"main","index":0}]]},
+    "Validate Contract Identity":{"main":[[{"node":"Fetch Contract Readiness Context","type":"main","index":0}],[{"node":"Respond Invalid Contract Request","type":"main","index":0}]]},
+    "Fetch Contract Readiness Context":{"main":[[{"node":"Evaluate Contract Readiness & Documents","type":"main","index":0}]]},
+    "Evaluate Contract Readiness & Documents":{"main":[[{"node":"Persist Contract Readiness","type":"main","index":0}]]},
+    "Persist Contract Readiness":{"main":[[{"node":"Record Contract Readiness Activity","type":"main","index":0}]]},
+    "Record Contract Readiness Activity":{"main":[[{"node":"Respond Contract Readiness","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-415"},{"name":"contracts"},{"name":"documents"},{"name":"signature"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-415","contractStatus":"scaffolded","idempotency":"wf415:{leadId}:{propertyId}:{dealId}","notes":"Contract readiness and document automation is deterministic scaffolding pending verified InsulaCRM contract/document schema, e-signature provider, title/closing provider, and production API contracts. This workflow does not create or execute legally binding documents by itself."}
+}

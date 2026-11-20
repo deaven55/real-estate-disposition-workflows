@@ -1,0 +1,53 @@
+{
+  "name": "WF-421 — Executed Assignment Contract → Title & Closing Coordination Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"executed-assignment-title-closing-coordination","responseMode":"lastNode","options":{}},
+      "id":"w421a","name":"Executed Assignment Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const buyerId=String(b.buyerId??'').trim(); const documentId=String(b.documentId??b.assignmentDocumentId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,buyerId,documentId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w421b","name":"Normalize Closing Coordination Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.buyerId}}","operation":"notEmpty"},{"value1":"={{$json.documentId}}","operation":"notEmpty"}]}},
+      "id":"w421c","name":"Validate Closing Coordination Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/title-closing-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"documentId","value":"={{$json.documentId}}"}]},"options":{}},
+      "id":"w421d","name":"Fetch Title Closing Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Closing Coordination Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const title=ctx.title??{}; const closing=ctx.closing??{}; const doc=ctx.document??{}; const flags=[]; const executed=ctx.contractExecutionStatus==='executed'||doc.executionStatus==='executed'||d.assignmentContractExecuted===true; if(!executed)flags.push('assignment_contract_not_executed'); if(title.status&&['failed','rejected','cancelled'].includes(String(title.status).toLowerCase()))flags.push('title_process_blocked'); if(closing.status&&['failed','cancelled'].includes(String(closing.status).toLowerCase()))flags.push('closing_process_blocked'); if(title.clearToClose===false)flags.push('title_not_clear_to_close'); if(closing.ready===false)flags.push('closing_not_ready'); if(!ctx.titleCompanyId&&!title.companyId)flags.push('title_company_missing'); if(!ctx.closingContactId&&!closing.contactId)flags.push('closing_contact_missing'); const blocked=flags.includes('assignment_contract_not_executed')||flags.includes('title_process_blocked')||flags.includes('closing_process_blocked'); const coordinationStatus=blocked?'blocked':flags.length?'pending_requirements':'ready'; const nextAction=coordinationStatus==='ready'?'open_or_update_title_order_and_schedule_closing':coordinationStatus==='blocked'?'resolve_contract_title_or_closing_blocker':'collect_missing_title_closing_requirements'; const packageData={assignmentId:d.assignmentId??ctx.assignmentId??null,dealId:input.dealId,propertyId:input.propertyId,buyerId:input.buyerId,documentId:input.documentId,titleCompanyId:ctx.titleCompanyId??title.companyId??null,closingContactId:ctx.closingContactId??closing.contactId??null,propertyAddress:ctx.propertyAddress??ctx.property?.address??null,executedContractEvidence:{providerEventId:ctx.providerEventId??doc.providerEventId??null,documentHash:ctx.documentHash??doc.documentHash??null,executedAt:ctx.executedAt??doc.executedAt??null}}; const idempotencyKey='wf421:'+input.leadId+':'+input.propertyId+':'+input.dealId+':'+input.buyerId+':'+input.documentId; return [{json:{...input,titleClosingCoordination:{status:coordinationStatus,nextAction,flags,packageData,coordinationSteps:coordinationStatus==='ready'?['create_or_confirm_title_order','send_executed_assignment_package','confirm_title_opened','collect_closing_date','confirm_buyer_and_seller_contacts','track_clear_to_close']:['resolve_blockers','revalidate_execution_and_title_closing_readiness'],confidenceScore:coordinationStatus==='ready'?95:Math.max(0,65-flags.length*8)},idempotencyKey}}];"},
+      "id":"w421e","name":"Build Title Closing Coordination Package","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/title-closing-coordination","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"documentId","value":"={{$json.documentId}}"},{"name":"titleClosingCoordination","value":"={{JSON.stringify($json.titleClosingCoordination)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w421f","name":"Persist Title Closing Coordination","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"executed_assignment_title_closing_coordination"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"documentId","value":"={{$json.documentId}}"},{"name":"status","value":"={{$json.titleClosingCoordination.status}}"},{"name":"nextAction","value":"={{$json.titleClosingCoordination.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf421:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId+':'+$json.documentId}}"}]},"options":{}},
+      "id":"w421g","name":"Record Title Closing Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w421h","name":"Respond Title Closing Coordination","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId, dealId, buyerId and documentId are required'} }}","options":{}},
+      "id":"w421i","name":"Respond Invalid Closing Coordination","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Executed Assignment Webhook":{"main":[[{"node":"Normalize Closing Coordination Request","type":"main","index":0}]]},
+    "Normalize Closing Coordination Request":{"main":[[{"node":"Validate Closing Coordination Identity","type":"main","index":0}]]},
+    "Validate Closing Coordination Identity":{"main":[[{"node":"Fetch Title Closing Context","type":"main","index":0}],[{"node":"Respond Invalid Closing Coordination","type":"main","index":0}]]},
+    "Fetch Title Closing Context":{"main":[[{"node":"Build Title Closing Coordination Package","type":"main","index":0}]]},
+    "Build Title Closing Coordination Package":{"main":[[{"node":"Persist Title Closing Coordination","type":"main","index":0}]]},
+    "Persist Title Closing Coordination":{"main":[[{"node":"Record Title Closing Activity","type":"main","index":0}]]},
+    "Record Title Closing Activity":{"main":[[{"node":"Respond Title Closing Coordination","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-421"},{"name":"title"},{"name":"closing"},{"name":"assignment"},{"name":"coordination"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-421","contractStatus":"scaffolded","idempotency":"wf421:{leadId}:{propertyId}:{dealId}:{buyerId}:{documentId}","notes":"Title and closing coordination is workflow scaffolding pending verified InsulaCRM title/closing schema, title-company integration, closing-provider integration, and production API contracts."}
+}

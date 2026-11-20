@@ -1,0 +1,53 @@
+{
+  "name": "WF-419 — Assignment Contract Generation & Signature Routing Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"assignment-contract-generation-signature-routing","responseMode":"lastNode","options":{}},
+      "id":"w419a","name":"Assignment Contract Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const buyerId=String(b.buyerId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,buyerId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w419b","name":"Normalize Assignment Contract Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.buyerId}}","operation":"notEmpty"}]}},
+      "id":"w419c","name":"Validate Assignment Contract Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/contract-generation-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"}]},"options":{}},
+      "id":"w419d","name":"Fetch Assignment Contract Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Assignment Contract Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const buyer=ctx.buyer??{}; const seller=ctx.seller??{}; const p=ctx.property??{}; const num=v=>Number.isFinite(Number(v))?Number(v):null; const purchasePrice=num(d.purchasePrice??d.contractPrice); const assignmentFee=num(d.assignmentFee); const buyerOffer=num(d.buyerOffer??d.offerAmount); const protectedMAO=num(d.protectedMAO??d.protectedMao); const flags=[]; if(['closed','cancelled','disputed'].includes(String(ctx.dealStatus??d.status??'').toLowerCase()))flags.push('deal_protected_state'); if(buyer.active===false)flags.push('buyer_inactive'); if(buyer.suppressed===true)flags.push('buyer_suppressed'); if(buyer.dnc===true)flags.push('buyer_dnc'); if(buyer.assignmentEligible!==true)flags.push('buyer_assignment_ineligible'); if(buyer.proofOfFundsVerified!==true)flags.push('proof_of_funds_not_verified'); if(seller.identityVerified!==true)flags.push('seller_identity_not_verified'); if(p.identityVerified!==true)flags.push('property_identity_not_verified'); if(d.contractReady!==true)flags.push('contract_not_ready'); if(d.sellerSigned!==true)flags.push('seller_signature_missing'); if(purchasePrice===null)flags.push('purchase_price_missing'); if(buyerOffer===null)flags.push('buyer_offer_missing'); if(protectedMAO!==null&&purchasePrice!==null&&purchasePrice>protectedMAO)flags.push('purchase_price_above_protected_mao'); if(buyerOffer!==null&&purchasePrice!==null&&buyerOffer<purchasePrice)flags.push('buyer_offer_below_purchase_price'); const hardBlock=['deal_protected_state','buyer_inactive','buyer_suppressed','buyer_dnc','buyer_assignment_ineligible','proof_of_funds_not_verified','seller_identity_not_verified','property_identity_not_verified','contract_not_ready','seller_signature_missing','purchase_price_missing','buyer_offer_missing','purchase_price_above_protected_mao','buyer_offer_below_purchase_price']; const blocked=flags.some(x=>hardBlock.includes(x)); const documentPayload={documentType:'assignment_agreement',status:blocked?'not_ready':'ready_for_generation',dealId:input.dealId,propertyId:input.propertyId,leadId:input.leadId,sellerId:seller.id??seller.sellerId??null,buyerId:input.buyerId,purchasePrice,assignmentFee,buyerOffer,requiredSigners:[{role:'seller',id:seller.id??seller.sellerId??null},{role:'buyer',id:buyer.id??buyer.buyerId??input.buyerId}],requiredFields:['property_identity','seller_identity','buyer_identity','purchase_price','assignment_fee','effective_date','signatures'],generationControls:{doNotTreatAsExecuted:true,requiresFinalReview:true}}; const signatureRouting=blocked?{status:'blocked',routes:[],nextAction:'resolve_contract_blockers'}:{status:'ready',routes:[{role:'seller',channel:'esign',required:true},{role:'buyer',channel:'esign',required:true}],nextAction:'generate_assignment_document_and_route_for_signatures'}; const idempotencyKey='wf419:'+input.leadId+':'+input.propertyId+':'+input.dealId+':'+input.buyerId; return [{json:{...input,assignmentContract:{status:blocked?'blocked':'ready_for_generation',documentPayload,signatureRouting,flags,confidenceScore:blocked?Math.max(0,55-flags.length*5):Math.max(75,100-flags.length*3)},idempotencyKey}}];"},
+      "id":"w419e","name":"Build Assignment Contract & Signature Routing","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/contract-generation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"assignmentContract","value":"={{JSON.stringify($json.assignmentContract)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w419f","name":"Persist Assignment Contract Workflow","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"assignment_contract_generation_signature_routing"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"status","value":"={{$json.assignmentContract.status}}"},{"name":"signatureRoutingStatus","value":"={{$json.assignmentContract.signatureRouting.status}}"},{"name":"idempotencyKey","value":"={{'wf419:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId+':'+$json.buyerId}}"}]},"options":{}},
+      "id":"w419g","name":"Record Assignment Contract Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w419h","name":"Respond Assignment Contract Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId, dealId and buyerId are required'} }}","options":{}},
+      "id":"w419i","name":"Respond Invalid Assignment Contract Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Assignment Contract Webhook":{"main":[[{"node":"Normalize Assignment Contract Request","type":"main","index":0}]]},
+    "Normalize Assignment Contract Request":{"main":[[{"node":"Validate Assignment Contract Identity","type":"main","index":0}]]},
+    "Validate Assignment Contract Identity":{"main":[[{"node":"Fetch Assignment Contract Context","type":"main","index":0}],[{"node":"Respond Invalid Assignment Contract Request","type":"main","index":0}]]},
+    "Fetch Assignment Contract Context":{"main":[[{"node":"Build Assignment Contract & Signature Routing","type":"main","index":0}]]},
+    "Build Assignment Contract & Signature Routing":{"main":[[{"node":"Persist Assignment Contract Workflow","type":"main","index":0}]]},
+    "Persist Assignment Contract Workflow":{"main":[[{"node":"Record Assignment Contract Activity","type":"main","index":0}]]},
+    "Record Assignment Contract Activity":{"main":[[{"node":"Respond Assignment Contract Result","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-419"},{"name":"assignment-contract"},{"name":"signature-routing"},{"name":"e-sign"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-419","contractStatus":"scaffolded","idempotency":"wf419:{leadId}:{propertyId}:{dealId}:{buyerId}","notes":"Assignment contract generation and signature routing is workflow scaffolding. It does not create a legally binding executed contract. Production use requires verified InsulaCRM contract/document schema, approved legal templates, e-signature provider, title/closing requirements, and production API contracts."}
+}

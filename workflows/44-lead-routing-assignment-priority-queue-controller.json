@@ -1,0 +1,230 @@
+{
+  "name": "WF-406 — Lead Routing, Assignment & Priority Queue Controller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-routing-assignment-priority-queue",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w406a",
+      "name": "Lead Routing Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const priorityScore=Number(b.priorityScore??b.qualification?.priorityScore??0); const tier=String(b.tier??b.qualification?.tier??'').trim().toUpperCase(); return [{json:{...b,leadId,priorityScore,tier,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w406b",
+      "name": "Normalize Lead Routing Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w406c",
+      "name": "Validate Lead Routing Identity",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/routing-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "priorityScore",
+              "value": "={{$json.priorityScore}}"
+            },
+            {
+              "name": "tier",
+              "value": "={{$json.tier}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w406d",
+      "name": "Fetch Lead Routing Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [660, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Lead Routing Input').first().json; const ctx=$json.context??$json; const suppressed=Boolean(ctx.suppressed||input.suppressed); const dnc=Boolean(ctx.dnc||input.dnc); const status=String(ctx.leadStatus??input.leadStatus??'active').toLowerCase(); const qualification=ctx.qualification??input.qualification??{}; const score=Math.max(0,Math.min(100,Number(input.priorityScore||qualification.priorityScore||0))); const tier=String(input.tier||qualification.tier||'C').toUpperCase(); const available=Array.isArray(ctx.assignees)?ctx.assignees:[]; const eligible=available.filter(a=>a.active!==false&&!a.suppressed&&!a.dnc); const ranked=eligible.map(a=>{const capacity=Math.max(0,Number(a.capacityRemaining??a.capacity??0)); const specialty=Number(a.specialtyScore??50); const geography=Number(a.geographyScore??50); const workload=Number(a.workloadScore??50); const score=(capacity>0?35:0)+specialty*.25+geography*.2+workload*.3; return {...a,routingScore:Math.round(score*100)/100};}).sort((a,b)=>b.routingScore-a.routingScore); const chosen=ranked[0]??null; const queue=score>=80?'priority_hot':score>=60?'priority_warm':score>=40?'standard': 'nurture'; const route=suppressed||dnc?'blocked':status==='closed'||status==='invalid'?'blocked':chosen?'assigned':'queued'; const reason=route==='blocked'?(suppressed?'suppressed':dnc?'dnc':status):chosen?'best_eligible_assignee':'no_eligible_assignee'; const idempotencyKey='wf406:'+input.leadId+':'+queue; return [{json:{...input,context:ctx,routing:{route,queue,reason,assignedTo:chosen?.assigneeId??chosen?.id??null,assignedName:chosen?.name??null,routingScore:chosen?.routingScore??null,eligibleAssigneeCount:ranked.length,priorityScore:score,tier,recommendedSlaHours:queue==='priority_hot'?1:queue==='priority_warm'?4:queue==='standard'?24:72},idempotencyKey}}}];"
+      },
+      "id": "w406e",
+      "name": "Determine Lead Route & Priority Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/routing",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "routing",
+              "value": "={{JSON.stringify($json.routing)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w406f",
+      "name": "Persist Lead Routing & Queue Assignment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, -80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "lead_routing_priority_queue"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "route",
+              "value": "={{$json.routing.route}}"
+            },
+            {
+              "name": "queue",
+              "value": "={{$json.routing.queue}}"
+            },
+            {
+              "name": "assignedTo",
+              "value": "={{$json.routing.assignedTo}}"
+            },
+            {
+              "name": "priorityScore",
+              "value": "={{$json.routing.priorityScore}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf406:activity:'+$json.leadId+':'+$json.routing.queue}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w406g",
+      "name": "Record Lead Routing Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w406h",
+      "name": "Respond Lead Routing",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId is required'} }}",
+        "options": {}
+      },
+      "id": "w406i",
+      "name": "Respond Invalid Routing Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 140]
+    }
+  ],
+  "connections": {
+    "Lead Routing Webhook": {
+      "main": [[{"node":"Normalize Lead Routing Input","type":"main","index":0}]]
+    },
+    "Normalize Lead Routing Input": {
+      "main": [[{"node":"Validate Lead Routing Identity","type":"main","index":0}]]
+    },
+    "Validate Lead Routing Identity": {
+      "main": [
+        [{"node":"Fetch Lead Routing Context","type":"main","index":0}],
+        [{"node":"Respond Invalid Routing Request","type":"main","index":0}]
+      ]
+    },
+    "Fetch Lead Routing Context": {
+      "main": [[{"node":"Determine Lead Route & Priority Queue","type":"main","index":0}]]
+    },
+    "Determine Lead Route & Priority Queue": {
+      "main": [[{"node":"Persist Lead Routing & Queue Assignment","type":"main","index":0}]]
+    },
+    "Persist Lead Routing & Queue Assignment": {
+      "main": [[{"node":"Record Lead Routing Activity","type":"main","index":0}]]
+    },
+    "Record Lead Routing Activity": {
+      "main": [[{"node":"Respond Lead Routing","type":"main","index":0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {"name":"WF-406"},
+    {"name":"lead-generation"},
+    {"name":"lead-routing"},
+    {"name":"priority-queue"},
+    {"name":"InsulaCRM"}
+  ],
+  "meta": {
+    "workflowId":"WF-406",
+    "contractStatus":"scaffolded",
+    "idempotency":"wf406:{leadId}:{queue}",
+    "notes":"Routing scaffold supports priority queues and eligible assignee selection pending production InsulaCRM assignee/capacity schema and API contract mapping."
+  }
+}

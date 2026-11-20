@@ -1,0 +1,53 @@
+{
+  "name": "WF-418 — Buyer Selection → Contract & Assignment Handoff Controller",
+  "nodes": [
+    {
+      "parameters":{"httpMethod":"POST","path":"buyer-selection-contract-assignment-handoff","responseMode":"lastNode","options":{}},
+      "id":"w418a","name":"Buyer Selection Handoff Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+    },
+    {
+      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const buyerId=String(b.buyerId??b.selectedBuyerId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,buyerId,receivedAt:new Date().toISOString()}}];"},
+      "id":"w418b","name":"Normalize Contract Handoff Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+    },
+    {
+      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.buyerId}}","operation":"notEmpty"}]}},
+      "id":"w418c","name":"Validate Contract Handoff Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/buyer-selection-handoff-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"}]},"options":{}},
+      "id":"w418d","name":"Fetch Contract Handoff Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+    },
+    {
+      "parameters":{"jsCode":"const input=$('Normalize Contract Handoff Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const buyer=ctx.buyer??{}; const seller=ctx.seller??{}; const p=ctx.property??{}; const num=v=>Number.isFinite(Number(v))?Number(v):null; const purchasePrice=num(d.purchasePrice??d.contractPrice); const assignmentFee=num(d.assignmentFee); const buyerOffer=num(d.buyerOffer??d.offerAmount); const protectedMao=num(d.protectedMAO??d.protectedMao); const selectedOffer=buyerOffer??num(input.buyerOffer); const flags=[]; if(ctx.dealStatus&&['closed','cancelled','disputed'].includes(String(ctx.dealStatus).toLowerCase()))flags.push('deal_protected_state'); if(buyer.active===false)flags.push('buyer_inactive'); if(buyer.suppressed===true)flags.push('buyer_suppressed'); if(buyer.dnc===true)flags.push('buyer_dnc'); if(buyer.assignmentEligible===false)flags.push('buyer_assignment_ineligible'); if(buyer.proofOfFundsVerified!==true)flags.push('proof_of_funds_not_verified'); if(seller.identityVerified!==true)flags.push('seller_identity_not_verified'); if(p.identityVerified!==true)flags.push('property_identity_not_verified'); if(d.contractReady!==true)flags.push('contract_not_ready'); if(d.sellerSigned!==true)flags.push('seller_signature_missing'); if(selectedOffer===null)flags.push('buyer_offer_missing'); if(protectedMao!==null&&purchasePrice!==null&&purchasePrice>protectedMao)flags.push('purchase_price_above_protected_mao'); if(protectedMao!==null&&selectedOffer!==null&&selectedOffer<purchasePrice)flags.push('buyer_offer_below_purchase_price'); if(purchasePrice===null)flags.push('purchase_price_missing'); const blocked=flags.some(x=>['deal_protected_state','buyer_inactive','buyer_suppressed','buyer_dnc','buyer_assignment_ineligible','proof_of_funds_not_verified','seller_identity_not_verified','property_identity_not_verified','contract_not_ready','seller_signature_missing','buyer_offer_missing','purchase_price_missing'].includes(x)); const handoffType=blocked?'review_required':(selectedOffer!==null&&purchasePrice!==null&&selectedOffer>=purchasePrice?'assignment_contract_handoff':'review_required'); const assignmentReady=handoffType==='assignment_contract_handoff'; const idempotencyKey='wf418:'+input.leadId+':'+input.propertyId+':'+input.dealId+':'+input.buyerId; return [{json:{...input,contractAssignmentHandoff:{status:assignmentReady?'ready':'blocked',handoffType,assignmentReady,selectedBuyer:{buyerId:input.buyerId,name:buyer.name??null},economics:{purchasePrice,assignmentFee,buyerOffer:selectedOffer,protectedMAO},requiredActions:assignmentReady?['prepare_assignment_contract','route_for_signatures','confirm_title_or_closing_contact','schedule_closing_handoff']:['resolve_blockers','revalidate_buyer_and_contract_readiness'],flags,confidenceScore:assignmentReady?Math.max(70,Math.min(100,100-flags.length*5)):Math.max(0,60-flags.length*5)},idempotencyKey}}];"},
+      "id":"w418e","name":"Validate Buyer Selection & Build Assignment Handoff","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/contract-assignment-handoff","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"handoff","value":"={{JSON.stringify($json.contractAssignmentHandoff)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
+      "id":"w418f","name":"Persist Contract Assignment Handoff","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+    },
+    {
+      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"buyer_selection_contract_assignment_handoff"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerId","value":"={{$json.buyerId}}"},{"name":"status","value":"={{$json.contractAssignmentHandoff.status}}"},{"name":"handoffType","value":"={{$json.contractAssignmentHandoff.handoffType}}"},{"name":"assignmentReady","value":"={{$json.contractAssignmentHandoff.assignmentReady}}"},{"name":"idempotencyKey","value":"={{'wf418:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId+':'+$json.buyerId}}"}]},"options":{}},
+      "id":"w418g","name":"Record Contract Handoff Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
+      "id":"w418h","name":"Respond Contract Assignment Handoff","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+    },
+    {
+      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId, dealId and buyerId are required'} }}","options":{}},
+      "id":"w418i","name":"Respond Invalid Contract Handoff","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+    }
+  ],
+  "connections":{
+    "Buyer Selection Handoff Webhook":{"main":[[{"node":"Normalize Contract Handoff Request","type":"main","index":0}]]},
+    "Normalize Contract Handoff Request":{"main":[[{"node":"Validate Contract Handoff Identity","type":"main","index":0}]]},
+    "Validate Contract Handoff Identity":{"main":[[{"node":"Fetch Contract Handoff Context","type":"main","index":0}],[{"node":"Respond Invalid Contract Handoff","type":"main","index":0}]]},
+    "Fetch Contract Handoff Context":{"main":[[{"node":"Validate Buyer Selection & Build Assignment Handoff","type":"main","index":0}]]},
+    "Validate Buyer Selection & Build Assignment Handoff":{"main":[[{"node":"Persist Contract Assignment Handoff","type":"main","index":0}]]},
+    "Persist Contract Assignment Handoff":{"main":[[{"node":"Record Contract Handoff Activity","type":"main","index":0}]]},
+    "Record Contract Handoff Activity":{"main":[[{"node":"Respond Contract Assignment Handoff","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
+  "tags":[{"name":"WF-418"},{"name":"buyer-selection"},{"name":"assignment"},{"name":"contract"},{"name":"handoff"},{"name":"InsulaCRM"}],
+  "meta":{"workflowId":"WF-418","contractStatus":"scaffolded","idempotency":"wf418:{leadId}:{propertyId}:{dealId}:{buyerId}","notes":"Buyer selection to contract/assignment handoff is deterministic scaffolding pending verified InsulaCRM contract schema, e-signature provider, title/closing provider, and production handoff APIs."}
+}

@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.0",
+  "purpose": "Deterministic contract tests for the canonical eight-engine lifecycle. These cases define expected behavior; they do not claim live provider availability.",
+  "cases": [
+    {
+      "id": "E2E-001",
+      "name": "lead to underwriting",
+      "eventType": "lead.created",
+      "expectedEngine": "lead-seller",
+      "nextEventType": "seller.qualified"
+    },
+    {
+      "id": "E2E-002",
+      "name": "seller to underwriting",
+      "eventType": "seller.qualified",
+      "expectedEngine": "lead-seller",
+      "nextEventType": "underwriting.requested"
+    },
+    {
+      "id": "E2E-003",
+      "name": "underwriting to negotiation",
+      "eventType": "underwriting.approved",
+      "expectedEngine": "underwriting-risk",
+      "nextEventType": "offer.prepare"
+    },
+    {
+      "id": "E2E-004",
+      "name": "offer to contract",
+      "eventType": "offer.accepted",
+      "expectedEngine": "negotiation-offer",
+      "nextEventType": "contract.readiness.requested"
+    },
+    {
+      "id": "E2E-005",
+      "name": "contract to disposition",
+      "eventType": "contract.signed",
+      "expectedEngine": "contract-esignature",
+      "nextEventType": "buyer.disposition.requested"
+    },
+    {
+      "id": "E2E-006",
+      "name": "buyer to title",
+      "eventType": "buyer.locked",
+      "expectedEngine": "buyer-disposition",
+      "nextEventType": "title.order.requested"
+    },
+    {
+      "id": "E2E-007",
+      "name": "title to closing",
+      "eventType": "title.cleared",
+      "expectedEngine": "title-closing",
+      "nextEventType": "closing.ready"
+    },
+    {
+      "id": "E2E-008",
+      "name": "closing to financials",
+      "eventType": "closing.completed",
+      "expectedEngine": "title-closing",
+      "nextEventType": "financials.reconcile.requested"
+    },
+    {
+      "id": "E2E-009",
+      "name": "financial completion",
+      "eventType": "financials.reconciled",
+      "expectedEngine": "financials-analytics",
+      "nextEventType": "profit.realized"
+    },
+    {
+      "id": "E2E-010",
+      "name": "duplicate replay blocked",
+      "eventType": "offer.accepted",
+      "expectedEngine": "negotiation-offer",
+      "expectedAction": "replay_blocked"
+    },
+    {
+      "id": "E2E-011",
+      "name": "terminal state blocked",
+      "eventType": "offer.prepare",
+      "expectedEngine": "negotiation-offer",
+      "dealStatus": "closed",
+      "expectedAction": "protected_state_blocked"
+    },
+    {
+      "id": "E2E-012",
+      "name": "missing identity blocked",
+      "eventType": "lead.created",
+      "expectedEngine": "lead-seller",
+      "missing": [
+        "leadId"
+      ],
+      "expectedAction": "validation_blocked"
+    }
+  ]
+}

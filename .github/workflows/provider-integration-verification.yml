@@ -33,6 +33,12 @@ jobs:
           N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
           PROVIDER_ADAPTER_WEBHOOK_PATH: ${{ vars.PROVIDER_ADAPTER_WEBHOOK_PATH || '/webhook/canonical-provider-adapter' }}
         run: node scripts/run-provider-adapter-matrix.js
+      - name: Run provider adapter idempotency collision test
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
+          PROVIDER_ADAPTER_WEBHOOK_PATH: ${{ vars.PROVIDER_ADAPTER_WEBHOOK_PATH || '/webhook/canonical-provider-adapter' }}
+        run: node scripts/run-provider-adapter-matrix.js
       - name: Run provider adapter healthchecks
         env:
           N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}

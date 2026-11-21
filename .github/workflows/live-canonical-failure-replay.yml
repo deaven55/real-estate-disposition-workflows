@@ -1,0 +1,19 @@
+name: Live Canonical Failure and Replay Tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  failure-replay:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run guardrail and replay suite
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
+          CANONICAL_PLATFORM_WEBHOOK_PATH: ${{ vars.CANONICAL_PLATFORM_WEBHOOK_PATH || '/webhook/canonical-platform-integration-hardening' }}
+        run: node scripts/run-live-failure-replay-tests.js

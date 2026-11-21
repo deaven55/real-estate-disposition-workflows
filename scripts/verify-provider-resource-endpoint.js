@@ -8,6 +8,7 @@ if(!resourceId){console.error('PROVIDER_RESOURCE_TEST_ID is required');process.e
 const body={providerCategory:category,providerResourceId:resourceId,entity:{dealId:String(process.env.PROVIDER_RESOURCE_TEST_DEAL_ID||'provider-resource-test-deal')},correlationId:'provider-resource-verification'};
 const headers={'content-type':'application/json'};
 if(token) headers.authorization='Bearer '+token;
+async function main(){
 const res=await fetch(base+'/platform/provider-resource/check',{method:'POST',headers,body:JSON.stringify(body)});
 const raw=await res.text();
 let response; try{response=JSON.parse(raw)}catch{response={raw:raw.slice(0,1000)}}
@@ -16,3 +17,6 @@ const known=typeof response.providerResourceExists==='boolean'?response.provider
 const passed=res.ok&&hasBoolean;
 console.log(JSON.stringify({status:passed?'passed':'failed',httpStatus:res.status,providerCategory:category,providerResourceId:resourceId,providerResourceExists:known,response},null,2));
 process.exit(passed?0:1);
+
+}
+main().catch(error=>{console.error(error);process.exit(1);});

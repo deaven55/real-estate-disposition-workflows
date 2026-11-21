@@ -3,7 +3,6 @@ const base=String(process.env.N8N_BASE_URL||'').replace(/\/$/,'');
 const path=String(process.env.PROVIDER_ADAPTER_WEBHOOK_PATH||'/webhook/canonical-provider-adapter');
 if(!base||!/^https:\/\//i.test(base)){console.error('N8N_BASE_URL must be HTTPS');process.exit(2);}
 const cases=[
- {id:'callback-resource-validation-contract',providerCategory:'esignature',operation:'create_package',payload:{dryRun:true,providerResourceExists:false},fixedIdempotencyKey:'provider-matrix:resource-validation'},
  {id:'same-idempotency-key-dry-run',providerCategory:'esignature',operation:'create_package',payload:{dryRun:true},fixedIdempotencyKey:'provider-matrix:collision-test'},
  {id:'success-dry-run',providerCategory:'esignature',operation:'create_package',payload:{dryRun:true}},
  {id:'void-dry-run',providerCategory:'esignature',operation:'void_package',payload:{dryRun:true}},

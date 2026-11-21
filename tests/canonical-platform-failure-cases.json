@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "purpose": "Live guardrail and replay cases for the canonical platform integration boundary.",
+  "cases": [
+    {
+      "id": "FAIL-001",
+      "name": "missing canonical identity is blocked",
+      "eventType": "lead.created",
+      "engine": "lead-seller",
+      "expectedReason": "eventType, at least one canonical entity ID, idempotencyKey and engine are required"
+    },
+    {
+      "id": "FAIL-002",
+      "name": "terminal closed state is blocked",
+      "eventType": "offer.prepare",
+      "engine": "negotiation-offer",
+      "dealStatus": "closed",
+      "leadId": "failure-test-lead",
+      "dealId": "failure-test-deal",
+      "expectedReason": "protected_state_blocked"
+    },
+    {
+      "id": "FAIL-003",
+      "name": "duplicate idempotency key is blocked",
+      "eventType": "offer.accepted",
+      "engine": "negotiation-offer",
+      "leadId": "failure-replay-lead",
+      "dealId": "failure-replay-deal",
+      "replay": true,
+      "expectedReason": "replay_blocked"
+    }
+  ]
+}

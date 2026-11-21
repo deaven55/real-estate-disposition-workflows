@@ -21,6 +21,7 @@ Required endpoints:
 - `POST /platform/idempotency/claim`
 - `POST /platform/state-transition`
 - `POST /platform/engine-dispatch`
+- `POST /platform/provider-resource/check`
 - `POST /analytics/activity`
 
 ## Idempotency requirements
@@ -72,9 +73,12 @@ The response must expose a deterministic acceptance field such as `accepted: tru
 - [ ] Verify all seven canonical engine dispatch targets.
 - [ ] Verify idempotency check/claim behavior under concurrent requests.
 - [ ] Verify atomic state transitions.
+- [ ] Verify provider-resource lookup returns authoritative `providerResourceExists` before accepting mutating callbacks.
 - [ ] Run deterministic E2E cases in `tests/canonical-platform-e2e-cases.json`.
 - [ ] Run live lifecycle test from lead creation through financial reconciliation.
 - [ ] Test duplicate replay, terminal-state rejection, missing identity, provider failure, timeout, and retry.
 
 ## Important
+The provider callback boundary now performs an authoritative InsulaCRM provider-resource check for non-communications callbacks before replay handling and lifecycle dispatch.
+
 This file is a deployment contract, not a claim that the external InsulaCRM or provider endpoints already exist. Production status requires live verification.

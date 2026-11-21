@@ -27,6 +27,12 @@ jobs:
           FUNDS_API_BASE_URL: ${{ secrets.FUNDS_API_BASE_URL }}
           FUNDS_API_TOKEN: ${{ secrets.FUNDS_API_TOKEN }}
         run: node scripts/verify-provider-configuration.js
+      - name: Run provider adapter dry-run matrix
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
+          PROVIDER_ADAPTER_WEBHOOK_PATH: ${{ vars.PROVIDER_ADAPTER_WEBHOOK_PATH || '/webhook/canonical-provider-adapter' }}
+        run: node scripts/run-provider-adapter-matrix.js
       - name: Run provider adapter healthchecks
         env:
           N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}

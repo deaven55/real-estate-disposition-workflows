@@ -6,7 +6,7 @@ if(!process.env.PROVIDER_CALLBACK_SHARED_TOKEN){console.error('PROVIDER_CALLBACK
 const token=process.env.PROVIDER_CALLBACK_SHARED_TOKEN;
 const cases=[
  {id:'missing-resource-id',body:{providerCategory:'esignature',providerEventId:'callback-test-missing-resource',status:'completed'},expect:500},
- {id:'unknown-resource',body:{providerCategory:'esignature',providerEventId:'callback-test-unknown-resource',status:'completed',providerResourceId:'unknown-provider-resource',providerResourceExists:false},expect:500},
+ {id:'missing-resource-validation',body:{providerCategory:'esignature',providerEventId:'callback-test-missing-resource-validation',status:'completed',providerResourceId:'pkg-test'},expect:500},\n {id:'unknown-resource',body:{providerCategory:'esignature',providerEventId:'callback-test-unknown-resource',status:'completed',providerResourceId:'unknown-provider-resource',providerResourceExists:false},expect:500},
  {id:'unsupported-status',body:{providerCategory:'esignature',providerEventId:'callback-test-unsupported-status',status:'mystery',providerResourceId:'pkg-test',providerResourceExists:true},expect:500},
  {id:'communications-delivered',body:{providerCategory:'communications',providerEventId:'callback-test-communication',status:'delivered'},expect:202},
  {id:'replay-same-event',body:{providerCategory:'communications',providerEventId:'callback-test-communication',status:'delivered'},expect:200}

@@ -1,0 +1,73 @@
+name: Live Provider Activation Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_live:
+        description: "Type LIVE to authorize live provider verification"
+        required: true
+        type: string
+      run_live_contracts:
+        description: "Run real provider contract mutations after preflight"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  live-provider-activation:
+    if: ${{ inputs.confirm_live == 'LIVE' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Live activation configuration preflight
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          INSULACRM_API_BASE_URL: ${{ secrets.INSULACRM_API_BASE_URL }}
+          COMMUNICATIONS_PROVIDER: ${{ secrets.COMMUNICATIONS_PROVIDER }}
+          COMMUNICATIONS_API_BASE_URL: ${{ secrets.COMMUNICATIONS_API_BASE_URL }}
+          COMMUNICATIONS_API_TOKEN: ${{ secrets.COMMUNICATIONS_API_TOKEN }}
+          ESIGNATURE_PROVIDER: ${{ secrets.ESIGNATURE_PROVIDER }}
+          ESIGNATURE_API_BASE_URL: ${{ secrets.ESIGNATURE_API_BASE_URL }}
+          ESIGNATURE_API_TOKEN: ${{ secrets.ESIGNATURE_API_TOKEN }}
+          TITLE_CLOSING_PROVIDER: ${{ secrets.TITLE_CLOSING_PROVIDER }}
+          TITLE_CLOSING_API_BASE_URL: ${{ secrets.TITLE_CLOSING_API_BASE_URL }}
+          TITLE_CLOSING_API_TOKEN: ${{ secrets.TITLE_CLOSING_API_TOKEN }}
+          FUNDS_PROVIDER: ${{ secrets.FUNDS_PROVIDER }}
+          FUNDS_API_BASE_URL: ${{ secrets.FUNDS_API_BASE_URL }}
+          FUNDS_API_TOKEN: ${{ secrets.FUNDS_API_TOKEN }}
+          PROVIDER_CALLBACK_SHARED_TOKEN: ${{ secrets.PROVIDER_CALLBACK_SHARED_TOKEN }}
+          PROVIDER_CONTRACT_DRY_RUN: 'false'
+          COMMUNICATIONS_SEND_MESSAGE_PATH: ${{ vars.COMMUNICATIONS_SEND_MESSAGE_PATH || '/messages' }}
+          ESIGNATURE_CREATE_PACKAGE_PATH: ${{ vars.ESIGNATURE_CREATE_PACKAGE_PATH || '/packages' }}
+          ESIGNATURE_VOID_PACKAGE_PATH: ${{ vars.ESIGNATURE_VOID_PACKAGE_PATH || '/packages/void' }}
+          TITLE_CLOSING_CREATE_TITLE_ORDER_PATH: ${{ vars.TITLE_CLOSING_CREATE_TITLE_ORDER_PATH || '/title-orders' }}
+          TITLE_CLOSING_REQUEST_CLOSING_PATH: ${{ vars.TITLE_CLOSING_REQUEST_CLOSING_PATH || '/closings' }}
+          FUNDS_CONFIRM_FUNDING_PATH: ${{ vars.FUNDS_CONFIRM_FUNDING_PATH || '/funding/confirm' }}
+        run: node scripts/verify-live-provider-activation.js
+      - name: Run live provider contract tests
+        if: ${{ inputs.run_live_contracts }}
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
+          PROVIDER_ADAPTER_WEBHOOK_PATH: ${{ vars.PROVIDER_ADAPTER_WEBHOOK_PATH || '/webhook/canonical-provider-adapter' }}
+          PROVIDER_CONTRACT_DRY_RUN: 'false'
+          PROVIDER_CALLBACK_SHARED_TOKEN: ${{ secrets.PROVIDER_CALLBACK_SHARED_TOKEN }}
+        run: node scripts/run-provider-contract-tests.js
+      - name: Run authenticated callback contract tests
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          PROVIDER_CALLBACK_WEBHOOK_PATH: ${{ vars.PROVIDER_CALLBACK_WEBHOOK_PATH || '/webhook/canonical-provider-callback' }}
+          PROVIDER_CALLBACK_SHARED_TOKEN: ${{ secrets.PROVIDER_CALLBACK_SHARED_TOKEN }}
+        run: node scripts/run-provider-callback-contract-tests.js
+      - name: Verify adapter health
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
+          PROVIDER_ADAPTER_WEBHOOK_PATH: ${{ vars.PROVIDER_ADAPTER_WEBHOOK_PATH || '/webhook/canonical-provider-adapter' }}
+        run: node scripts/run-provider-integration-verification.js

@@ -1,0 +1,17 @@
+name: InsulaCRM Live Endpoint Verification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-insulacrm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required InsulaCRM endpoints
+        env:
+          INSULACRM_API_BASE_URL: ${{ secrets.INSULACRM_API_BASE_URL }}
+          INSULACRM_API_TOKEN: ${{ secrets.INSULACRM_API_TOKEN }}
+        run: node scripts/verify-insulacrm-endpoints.js

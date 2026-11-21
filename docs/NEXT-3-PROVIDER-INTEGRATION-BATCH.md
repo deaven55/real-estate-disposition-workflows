@@ -52,3 +52,12 @@ Still **not production-live**. The adapter boundary is implemented, but live pro
 ## Next concrete step
 
 Take the first real provider—preferably the e-signature provider because it is directly on the contract-to-buyer lifecycle—and implement its exact API request/response mapping behind this adapter without changing the canonical business engines.
+
+
+## Follow-up batch: E-signature wiring
+
+1. Hardened `canonical-contract-esignature-engine.json` to use `INSULACRM_API_BASE_URL` and recognize canonical signed lifecycle events such as `contract.signed`.
+2. Added `workflows/canonical-esignature-provider-request-mapper.json` to translate canonical signature requests into the vendor-neutral provider adapter contract and return lifecycle events.
+3. Added `tests/canonical-esignature-provider-cases.json` and `scripts/validate-esignature-provider-contract.js` for deterministic contract coverage.
+
+The mapper remains provider-neutral until a specific e-signature vendor and API contract are configured.

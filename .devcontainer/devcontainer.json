@@ -1,0 +1,21 @@
+{
+  "name": "Real Estate Disposition n8n",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [5678],
+  "portsAttributes": {
+    "5678": {
+      "label": "n8n",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup-n8n.sh",
+  "remoteEnv": {
+    "N8N_HOST": "0.0.0.0",
+    "N8N_PORT": "5678",
+    "N8N_PROTOCOL": "http"
+  }
+}

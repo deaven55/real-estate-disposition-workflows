@@ -40,6 +40,8 @@ Workflow JSON currently uses `https://YOUR_INSULACRM_API` as a deployment placeh
 | POST /platform/idempotency/claim | Atomically claim a new idempotency key |
 | POST /platform/state-transition | Apply an authoritative lifecycle state transition |
 | POST /platform/engine-dispatch | Dispatch an event to its canonical engine |
+| POST /platform/provider-result | Persist normalized provider operation evidence |
+| POST /platform/provider-resource/check | Verify a provider resource ID is known before accepting a mutating callback |
 
 ## Canonical request envelope
 
@@ -153,6 +155,10 @@ Credentials must be configured through n8n credential storage or deployment secr
 
 This contract describes what the canonical workflows require. It does not prove that these endpoints currently exist in InsulaCRM. Production activation requires live endpoint verification and an end-to-end lifecycle test.
 
+
+## Provider resource verification
+
+`POST /platform/provider-resource/check` must return an authoritative boolean such as `providerResourceExists: true|false`. The callback boundary must reject missing/false verification for non-communications provider categories before lifecycle dispatch.
 
 ## Provider evidence endpoint
 

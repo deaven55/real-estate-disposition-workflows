@@ -1,0 +1,35 @@
+name: Live Canonical Lifecycle E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      lead_id:
+        description: Optional deterministic E2E lead ID
+        required: false
+        type: string
+      deal_id:
+        description: Optional deterministic E2E deal ID
+        required: false
+        type: string
+      property_id:
+        description: Optional deterministic E2E property ID
+        required: false
+        type: string
+
+jobs:
+  live-lifecycle:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Lead to Profit lifecycle
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
+          CANONICAL_PLATFORM_WEBHOOK_PATH: ${{ vars.CANONICAL_PLATFORM_WEBHOOK_PATH || '/webhook/canonical-platform-integration-hardening' }}
+          E2E_LEAD_ID: ${{ inputs.lead_id }}
+          E2E_DEAL_ID: ${{ inputs.deal_id }}
+          E2E_PROPERTY_ID: ${{ inputs.property_id }}
+        run: node scripts/run-live-lifecycle-e2e.js

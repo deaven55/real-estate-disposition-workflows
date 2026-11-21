@@ -69,9 +69,7 @@
             }
           }
         },
-        "retryOnFail": true,
-        "maxTries": 2,
-        "waitBetweenTries": 1000
+        "retryOnFail": false
       },
       "id": "pab-c",
       "name": "Call External Provider",
@@ -84,7 +82,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input=$('Normalize Provider Result').first().json; const pr=input.providerResult; const classification=pr.accepted?'success':pr.status===401||pr.status===403?'authentication_failure':pr.status===408?'timeout':pr.status===429?'rate_limit':pr.status>=500?'provider_5xx':pr.status>=400?'validation_or_provider_rejection':'unknown'; return [{json:{...input,providerResult:{...pr,classification},canonicalFailureEvent:pr.accepted?null:{eventType:'provider.operation.failed',providerCategory:input.providerCategory,operation:input.operation,retryable:pr.retryable,idempotencyKey:input.idempotencyKey,correlationId:input.correlationId,entity:input.entity,payload:{classification,status:pr.status,providerRequestId:pr.providerRequestId,providerResourceId:pr.providerResourceId}}}}];"
+        "jsCode": "const input=$('Normalize Provider Result').first().json; const pr=input.providerResult; const classification=pr.accepted?'success':pr.status===401||pr.status===403?'authentication_failure':pr.status===408?'timeout':pr.status===429?'rate_limit':pr.status>=500?'provider_5xx':pr.status>=400?'validation_or_provider_rejection':'unknown'; const retryable=classification==='timeout'||classification==='rate_limit'||classification==='provider_5xx'; const retryAfterSeconds=classification==='rate_limit'&&Number.isFinite(Number(pr.headers?.['retry-after']))?Number(pr.headers['retry-after']):null; return [{json:{...input,providerResult:{...pr,classification,retryable,retryAfterSeconds},canonicalFailureEvent:pr.accepted?null:{eventType:'provider.operation.failed',providerCategory:input.providerCategory,operation:input.operation,retryable,idempotencyKey:input.idempotencyKey,correlationId:input.correlationId,entity:input.entity,payload:{classification,status:pr.status,providerRequestId:pr.providerRequestId,providerResourceId:pr.providerResourceId,retryAfterSeconds}}}}];"
       },
       "id": "pab-d",
       "name": "Normalize Provider Result",

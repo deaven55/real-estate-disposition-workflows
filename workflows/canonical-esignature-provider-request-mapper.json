@@ -1,0 +1,216 @@
+{
+  "name": "Canonical E-Signature Provider Request Mapper",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "canonical-esignature-provider-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "esp-a",
+      "name": "E-Signature Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const eventType=String(b.eventType??'signature_request').trim().toLowerCase(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const sellerId=String(b.sellerId??'').trim(); const buyerId=String(b.buyerId??'').trim(); const idempotencyKey=String(b.idempotencyKey??('esignature:create:'+dealId+':'+contractId)).trim(); if(!dealId||!contractId||!idempotencyKey) throw new Error('dealId, contractId and idempotencyKey are required'); if(!['signature_request','contract.signature.requested','signature.void'].includes(eventType)) throw new Error('Unsupported e-signature eventType'); const payload=b.payload??{}; const signers=Array.isArray(payload.signers)?payload.signers:[]; if(eventType!=='signature.void'&&signers.length<1) throw new Error('At least one signer is required'); return [{json:{schemaVersion:'1.0',providerCategory:'esignature',operation:eventType==='signature.void'?'void_package':'create_package',idempotencyKey,correlationId:String(b.correlationId??('esignature:'+dealId+':'+contractId)),entity:{dealId,contractId,sellerId,buyerId,propertyId:String(b.propertyId??'')},payload:{packageName:String(payload.packageName??('Deal '+dealId+' Contract')),documentIds:Array.isArray(payload.documentIds)?payload.documentIds:[],signers:signers.map(s=>({signerId:String(s.signerId??s.id??''),name:String(s.name??''),email:String(s.email??''),role:String(s.role??''),required:s.required!==false})),message:String(payload.message??''),callbackUrl:String(payload.callbackUrl??'')},metadata:{source:'canonical-contract-esignature-engine',eventType,requestVersion:'1.0'}}}];"
+      },
+      "id": "esp-b",
+      "name": "Validate And Build E-Signature Adapter Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL + '/webhook/canonical-provider-adapter'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{$json.correlationId}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000
+      },
+      "id": "esp-c",
+      "name": "Call Canonical Provider Adapter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Validate And Build E-Signature Adapter Request').first().json; const r=$json.body??$json; const accepted=r.status==='accepted'||r.providerResult?.accepted===true||r.accepted===true; const providerResourceId=String(r.providerResult?.providerResourceId??r.providerResourceId??''); const providerRequestId=String(r.providerResult?.providerRequestId??r.providerRequestId??''); return [{json:{...input,accepted,providerResourceId,providerRequestId,providerResult:r,canonicalEvent:accepted?{eventType:'signature.package.created',entity:input.entity,idempotencyKey:input.idempotencyKey,correlationId:input.correlationId,payload:{providerResourceId,providerRequestId}}:{eventType:'provider.operation.failed',entity:input.entity,idempotencyKey:input.idempotencyKey,correlationId:input.correlationId,payload:{providerCategory:'esignature',operation:input.operation,response:r}}}}}];"
+      },
+      "id": "esp-d",
+      "name": "Normalize E-Signature Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL + '/webhook/canonical-platform-integration-hardening'}}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{$json.canonicalEvent}}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000
+      },
+      "id": "esp-e",
+      "name": "Dispatch E-Signature Lifecycle Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": "={{$json.accepted?200:502}}",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "esp-f",
+      "name": "Respond E-Signature Outcome",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "E-Signature Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate And Build E-Signature Adapter Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate And Build E-Signature Adapter Request": {
+      "main": [
+        [
+          {
+            "node": "Call Canonical Provider Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Canonical Provider Adapter": {
+      "main": [
+        [
+          {
+            "node": "Normalize E-Signature Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize E-Signature Result": {
+      "main": [
+        [
+          {
+            "node": "Dispatch E-Signature Lifecycle Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch E-Signature Lifecycle Event": {
+      "main": [
+        [
+          {
+            "node": "Respond E-Signature Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "esignature"
+    },
+    {
+      "name": "provider"
+    },
+    {
+      "name": "canonical-lifecycle"
+    }
+  ],
+  "meta": {
+    "purpose": "Maps canonical contract signature requests into the vendor-neutral provider adapter without coupling the contract engine to a provider.",
+    "status": "deployment-configurable"
+  }
+}

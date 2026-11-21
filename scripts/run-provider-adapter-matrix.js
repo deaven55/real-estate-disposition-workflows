@@ -18,7 +18,11 @@ async function run(c){
  const r=await fetch(base+path,{method:'POST',headers,body:JSON.stringify(body)});
  return {id:c.id,status:r.status,expected:c.expectStatus??200,passed:r.status===(c.expectStatus??200)};
 }
+async function main(){
 const results=[]; for(const c of cases) results.push(await run(c)); const collisionCase=cases.find(c=>c.fixedIdempotencyKey); if(collisionCase){const a=await run(collisionCase); const b=await run(collisionCase); results.push({id:'idempotency-collision-repeat',status:a.status,secondStatus:b.status,expected:a.status,passed:a.status===b.status});}
 const failed=results.filter(x=>!x.passed);
 console.log(JSON.stringify({status:failed.length?'failed':'passed',results},null,2));
 process.exit(failed.length?1:0);
+
+}
+main().catch(error=>{console.error(error);process.exit(1);});

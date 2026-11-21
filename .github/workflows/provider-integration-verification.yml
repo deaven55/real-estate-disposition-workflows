@@ -51,6 +51,19 @@ jobs:
           PROVIDER_RESOURCE_TEST_ID: ${{ secrets.PROVIDER_RESOURCE_TEST_ID }}
           PROVIDER_RESOURCE_TEST_DEAL_ID: ${{ vars.PROVIDER_RESOURCE_TEST_DEAL_ID || 'provider-resource-verification-deal' }}
         run: node scripts/verify-provider-resource-endpoint.js
+      - name: Run controlled live provider lifecycle E2E
+        if: ${{ vars.PROVIDER_LIFECYCLE_E2E_ENABLED == 'true' }}
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
+          PROVIDER_ADAPTER_WEBHOOK_PATH: ${{ vars.PROVIDER_ADAPTER_WEBHOOK_PATH || '/webhook/canonical-provider-adapter' }}
+          PROVIDER_CALLBACK_WEBHOOK_PATH: ${{ vars.PROVIDER_CALLBACK_WEBHOOK_PATH || '/webhook/canonical-provider-callback' }}
+          PROVIDER_CALLBACK_SHARED_TOKEN: ${{ secrets.PROVIDER_CALLBACK_SHARED_TOKEN }}
+          PROVIDER_LIFECYCLE_CATEGORY: ${{ vars.PROVIDER_LIFECYCLE_CATEGORY || 'esignature' }}
+          PROVIDER_LIFECYCLE_OPERATION: ${{ vars.PROVIDER_LIFECYCLE_OPERATION || 'create_package' }}
+          PROVIDER_LIFECYCLE_DEAL_ID: ${{ vars.PROVIDER_LIFECYCLE_DEAL_ID || 'provider-lifecycle-e2e-deal' }}
+          PROVIDER_LIFECYCLE_PROPERTY_ID: ${{ vars.PROVIDER_LIFECYCLE_PROPERTY_ID || 'provider-lifecycle-e2e-property' }}
+        run: node scripts/run-provider-lifecycle-e2e.js
       - name: Run provider callback contract tests
         env:
           N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}

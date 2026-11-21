@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0",
+  "cases": [
+    {
+      "id": "ESIGN-001",
+      "eventType": "signature_request",
+      "expectedOperation": "create_package",
+      "required": ["dealId","contractId","idempotencyKey","payload.signers"]
+    },
+    {
+      "id": "ESIGN-002",
+      "eventType": "contract.signature.requested",
+      "expectedOperation": "create_package",
+      "required": ["dealId","contractId","idempotencyKey","payload.signers"]
+    },
+    {
+      "id": "ESIGN-003",
+      "eventType": "signature.void",
+      "expectedOperation": "void_package",
+      "required": ["dealId","contractId","idempotencyKey"]
+    },
+    {
+      "id": "ESIGN-004",
+      "eventType": "contract.signed",
+      "expectedLifecycleEvent": "contract.signed"
+    },
+    {
+      "id": "ESIGN-005",
+      "eventType": "contract.signature.declined",
+      "expectedLifecycleEvent": "contract.signature.declined"
+    },
+    {
+      "id": "ESIGN-006",
+      "eventType": "contract.signature.expired",
+      "expectedLifecycleEvent": "contract.signature.expired"
+    },
+    {
+      "id": "ESIGN-007",
+      "eventType": "contract.voided",
+      "expectedLifecycleEvent": "contract.voided"
+    }
+  ]
+}

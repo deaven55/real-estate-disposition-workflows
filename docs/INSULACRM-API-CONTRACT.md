@@ -152,3 +152,8 @@ Credentials must be configured through n8n credential storage or deployment secr
 ## Verification rule
 
 This contract describes what the canonical workflows require. It does not prove that these endpoints currently exist in InsulaCRM. Production activation requires live endpoint verification and an end-to-end lifecycle test.
+
+
+## Provider evidence endpoint
+
+`POST /platform/provider-result` accepts normalized provider operation evidence including provider category, operation, deterministic idempotency key, correlation ID, provider request/resource IDs, status, and acceptance state.

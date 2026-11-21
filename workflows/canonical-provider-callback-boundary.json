@@ -33,6 +33,27 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.providerCategory !== 'communications'}}",
+              "operation": "isTrue"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "pcb-resource-required",
+      "name": "Gate Resource Verification Requirement",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "={{$env.INSULACRM_API_BASE_URL + '/platform/provider-resource/check'}}",
         "sendBody": true,
@@ -216,7 +237,25 @@
       "main": [
         [
           {
+            "node": "Gate Resource Verification Requirement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Resource Verification Requirement": {
+      "main": [
+        [
+          {
             "node": "Verify Provider Resource In InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Callback Replay",
             "type": "main",
             "index": 0
           }

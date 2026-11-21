@@ -77,6 +77,8 @@ Failure:
 11. A provider adapter must expose enough evidence for audit/reconciliation.
 12. Mutating callbacks must identify a provider resource; unknown-resource callbacks must be rejected before lifecycle state transition.
 13. Retry policy must be explicit: authentication and validation failures are non-retryable; timeout, rate-limit and transient 5xx failures may be retried with the same idempotency key.
+14. Provider callback boundaries must not use blind automatic retries around idempotency checks or lifecycle dispatch; callback providers may safely retry the same event because the canonical idempotency key is the replay control.
+15. Callback replay tests must verify that the first delivery is accepted and a subsequent delivery of the same provider event is ignored without another lifecycle transition.
 
 ## Minimum provider test matrix
 

@@ -50,7 +50,9 @@ for (const [from, to] of expected) {
 const hardening = readJson('workflows/canonical-platform-integration-hardening.json');
 assert(findNode(hardening, 'Check Idempotency'), 'hardening missing idempotency check');
 assert(findNode(hardening, 'Claim Idempotency Before Dispatch'), 'hardening missing idempotency claim');
+assert(findNode(hardening, 'Gate Atomic State Transition'), 'hardening missing state-transition gate');
 assert(findNode(hardening, 'Request Atomic State Transition'), 'hardening missing state transition');
+assert(findNode(hardening, 'Gate Canonical Engine Dispatch'), 'hardening missing engine-dispatch gate');
 assert(findNode(hardening, 'Dispatch Canonical Engine'), 'hardening missing engine dispatch');
 
 const handoff = readJson('workflows/102-canonical-lifecycle-event-handoff.json');

@@ -70,10 +70,11 @@ Failure:
 4. Retries are bounded and use the same logical idempotency key.
 5. Provider response IDs are persisted to InsulaCRM.
 6. Provider failures are represented as canonical events rather than silently swallowed.
-7. Communication dispatch is separated from lifecycle state transitions.
-8. Webhook callbacks are authenticated and deduplicated before changing lifecycle state.
-9. Provider timeouts must not be interpreted as successful mutation.
-10. A provider adapter must expose enough evidence for audit/reconciliation.
+7. Provider result evidence is persisted to InsulaCRM through the canonical provider-result endpoint.
+8. Provider callbacks are authenticated at the n8n Webhook boundary and deduplicated before lifecycle dispatch.
+9. Communication dispatch is separated from lifecycle state transitions.
+10. Provider timeouts must not be interpreted as successful mutation.
+11. A provider adapter must expose enough evidence for audit/reconciliation.
 
 ## Minimum provider test matrix
 

@@ -159,6 +159,92 @@
         "responseCode": 200,
         "responseBody": "={{ JSON.stringify({ success: true, dealId: $('Assemble Deal Package').first().json.deal._id, email: $('Assemble Deal Package').first().json.email, packageSentAt: Date.now() }) }}"
       }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "{{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + (($('Lookup Package Deal in InsulaCRM').first().json.data && $('Lookup Package Deal in InsulaCRM').first().json.data[0] ? $('Lookup Package Deal in InsulaCRM').first().json.data[0].id : 0)) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'disposition:package-sent:' + $('Package Delivery Webhook').first().json.distributionId + ':v1' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ notes: 'Deal package delivered to buyer at ' + $('Assemble Deal Package').first().json.email + ' on ' + new Date().toISOString() }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "sync-package-delivery-to-insula",
+      "name": "Sync Package Delivery to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2280,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "external_id",
+              "value": "={{ $('Fetch Deal').first().json.data._id }}"
+            },
+            {
+              "name": "external_source",
+              "value": "convex_disposition_intake"
+            },
+            {
+              "name": "per_page",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "lookup-package-deal-in-insula",
+      "name": "Lookup Package Deal in InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        220
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -221,7 +307,7 @@
       "main": [
         [
           {
-            "node": "Send SMS Confirmation",
+            "node": "Lookup Package Deal in InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -244,6 +330,28 @@
         [
           {
             "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Package Delivery to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Package Deal in InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Sync Package Delivery to InsulaCRM",
             "type": "main",
             "index": 0
           }

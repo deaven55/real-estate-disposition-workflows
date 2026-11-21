@@ -430,6 +430,21 @@
         "otherOptions": {}
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\nconst base = $env.INSULA_CRM_BASE_URL;\nconst key = data.messageId || (data.phone + ':' + data.timestamp);\ntry {\n  const lookup = await this.helpers.httpRequest({\n    method:'GET',\n    url: base + '/api/v1/leads',\n    qs:{phone:data.phone,per_page:1},\n    headers:{'X-API-Key':$env.INSULA_CRM_API_KEY}\n  });\n  const lead = lookup && lookup.data && lookup.data[0] ? lookup.data[0] : null;\n  if (lead) {\n    await this.helpers.httpRequest({\n      method:'POST',\n      url: base + '/api/v1/activities',\n      headers:{\n        'X-API-Key':$env.INSULA_CRM_API_KEY,\n        'Content-Type':'application/json',\n        'Idempotency-Key':'disposition:buyer-response:' + key + ':v1'\n      },\n      body:{\n        lead_id:lead.id,\n        type:'stage_change',\n        subject:'Buyer SMS response: ' + data.intent,\n        body:data.message,\n        logged_at:data.timestamp\n      },\n      json:true\n    });\n    if (data.intent === 'dnc') {\n      await this.helpers.httpRequest({\n        method:'PUT',\n        url:base + '/api/v1/leads/' + lead.id,\n        headers:{'X-API-Key':$env.INSULA_CRM_API_KEY,'Content-Type':'application/json'},\n        body:{do_not_contact:true},\n        json:true\n      });\n    }\n  }\n} catch (error) {\n  console.log('InsulaCRM buyer response sync failed:', error.message);\n}\nreturn [{json:data}];"
+      },
+      "id": "sync-buyer-response-to-insula",
+      "name": "Sync Buyer Response to InsulaCRM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        300
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -459,7 +474,7 @@
       "main": [
         [
           {
-            "node": "Route by Intent",
+            "node": "Sync Buyer Response to InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -612,6 +627,17 @@
         [
           {
             "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Buyer Response to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
             "type": "main",
             "index": 0
           }

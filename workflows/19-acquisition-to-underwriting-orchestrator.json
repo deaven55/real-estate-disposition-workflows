@@ -1,0 +1,471 @@
+{
+  "name": "WholeStack WF-019: Acquisition-to-Underwriting Orchestrator",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "wholestack-acquisition-orchestrator-v1",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "prepare",
+      "name": "Prepare Orchestration Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input=$input.first().json.body||$input.first().json; const required=['dealId','address','city','state']; const missing=required.filter(k=>!input[k]); let state=String(input.state||'').trim().toUpperCase(); const aliases={'NORTH CAROLINA':'NC','SOUTH CAROLINA':'SC','NEW YORK':'NY','NEW JERSEY':'NJ','NEW MEXICO':'NM','NEW HAMPSHIRE':'NH','WEST VIRGINIA':'WV','WASHINGTON':'WA','DISTRICT OF COLUMBIA':'DC'}; state=aliases[state]||state; return [{json:{valid:missing.length===0&&/^[A-Z]{2}$/.test(state),errors:missing.length?missing:(/^[A-Z]{2}$/.test(state)?[]:['state']),dealId:input.dealId,address:String(input.address||'').trim(),city:String(input.city||'').trim(),state,zip:String(input.zip||'').trim(),county:String(input.county||'').trim(),property_type:input.property_type??null,square_footage:input.square_footage??null,bedrooms:input.bedrooms??null,bathrooms:input.bathrooms??null,year_built:input.year_built??null,acreage:input.acreage??null,maxComps:input.maxComps??8,activity:input.activity||'acquisition',pipeline_version:'v1'}}];"
+      }
+    },
+    {
+      "id": "ifvalid",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bad",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        260
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success:false,errors:$json.errors}) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "wf014",
+      "name": "Run WF-014 Property Intelligence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        700,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_INTERNAL_BASE_URL + '/webhook/wholestack-nc-property-intelligence-v1' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,address:$json.address,city:$json.city,state:$json.state,zip:$json.zip,county:$json.county}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      }
+    },
+    {
+      "id": "wf014ctx",
+      "name": "Preserve Pipeline Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const base=$('Prepare Orchestration Request').first().json; return [{json:{...base,property_intelligence_result:$json}}];"
+      }
+    },
+    {
+      "id": "wf015",
+      "name": "Run WF-015 Comps + ARV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1180,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_INTERNAL_BASE_URL + '/webhook/wholestack-comps-arv-v1' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,address:$json.address,city:$json.city,state:$json.state,zip:$json.zip,county:$json.county,property_type:$json.property_type,square_footage:$json.square_footage,bedrooms:$json.bedrooms,bathrooms:$json.bathrooms,year_built:$json.year_built,acreage:$json.acreage,maxComps:$json.maxComps}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      }
+    },
+    {
+      "id": "wf015ctx",
+      "name": "Preserve ARV Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const base=$('Preserve Pipeline Context').first().json; return [{json:{...base,comps_arv_result:$json}}];"
+      }
+    },
+    {
+      "id": "wf016",
+      "name": "Run WF-016 Offer Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1660,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_INTERNAL_BASE_URL + '/webhook/wholestack-offer-decision-v1' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId}) }}",
+        "options": {
+          "timeout": 90000
+        }
+      }
+    },
+    {
+      "id": "wf016ctx",
+      "name": "Preserve Offer Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const base=$('Preserve ARV Context').first().json; return [{json:{...base,offer_decision_result:$json}}];"
+      }
+    },
+    {
+      "id": "wf017",
+      "name": "Run WF-017 Deal Ranking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2140,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_INTERNAL_BASE_URL + '/webhook/wholestack-deal-ranking-v1' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId}) }}",
+        "options": {
+          "timeout": 90000
+        }
+      }
+    },
+    {
+      "id": "wf017ctx",
+      "name": "Preserve Ranking Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2380,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const base=$('Preserve Offer Context').first().json; return [{json:{...base,ranking_result:$json}}];"
+      }
+    },
+    {
+      "id": "wf018",
+      "name": "Run WF-018 Compliance Gate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2620,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_INTERNAL_BASE_URL + '/webhook/wholestack-jurisdiction-compliance-v1' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,activity:$json.activity,state:$json.state}) }}",
+        "options": {
+          "timeout": 90000
+        }
+      }
+    },
+    {
+      "id": "final",
+      "name": "Build Orchestration Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const base=$('Preserve Ranking Context').first().json; return [{json:{success:true,pipeline:'acquisition-to-underwriting',pipeline_version:base.pipeline_version,dealId:base.dealId,jurisdiction:{state:base.state,county:base.county},property:{address:base.address,city:base.city,zip:base.zip},stages:{property_intelligence:base.property_intelligence_result,comps_arv:base.comps_arv_result,offer_decision:base.offer_decision_result,ranking:base.ranking_result,compliance:$json},next_action:$json?.result?.automation_allowed===true?'Eligible for downstream workflow after required human controls':'Review required before automated seller/buyer activity'}}];"
+      }
+    },
+    {
+      "id": "response",
+      "name": "Respond Orchestration Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3100,
+        -80
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Orchestration Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Orchestration Request": {
+      "main": [
+        [
+          {
+            "node": "IF Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid": {
+      "main": [
+        [
+          {
+            "node": "Run WF-014 Property Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-014 Property Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Preserve Pipeline Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Pipeline Context": {
+      "main": [
+        [
+          {
+            "node": "Run WF-015 Comps + ARV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-015 Comps + ARV": {
+      "main": [
+        [
+          {
+            "node": "Preserve ARV Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve ARV Context": {
+      "main": [
+        [
+          {
+            "node": "Run WF-016 Offer Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-016 Offer Decision": {
+      "main": [
+        [
+          {
+            "node": "Preserve Offer Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Offer Context": {
+      "main": [
+        [
+          {
+            "node": "Run WF-017 Deal Ranking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-017 Deal Ranking": {
+      "main": [
+        [
+          {
+            "node": "Preserve Ranking Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Ranking Context": {
+      "main": [
+        [
+          {
+            "node": "Run WF-018 Compliance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-018 Compliance Gate": {
+      "main": [
+        [
+          {
+            "node": "Build Orchestration Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Orchestration Result": {
+      "main": [
+        [
+          {
+            "node": "Respond Orchestration Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

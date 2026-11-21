@@ -1,0 +1,268 @@
+{
+  "name": "WholeStack WF-015: Comparable Sales Collector + ARV Engine",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "wholestack-comps-arv-v1",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "prepare",
+      "name": "Prepare Comp Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input=$input.first().json.body||$input.first().json; const required=['dealId','address','state']; const missing=required.filter(k=>!input[k]); return [{json:{valid:missing.length===0,errors:missing,dealId:input.dealId,property:{address:input.address,city:input.city||'',state:String(input.state||'').toUpperCase(),zip:input.zip||'',county:input.county||'',property_type:input.property_type||null,square_footage:input.square_footage||null,bedrooms:input.bedrooms||null,bathrooms:input.bathrooms||null,year_built:input.year_built||null,acreage:input.acreage||null},maxComps:Math.min(12,Math.max(3,Number(input.maxComps||8))),notes:input.notes||''}}];"
+      }
+    },
+    {
+      "id": "ifvalid",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bad",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        220
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success:false,errors:$json.errors}) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "search",
+      "name": "Perplexity Closed-Sales Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        700,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERPLEXITY_API_URL || 'https://api.perplexity.ai/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.PERPLEXITY_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model:$env.PERPLEXITY_PROPERTY_MODEL || 'sonar',messages:[{role:'system',content:'You are a real-estate comparable-sales research agent. Find CLOSED, RECORDED or otherwise explicitly documented comparable property sales that can support an ARV analysis. Never invent a sale, price, date, address, square footage, beds, baths, year built, or distance. Do not use active listings as sold comps. Prefer official county property/tax/land-record sources and other directly attributable public records. Return ONLY valid JSON with this shape: {comps:[{address,sale_price,sale_date,property_type,city,state,zip_code,sqft,beds,baths,lot_size,year_built,distance_miles,condition,source_record_id,source_url,confidence,notes}],limitations:[],search_notes:\"\"}. Include only fields explicitly supported by a source. Each comp must have sale_price, sale_date, address, and source_url or source_record_id.'},{role:'user',content:'Subject property: '+$json.property.address+', '+$json.property.city+', '+$json.property.state+' '+$json.property.zip+'\\nCounty: '+$json.property.county+'\\nProperty type: '+($json.property.property_type||'unknown')+'\\nSqft: '+($json.property.square_footage||'unknown')+'\\nBeds: '+($json.property.bedrooms||'unknown')+'\\nBaths: '+($json.property.bathrooms||'unknown')+'\\nYear built: '+($json.property.year_built||'unknown')+'\\nAcreage: '+($json.property.acreage||'unknown')+'\\nFind up to '+$json.maxComps+' relevant closed sales, prioritizing recency, proximity, property type, and physical similarity. Do not estimate missing facts.'}]}) }}",
+        "options": {
+          "timeout": 90000
+        }
+      }
+    },
+    {
+      "id": "parse",
+      "name": "Parse Comp Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        -80
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const ctx=$(\"Prepare Comp Request\").first().json; const raw=$input.first().json; let content=raw.choices?.[0]?.message?.content ?? raw.output_text ?? raw.content ?? ''; if(typeof content!=='string') content=JSON.stringify(content); const citations=Array.isArray(raw.citations)?raw.citations:[]; content=content.replace(/^```(?:json)?\\s*/i,'').replace(/\\s*```$/,'').trim(); let parsed; try{parsed=JSON.parse(content);}catch(e){return [{json:{valid:false,errors:['Perplexity returned non-JSON comp evidence'],dealId:ctx.dealId,property:ctx.property,raw:content}}];} const comps=Array.isArray(parsed.comps)?parsed.comps:[]; const normalized=comps.filter(c=>c&&c.address&&c.sale_price&&c.sale_date).map(c=>({...c,state:c.state?String(c.state).toUpperCase():ctx.property.state,external_source:c.external_source||'perplexity_public_record_research',source_url:c.source_url||citations[0]||null,confidence:c.confidence??null})); return [{json:{valid:true,errors:[],dealId:ctx.dealId,property:ctx.property,comps:normalized,limitations:parsed.limitations||[],search_notes:parsed.search_notes||'',citations}}];"
+      }
+    },
+    {
+      "id": "call",
+      "name": "Persist Comps + Calculate ARV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1180,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $json.dealId + '/comps/recalculate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'arv:comps:' + $json.dealId + ':v1' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({comps:$json.comps}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "response",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1420,
+        -80
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success:true,dealId:$json.dealId,result:$json}) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Comp Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Comp Request": {
+      "main": [
+        [
+          {
+            "node": "IF Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid": {
+      "main": [
+        [
+          {
+            "node": "Perplexity Closed-Sales Research",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perplexity Closed-Sales Research": {
+      "main": [
+        [
+          {
+            "node": "Parse Comp Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Comp Evidence": {
+      "main": [
+        [
+          {
+            "node": "Persist Comps + Calculate ARV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Comps + Calculate ARV": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

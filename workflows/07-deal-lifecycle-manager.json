@@ -300,6 +300,36 @@
         "otherOptions": {}
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data=$input.first().json;\nconst deal=data.deal;\nconst base=$env.INSULA_CRM_BASE_URL;\ntry {\n  const lookup=await this.helpers.httpRequest({\n    method:'GET',url:base+'/api/v1/deals',\n    qs:{external_id:deal._id,external_source:'convex_disposition_intake',per_page:1},\n    headers:{'X-API-Key':$env.INSULA_CRM_API_KEY}\n  });\n  const canonical=lookup?.data?.[0];\n  if(canonical){\n    await this.helpers.httpRequest({\n      method:'PUT',url:base+'/api/v1/deals/'+canonical.id,\n      headers:{'X-API-Key':$env.INSULA_CRM_API_KEY,'Content-Type':'application/json'},\n      body:{stage:'closed_lost',notes:'Disposition lifecycle marked deal expired on '+new Date().toISOString()},\n      json:true\n    });\n  }\n} catch(error){ console.log('InsulaCRM expired deal sync failed:',error.message); }\nreturn [{json:data}];"
+      },
+      "id": "sync-expired-deal-to-insula",
+      "name": "Sync Expired Deal to InsulaCRM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        220
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data=$input.first().json;\nconst deal=data.deal;\nconst base=$env.INSULA_CRM_BASE_URL;\ntry {\n  const lookup=await this.helpers.httpRequest({\n    method:'GET',url:base+'/api/v1/deals',\n    qs:{external_id:deal._id,external_source:'convex_disposition_intake',per_page:1},\n    headers:{'X-API-Key':$env.INSULA_CRM_API_KEY}\n  });\n  const canonical=lookup?.data?.[0];\n  if(canonical){\n    await this.helpers.httpRequest({\n      method:'PUT',url:base+'/api/v1/deals/'+canonical.id,\n      headers:{'X-API-Key':$env.INSULA_CRM_API_KEY,'Content-Type':'application/json'},\n      body:{stage:'dispositions',notes:'Expired hold released; disposition round '+(data.nextRound||1)+' at '+new Date().toISOString()},\n      json:true\n    });\n  }\n} catch(error){ console.log('InsulaCRM hold release sync failed:',error.message); }\nreturn [{json:data}];"
+      },
+      "id": "sync-released-hold-to-insula",
+      "name": "Sync Released Hold to InsulaCRM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        520
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -403,7 +433,7 @@
       "main": [
         [
           {
-            "node": "Generate Post-Mortem",
+            "node": "Sync Expired Deal to InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -425,7 +455,7 @@
       "main": [
         [
           {
-            "node": "Update Deal Round",
+            "node": "Sync Released Hold to InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -477,6 +507,28 @@
         [
           {
             "node": "Slack Lifecycle Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Expired Deal to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Generate Post-Mortem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Released Hold to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Update Deal Round",
             "type": "main",
             "index": 0
           }

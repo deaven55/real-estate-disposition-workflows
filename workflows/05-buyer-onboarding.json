@@ -273,6 +273,44 @@
         "responseCode": 201,
         "responseBody": "={{ JSON.stringify({ success: true, buyerId: $('Create Buyer in Convex').first().json.data._id, closeLeadId: $('Create Close CRM Lead').first().json.id, status: 'pending_optin', tier: 'warm', note: 'Opt-in SMS sent. Buyer must reply YES before receiving deals.' }) }}"
       }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/buyers' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.INSULA_CRM_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'disposition:buyer:' + $('Create Buyer in Convex').first().json.data._id + ':v1' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n        JSON.stringify({\n          external_id: $('Create Buyer in Convex').first().json.data._id,\n          external_source: 'convex_buyer_onboarding',\n          first_name: String($('Normalize Phone to E164').first().json.buyer.name || '').trim().split(/\\s+/)[0] || 'Buyer',\n          last_name: String($('Normalize Phone to E164').first().json.buyer.name || '').trim().split(/\\s+/).slice(1).join(' ') || 'Buyer',\n          company: $('Normalize Phone to E164').first().json.buyer.company || null,\n          phone: $('Normalize Phone to E164').first().json.normalizedPhone,\n          email: $('Normalize Phone to E164').first().json.buyer.email || null,\n          min_purchase_price: Number($('Normalize Phone to E164').first().json.buyer.criteria.priceMin || 0),\n          max_purchase_price: Number($('Normalize Phone to E164').first().json.buyer.criteria.priceMax || 0),\n          preferred_property_types: $('Normalize Phone to E164').first().json.buyer.criteria.propertyTypes || [],\n          preferred_states: $('Normalize Phone to E164').first().json.buyer.criteria.markets || [],\n          preferred_strategies: $('Normalize Phone to E164').first().json.buyer.criteria.strategies || [],\n          preferred_conditions: $('Normalize Phone to E164').first().json.buyer.criteria.conditionAccepted || ['Light','Medium','Heavy'],\n          monthly_capacity: Number($('Normalize Phone to E164').first().json.buyer.criteria.monthlyCapacity || 0),\n          notes: JSON.stringify({source: $('Normalize Phone to E164').first().json.buyer.source || 'website', referredBy: $('Normalize Phone to E164').first().json.buyer.referredBy || null}),\n          buyer_tier: 'warm'\n        })\n      )}}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "sync-buyer-to-insula",
+      "name": "Sync Buyer to InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2280,
+        300
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -393,7 +431,7 @@
       "main": [
         [
           {
-            "node": "Send Opt-In SMS",
+            "node": "Sync Buyer to InsulaCRM",
             "type": "main",
             "index": 0
           }
@@ -416,6 +454,17 @@
         [
           {
             "node": "Respond 201 Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Buyer to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Send Opt-In SMS",
             "type": "main",
             "index": 0
           }

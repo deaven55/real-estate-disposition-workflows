@@ -1,0 +1,285 @@
+{
+  "name": "WholeStack WF-013: Property Recon Provider Adapter",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "wholestack-property-recon-v1",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "prepare",
+      "name": "Prepare Recon Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input=$input.first().json.body||$input.first().json; const required=['dealId','address','city','state','zip']; const missing=required.filter(k=>!input[k]); const urls=Array.isArray(input.urls)?input.urls.filter(Boolean):[]; return [{json:{valid:missing.length===0,errors:missing,dealId:input.dealId,property:{address:input.address,city:input.city,state:input.state,zip:input.zip},urls,notes:input.notes||''}}];"
+      }
+    },
+    {
+      "id": "ifvalid",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bad",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        220
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success:false,errors:$json.errors}) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "search",
+      "name": "Perplexity Property Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        700,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERPLEXITY_API_URL || 'https://api.perplexity.ai/chat/completions' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.PERPLEXITY_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model:$env.PERPLEXITY_PROPERTY_MODEL || 'sonar',messages:[{role:'system',content:'Research property facts using only information you can support from retrieved web sources. Do not invent sales, values, owners, liens, tax facts, or market statistics. Return concise JSON with facts, possible_comps, tax_or_public_record_signals, market_signals, source_citations, limitations.'},{role:'user',content:'Property: '+$json.property.address+', '+$json.property.city+', '+$json.property.state+' '+$json.property.zip+'\\nAdditional notes: '+$json.notes+'\\nReturn evidence useful for a real-estate wholesale deal analysis.'}]}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "scrape",
+      "name": "Firecrawl Property Pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        -80
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const ctx=$(\"Prepare Recon Request\").first().json; const urls=ctx.urls; const results=[]; for(const url of urls){try{const r=await this.helpers.httpRequest({method:'POST',url:$env.FIRECRAWL_API_URL||'https://api.firecrawl.dev/v2/scrape',headers:{Authorization:'Bearer '+$env.FIRECRAWL_API_KEY,'Content-Type':'application/json'},body:{url,formats:['markdown'],onlyMainContent:true},json:true,timeout:60000}); results.push({url,ok:true,data:r});}catch(error){results.push({url,ok:false,error:String(error.message||error)});}} return [{json:{...ctx,perplexity:$input.first().json,scraped:results}}];"
+      }
+    },
+    {
+      "id": "bundle",
+      "name": "Build Evidence Bundle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        -80
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d=$input.first().json; const evidence=[{evidence_type:'property_research',source:'perplexity',observed_at:new Date().toISOString(),confidence:null,payload:d.perplexity}]; for(const s of d.scraped)evidence.push({evidence_type:'web_source',source:'firecrawl',source_record_id:s.url,observed_at:new Date().toISOString(),confidence:null,payload:s}); return [{json:{dealId:d.dealId,evidence,property:d.property}}];"
+      }
+    },
+    {
+      "id": "call",
+      "name": "Send Evidence to WF-012",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1420,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_INTERNAL_BASE_URL + '/webhook/wholestack-property-intelligence-v1' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,address:$json.property.address,city:$json.property.city,state:$json.property.state,zip:$json.property.zip,evidence:$json.evidence}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "response",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1660,
+        -80
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success:true,dealId:$json.dealId,result:$json}) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Recon Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Recon Request": {
+      "main": [
+        [
+          {
+            "node": "IF Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid": {
+      "main": [
+        [
+          {
+            "node": "Perplexity Property Research",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perplexity Property Research": {
+      "main": [
+        [
+          {
+            "node": "Firecrawl Property Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firecrawl Property Pages": {
+      "main": [
+        [
+          {
+            "node": "Build Evidence Bundle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Evidence Bundle": {
+      "main": [
+        [
+          {
+            "node": "Send Evidence to WF-012",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Evidence to WF-012": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

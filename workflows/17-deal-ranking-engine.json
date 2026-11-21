@@ -1,0 +1,103 @@
+{
+  "name": "WholeStack WF-017: Deal Ranking Engine",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": {
+        "path": "wholestack-deal-ranking-v1",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "prepare",
+      "name": "Prepare Ranking Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input=$input.first().json.body||$input.first().json; const missing=['dealId'].filter(k=>!input[k]); return [{json:{valid:missing.length===0,errors:missing,dealId:input.dealId,overrides:{arv:input.arv,repairs:input.repairs,asking_price:input.asking_price,offer_target:input.offer_target,arv_confidence:input.arv_confidence,comp_count:input.comp_count,motivation_score:input.motivation_score,buyer_match_count:input.buyer_match_count,property_completeness:input.property_completeness,distress_signal_count:input.distress_signal_count,risk_flag_count:input.risk_flag_count}}}];"
+      }
+    },
+    {
+      "id": "if",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [460, 0],
+      "parameters": {
+        "conditions": {
+          "options": {"version": 2, "caseSensitive": true, "typeValidation": "strict", "leftValue": ""},
+          "combinator": "and",
+          "conditions": [{
+            "id": "valid",
+            "leftValue": "={{ $json.valid }}",
+            "rightValue": "",
+            "operator": {"type": "boolean", "operation": "true", "singleValue": true}
+          }]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bad",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 220],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success:false,errors:$json.errors}) }}",
+        "options": {"responseCode": 400}
+      }
+    },
+    {
+      "id": "call",
+      "name": "Calculate Deal Ranking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [700, -80],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INSULA_CRM_BASE_URL + '/api/v1/deals/' + $json.dealId + '/rank' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "X-API-Key", "value": "={{ $env.INSULA_CRM_API_KEY }}"},
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Idempotency-Key", "value": "={{ 'deal-ranking:' + $json.dealId + ':v1' }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.overrides) }}",
+        "options": {"timeout": 60000}
+      }
+    },
+    {
+      "id": "response",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [940, -80],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success:true,dealId:$('Prepare Ranking Request').first().json.dealId,result:$json}) }}",
+        "options": {"responseCode": 200}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node":"Prepare Ranking Request","type":"main","index":0}]]},
+    "Prepare Ranking Request": {"main": [[{"node":"IF Valid","type":"main","index":0}]]},
+    "IF Valid": {"main": [[{"node":"Calculate Deal Ranking","type":"main","index":0}],[{"node":"Respond 400","type":"main","index":0}]]},
+    "Calculate Deal Ranking": {"main": [[{"node":"Respond Success","type":"main","index":0}]]}
+  },
+  "settings": {"executionOrder":"v1","callerPolicy":"workflowsFromSameOwner","availableInMCP":false}
+}

@@ -1,0 +1,33 @@
+name: Deployment Configuration Preflight
+
+on:
+  workflow_dispatch:
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_WEBHOOK_TOKEN: ${{ secrets.N8N_WEBHOOK_TOKEN }}
+          INSULACRM_API_BASE_URL: ${{ secrets.INSULACRM_API_BASE_URL }}
+          INSULACRM_API_TOKEN: ${{ secrets.INSULACRM_API_TOKEN }}
+          CANONICAL_PLATFORM_WEBHOOK_PATH: ${{ vars.CANONICAL_PLATFORM_WEBHOOK_PATH || '/webhook/canonical-platform-integration-hardening' }}
+          CANONICAL_LIFECYCLE_HANDOFF_WEBHOOK_PATH: ${{ vars.CANONICAL_LIFECYCLE_HANDOFF_WEBHOOK_PATH || '/webhook/canonical-lifecycle-handoff' }}
+          PLATFORM_EVENT_ROUTER_WEBHOOK_PATH: ${{ vars.PLATFORM_EVENT_ROUTER_WEBHOOK_PATH || '/webhook/platform-event-router' }}
+          PROVIDER_ADAPTER_WEBHOOK_PATH: ${{ vars.PROVIDER_ADAPTER_WEBHOOK_PATH || '/webhook/canonical-provider-adapter' }}
+          PROVIDER_CALLBACK_WEBHOOK_PATH: ${{ vars.PROVIDER_CALLBACK_WEBHOOK_PATH || '/webhook/canonical-provider-callback' }}
+          PROVIDER_CONTRACT_DRY_RUN: ${{ vars.PROVIDER_CONTRACT_DRY_RUN || 'true' }}
+          PROVIDER_CALLBACK_SHARED_TOKEN: ${{ secrets.PROVIDER_CALLBACK_SHARED_TOKEN }}
+        run: node scripts/verify-deployment-configuration.js
+
+      - name: Validate verification script syntax
+        run: |
+          for file in scripts/*.js; do
+            node --check "$file"
+          done

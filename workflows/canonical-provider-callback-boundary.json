@@ -43,9 +43,7 @@
             }
           }
         },
-        "retryOnFail": true,
-        "maxTries": 2,
-        "waitBetweenTries": 1000
+        "retryOnFail": false
       },
       "id": "pcb-c",
       "name": "Check Callback Replay",

@@ -34,6 +34,48 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "={{$env.INSULACRM_API_BASE_URL + '/platform/provider-resource/check'}}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {providerCategory:$json.providerCategory,providerResourceId:$json.providerResourceId,entity:$json.entity,correlationId:$json.correlationId} }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "retryOnFail": false
+      },
+      "id": "pcb-resource-check",
+      "name": "Verify Provider Resource In InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        520,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Provider Callback').first().json; const r=$json.body??$json; const known=r.providerResourceExists===true||r.known===true; if(input.providerCategory!=='communications'&&!known) throw new Error('InsulaCRM provider resource verification failed'); return [{json:{...input,providerResourceVerification:{known,providerCategory:input.providerCategory,providerResourceId:input.providerResourceId}}}];"
+      },
+      "id": "pcb-resource-guard",
+      "name": "Gate Verified Provider Resource",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "={{$env.INSULACRM_API_BASE_URL + '/platform/idempotency/check'}}",
         "sendBody": true,
         "contentType": "json",
@@ -171,6 +213,28 @@
       ]
     },
     "Normalize Provider Callback": {
+      "main": [
+        [
+          {
+            "node": "Verify Provider Resource In InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Provider Resource In InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Gate Verified Provider Resource",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Verified Provider Resource": {
       "main": [
         [
           {

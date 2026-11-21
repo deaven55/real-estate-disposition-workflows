@@ -61,3 +61,11 @@ Take the first real provider—preferably the e-signature provider because it is
 3. Added `tests/canonical-esignature-provider-cases.json` and `scripts/validate-esignature-provider-contract.js` for deterministic contract coverage.
 
 The mapper remains provider-neutral until a specific e-signature vendor and API contract are configured.
+
+## Follow-up batch: provider configuration and callback security
+
+1. Added `config/esignature-provider-contract.json` as the deployment-neutral e-signature API/callback contract manifest.
+2. Added `scripts/validate-esignature-provider-configuration.js` to fail configuration checks when provider URL, credentials, or contract fields are missing/invalid.
+3. Hardened `canonical-provider-callback-boundary.json` to require `PROVIDER_CALLBACK_SHARED_TOKEN` and a matching callback header before any provider event can reach lifecycle state transition. Added the required deployment variables to `.env.example`.
+
+This still intentionally does not name or claim a specific e-signature vendor. The next vendor-specific step requires the actual provider/API contract and credentials.

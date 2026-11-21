@@ -10,7 +10,7 @@ const cases=[
 ];
 async function run(c){
   const id='provider-contract-test:'+c.providerCategory+':'+c.operation+':'+Date.now();
-  const body={schemaVersion:'1.0',providerCategory:c.providerCategory,operation:c.operation,idempotencyKey:id,correlationId:'provider-contract-test',entity:{dealId:'test-deal',propertyId:'test-property'},payload:{dryRun:true},metadata:{source:'provider-contract-test'}};
+  const body={schemaVersion:'1.0',providerCategory:c.providerCategory,operation:c.operation,idempotencyKey:id,correlationId:'provider-contract-test',entity:{dealId:'test-deal',propertyId:'test-property'},payload:{dryRun:process.env.PROVIDER_CONTRACT_DRY_RUN!=='false'},metadata:{source:'provider-contract-test'}};
   const headers={'content-type':'application/json'};
   if(process.env.N8N_WEBHOOK_TOKEN) headers.authorization='Bearer '+process.env.N8N_WEBHOOK_TOKEN;
   const r=await fetch(base+path,{method:'POST',headers,body:JSON.stringify(body)});

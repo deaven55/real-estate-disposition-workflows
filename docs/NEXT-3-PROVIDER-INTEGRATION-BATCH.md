@@ -69,3 +69,9 @@ The mapper remains provider-neutral until a specific e-signature vendor and API 
 3. Hardened `canonical-provider-callback-boundary.json` to require `PROVIDER_CALLBACK_SHARED_TOKEN` and a matching callback header before any provider event can reach lifecycle state transition. Added the required deployment variables to `.env.example`.
 
 This still intentionally does not name or claim a specific e-signature vendor. The next vendor-specific step requires the actual provider/API contract and credentials.
+
+## Next 3: e-signature contract verification layer
+
+1. Hardened the e-signature validator so canonical provider cases and production-gate requirements are checked together.
+2. Added GitHub Actions CI validation for the e-signature provider contract, mapper, callback boundary, and canonical test cases.
+3. Added `docs/ESIGNATURE-PROVIDER-VALIDATION.md` documenting the exact CI/runtime boundary: CI validates the contract, while live provider credentials and create/callback behavior require deployment verification.

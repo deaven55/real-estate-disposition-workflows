@@ -1,0 +1,154 @@
+{
+  "name": "Canonical Provider Callback Boundary",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "canonical-provider-callback",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "pcb-a",
+      "name": "Provider Callback Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0,0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const h=$json.headers??{}; const category=String(b.providerCategory??'').trim(); const providerEventId=String(b.providerEventId??b.eventId??b.id??'').trim(); const status=String(b.status??b.event?.status??'').trim().toLowerCase(); const entity=b.entity??{}; if(!category||!providerEventId||!status) throw new Error('providerCategory, providerEventId and status are required'); const statusMap={communications:{delivered:'communication.delivered',failed:'communication.failed'},esignature:{completed:'contract.signed',executed:'contract.signed',declined:'contract.signature.declined',voided:'contract.voided',expired:'contract.signature.expired'},titleClosing:{cleared:'title.cleared',exception:'title.exception',closing_ready:'closing.ready',closed:'closing.completed'},funds:{funded:'funds.confirmed',failed:'funds.failed',reconciled:'financials.reconciled'}}; const eventType=statusMap[category]?.[status]??''; if(!eventType) throw new Error('Unsupported provider callback status'); const idempotencyKey='provider-callback:'+category+':'+providerEventId; return [{json:{schemaVersion:'1.0',eventId:'provider-callback:'+providerEventId,eventType,occurredAt:String(b.occurredAt??new Date().toISOString()),source:'provider-callback',providerCategory:category,providerEventId,status,idempotencyKey,correlationId:String(b.correlationId??('provider-callback:'+providerEventId)),entity,payload:b.payload??b,metadata:{providerCallbackHeaders:{providerSignaturePresent:Boolean(h['x-provider-signature']||h['x-webhook-signature']),source:'provider-callback-boundary'}}}}];"
+      },
+      "id": "pcb-b",
+      "name": "Normalize Provider Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260,0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.INSULACRM_API_BASE_URL + '/platform/idempotency/check'}}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000
+      },
+      "id": "pcb-c",
+      "name": "Check Callback Replay",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [520,0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Provider Callback').first().json; const r=$json.body??$json; const alreadyProcessed=r.alreadyProcessed===true||r.processed===true; return [{json:{...input,replayGuard:{alreadyProcessed,dispatchAllowed:!alreadyProcessed}}}];"
+      },
+      "id": "pcb-d",
+      "name": "Apply Callback Replay Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780,0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{"value1":"={{$json.replayGuard.dispatchAllowed}}","operation":"isTrue"}]
+        },
+        "options": {}
+      },
+      "id": "pcb-e",
+      "name": "Gate Callback Dispatch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1040,0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL + '/webhook/canonical-platform-integration-hardening'}}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000
+      },
+      "id": "pcb-f",
+      "name": "Dispatch Callback Into Canonical Lifecycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1280,-80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 202,
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "pcb-g",
+      "name": "Respond Callback Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540,-80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ {status:'replay_ignored',idempotencyKey:$json.idempotencyKey,eventType:$json.eventType} }}",
+        "options": {}
+      },
+      "id": "pcb-h",
+      "name": "Respond Callback Replay",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1280,120]
+    }
+  ],
+  "connections": {
+    "Provider Callback Webhook": {"main":[[{"node":"Normalize Provider Callback","type":"main","index":0}]]},
+    "Normalize Provider Callback": {"main":[[{"node":"Check Callback Replay","type":"main","index":0}]]},
+    "Check Callback Replay": {"main":[[{"node":"Apply Callback Replay Guard","type":"main","index":0}]]},
+    "Apply Callback Replay Guard": {"main":[[{"node":"Gate Callback Dispatch","type":"main","index":0}]]},
+    "Gate Callback Dispatch": {"main":[[{"node":"Dispatch Callback Into Canonical Lifecycle","type":"main","index":0}],[{"node":"Respond Callback Replay","type":"main","index":0}]]},
+    "Dispatch Callback Into Canonical Lifecycle": {"main":[[{"node":"Respond Callback Accepted","type":"main","index":0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [{"name":"provider"},{"name":"callback"},{"name":"idempotency"},{"name":"canonical-lifecycle"}],
+  "meta": {
+    "purpose": "Authenticated provider callback boundary that deduplicates callbacks before lifecycle state changes.",
+    "status": "deployment-configurable",
+    "activationRequirement": "Configure the Webhook Header Auth credential in n8n before activation."
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0",
+  "providerCategory": "esignature",
+  "provider": "CONFIGURE_PROVIDER",
+  "baseUrlEnv": "ESIGNATURE_API_BASE_URL",
+  "tokenEnv": "ESIGNATURE_API_TOKEN",
+  "operations": {
+    "create_package": {
+      "method": "POST",
+      "pathEnv": "ESIGNATURE_CREATE_PACKAGE_PATH",
+      "defaultPath": "/packages",
+      "requiredRequestFields": ["packageName","documents","signers"]
+    },
+    "void_package": {
+      "method": "POST",
+      "pathEnv": "ESIGNATURE_VOID_PACKAGE_PATH",
+      "defaultPath": "/packages/void",
+      "requiredRequestFields": ["providerResourceId","reason"]
+    }
+  },
+  "callbacks": {
+    "eventIdField": "providerEventId",
+    "statusField": "status",
+    "signatureHeaderEnv": "ESIGNATURE_CALLBACK_SIGNATURE_HEADER",
+    "sharedSecretEnv": "ESIGNATURE_CALLBACK_SHARED_SECRET"
+  },
+  "canonicalStatusMap": {
+    "completed": "contract.signed",
+    "executed": "contract.signed",
+    "declined": "contract.signature.declined",
+    "voided": "contract.voided",
+    "expired": "contract.signature.expired"
+  },
+  "productionGate": {
+    "requiresRealProvider": true,
+    "requiresLiveCredentials": true,
+    "requiresLiveCreateAndCallbackTest": true
+  }
+}

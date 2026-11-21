@@ -121,5 +121,45 @@ const handoff = readJson('workflows/102-canonical-lifecycle-event-handoff.json')
 assert(findNode(handoff, 'Determine Next Canonical Lifecycle Event'), 'handoff missing lifecycle decision');
 assert(findNode(handoff, 'Dispatch Next Lifecycle Event'), 'handoff missing lifecycle dispatch');
 
+const providerAdapter = readJson('workflows/canonical-provider-adapter-boundary.json');
+for (const name of [
+  'Validate And Resolve Provider',
+  'Gate Provider Dry Run',
+  'Call External Provider',
+  'Normalize Provider Result',
+  'Persist Provider Evidence To InsulaCRM',
+  'Build Canonical Provider Outcome'
+]) assert(findNode(providerAdapter, name), `provider adapter missing ${name}`);
+
+const providerCallback = readJson('workflows/canonical-provider-callback-boundary.json');
+for (const name of [
+  'Normalize Provider Callback',
+  'Gate Resource Verification Requirement',
+  'Verify Provider Resource In InsulaCRM',
+  'Gate Verified Provider Resource',
+  'Check Callback Replay',
+  'Gate Callback Dispatch',
+  'Dispatch Callback Into Canonical Lifecycle'
+]) assert(findNode(providerCallback, name), `provider callback missing ${name}`);
+
+const providerAdapterText = JSON.stringify(providerAdapter);
+for (const operation of ['send_message', 'create_package', 'void_package', 'create_title_order', 'request_closing', 'confirm_funding']) {
+  assert(providerAdapterText.includes(operation), `provider adapter missing operation ${operation}`);
+}
+
+const providerCallbackText = JSON.stringify(providerCallback);
+for (const marker of ['provider-resource/check', 'providerResourceExists', 'replay_ignored', '202', '200']) {
+  assert(providerCallbackText.includes(marker), `provider callback missing contract marker ${marker}`);
+}
+
+const e2eCases = readJson('tests/canonical-platform-e2e-cases.json');
+assert(Array.isArray(e2eCases.cases) && e2eCases.cases.length === 12, 'canonical E2E case suite must contain 12 cases');
+for (const id of ['E2E-001','E2E-002','E2E-003','E2E-004','E2E-005','E2E-006','E2E-007','E2E-008','E2E-009','E2E-010','E2E-011','E2E-012']) assert(e2eCases.cases.some(c => c.id === id), `missing canonical E2E case ${id}`);
+
+const lifecycleText = JSON.stringify(handoff);
+for (const eventType of ['seller.qualified','underwriting.requested','offer.prepare','contract.readiness.requested','buyer.disposition.requested','title.order.requested','closing.ready','financials.reconcile.requested','profit.realized']) {
+  assert(lifecycleText.includes(eventType), `lifecycle handoff missing ${eventType}`);
+}
+
 console.log('Canonical contract validation passed.');
 

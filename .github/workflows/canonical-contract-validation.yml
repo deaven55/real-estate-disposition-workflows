@@ -14,3 +14,9 @@ jobs:
 
       - name: Validate canonical workflow contracts
         run: node tests/canonical-contract-validation.js
+
+      - name: Validate verification script syntax
+        run: |
+          for file in scripts/*.js; do
+            node --check "$file"
+          done

@@ -82,3 +82,10 @@ This still intentionally does not name or claim a specific e-signature vendor. T
 1. Made provider operation paths deployment-configurable instead of fixed in workflow JSON.
 2. Added an explicit dry-run gate so provider contract verification can exercise the adapter without mutating a real external account.
 3. Updated provider contract tests and `.env.example` so dry-run is the safe default; setting `PROVIDER_CONTRACT_DRY_RUN=false` is an explicit live-provider test decision.
+
+
+## Next 3: provider execution and failure controls
+
+1. Dry-run mode no longer requires live provider URL/token configuration, so adapter verification can run safely against a deployed n8n boundary without external mutation.
+2. Provider outcomes now classify failures into authentication, timeout, rate-limit, 5xx, validation/rejection, and unknown categories while preserving retryability and provider IDs.
+3. Added `scripts/run-provider-adapter-matrix.js` and wired it into the manual provider integration verification workflow to exercise e-signature, communications, title/closing, funds, and unsupported-operation cases.

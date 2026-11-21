@@ -75,3 +75,10 @@ This still intentionally does not name or claim a specific e-signature vendor. T
 1. Hardened the e-signature validator so canonical provider cases and production-gate requirements are checked together.
 2. Added GitHub Actions CI validation for the e-signature provider contract, mapper, callback boundary, and canonical test cases.
 3. Added `docs/ESIGNATURE-PROVIDER-VALIDATION.md` documenting the exact CI/runtime boundary: CI validates the contract, while live provider credentials and create/callback behavior require deployment verification.
+
+
+## Next 3: provider adapter execution hardening
+
+1. Made provider operation paths deployment-configurable instead of fixed in workflow JSON.
+2. Added an explicit dry-run gate so provider contract verification can exercise the adapter without mutating a real external account.
+3. Updated provider contract tests and `.env.example` so dry-run is the safe default; setting `PROVIDER_CONTRACT_DRY_RUN=false` is an explicit live-provider test decision.

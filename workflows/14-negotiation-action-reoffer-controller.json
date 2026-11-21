@@ -236,5 +236,6 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "active": false
+  "active": false,
+  "id": "cf96e6d9-7857-493a-9aef-65e089010220"
 }

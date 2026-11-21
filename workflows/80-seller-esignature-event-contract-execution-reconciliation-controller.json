@@ -2,57 +2,423 @@
   "name": "WF-442 — Seller E-Signature Event → Contract Execution Reconciliation Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"seller-esignature-contract-execution-reconciliation","responseMode":"lastNode","options":{}},
-      "id":"w442a","name":"Seller E-Signature Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seller-esignature-contract-execution-reconciliation",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w442a",
+      "name": "Seller E-Signature Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const eventId=String(b.eventId??b.providerEventId??'').trim(); const eventType=String(b.eventType??b.status??'').trim().toLowerCase(); return [{json:{...b,leadId,dealId,contractId,eventId,eventType,receivedAt:new Date().toISOString()}}];"},
-      "id":"w442b","name":"Normalize E-Signature Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const eventId=String(b.eventId??b.providerEventId??'').trim(); const eventType=String(b.eventType??b.status??'').trim().toLowerCase(); return [{json:{...b,leadId,dealId,contractId,eventId,eventType,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w442b",
+      "name": "Normalize E-Signature Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"},{"value1":"={{$json.eventId}}","operation":"notEmpty"},{"value1":"={{$json.eventType}}","operation":"notEmpty"}]}},
-      "id":"w442c","name":"Validate E-Signature Event","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.contractId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.eventId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.eventType}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w442c",
+      "name": "Validate E-Signature Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/contracts/esignature-execution-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"eventId","value":"={{$json.eventId}}"}]},"options":{}},
-      "id":"w442d","name":"Fetch E-Signature Execution Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/contracts/esignature-execution-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "eventId",
+              "value": "={{$json.eventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w442d",
+      "name": "Fetch E-Signature Execution Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize E-Signature Event').first().json; const ctx=$json.context??$json; const required=Array.isArray(ctx.requiredSigners)?ctx.requiredSigners:[]; const signatures=Array.isArray(ctx.signatures)?ctx.signatures:[]; const requiredIds=required.map(s=>String(s.id??s.signerId??s.role??s).toLowerCase()); const signedIds=signatures.filter(s=>String(s.status??'').toLowerCase()==='signed').map(s=>String(s.signerId??s.id??s.role??'').toLowerCase()); const allRequiredSigned=requiredIds.length>0?requiredIds.every(id=>signedIds.includes(id)):ctx.allRequiredSignaturesComplete===true; const terminal=['completed','signed','executed','completed_successfully'].includes(input.eventType); const failed=['declined','rejected','voided','cancelled','expired','failed'].includes(input.eventType); const blockedStates=['closed','cancelled','disputed','dnc','suppressed']; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); const flags=[]; if(blockedStates.includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); if(failed)flags.push('esignature_terminal_failure'); if(terminal&&!allRequiredSigned)flags.push('required_signatures_incomplete'); if(!ctx.documentId&&terminal)flags.push('executed_document_missing'); let decision='pending_signature',nextAction='await_remaining_signatures',executionState='signature_pending'; if(flags.includes('deal_or_contact_blocked')){decision='blocked';nextAction='stop_contract_execution_flow';executionState='blocked';}else if(failed){decision='signature_failed';nextAction='route_signature_recovery_or_reissue';executionState='signature_failed';}else if(terminal&&allRequiredSigned&&ctx.documentId){decision='executed';nextAction='advance_to_title_and_closing_coordination';executionState='executed';}else if(terminal&&!allRequiredSigned){decision='signature_incomplete';nextAction='identify_and_route_missing_signers';executionState='signature_pending';} const idempotencyKey='wf442:'+input.leadId+':'+input.dealId+':'+input.contractId+':'+input.eventId; return [{json:{...input,contractExecutionReconciliation:{status:decision==='executed'?'executed':decision==='blocked'?'blocked':'reconciled',decision,nextAction,executionState,allRequiredSignaturesComplete:allRequiredSigned,requiredSignerCount:requiredIds.length,signedSignerCount:signedIds.length,documentId:ctx.documentId??null,provider:ctx.provider??input.provider??null,providerEventId:input.eventId,flags,requiresHumanReview:['blocked','signature_failed','signature_incomplete'].includes(decision),confidenceScore:decision==='executed'?98:decision==='pending_signature'?90:35},idempotencyKey}}];"},
-      "id":"w442e","name":"Reconcile Contract Execution & Signature Evidence","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize E-Signature Event').first().json; const ctx=$json.context??$json; const required=Array.isArray(ctx.requiredSigners)?ctx.requiredSigners:[]; const signatures=Array.isArray(ctx.signatures)?ctx.signatures:[]; const requiredIds=required.map(s=>String(s.id??s.signerId??s.role??s).toLowerCase()); const signedIds=signatures.filter(s=>String(s.status??'').toLowerCase()==='signed').map(s=>String(s.signerId??s.id??s.role??'').toLowerCase()); const allRequiredSigned=requiredIds.length>0?requiredIds.every(id=>signedIds.includes(id)):ctx.allRequiredSignaturesComplete===true; const terminal=['completed','signed','executed','completed_successfully'].includes(input.eventType); const failed=['declined','rejected','voided','cancelled','expired','failed'].includes(input.eventType); const blockedStates=['closed','cancelled','disputed','dnc','suppressed']; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); const flags=[]; if(blockedStates.includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); if(failed)flags.push('esignature_terminal_failure'); if(terminal&&!allRequiredSigned)flags.push('required_signatures_incomplete'); if(!ctx.documentId&&terminal)flags.push('executed_document_missing'); let decision='pending_signature',nextAction='await_remaining_signatures',executionState='signature_pending'; if(flags.includes('deal_or_contact_blocked')){decision='blocked';nextAction='stop_contract_execution_flow';executionState='blocked';}else if(failed){decision='signature_failed';nextAction='route_signature_recovery_or_reissue';executionState='signature_failed';}else if(terminal&&allRequiredSigned&&ctx.documentId){decision='executed';nextAction='advance_to_title_and_closing_coordination';executionState='executed';}else if(terminal&&!allRequiredSigned){decision='signature_incomplete';nextAction='identify_and_route_missing_signers';executionState='signature_pending';} const idempotencyKey='wf442:'+input.leadId+':'+input.dealId+':'+input.contractId+':'+input.eventId; return [{json:{...input,contractExecutionReconciliation:{status:decision==='executed'?'executed':decision==='blocked'?'blocked':'reconciled',decision,nextAction,executionState,allRequiredSignaturesComplete:allRequiredSigned,requiredSignerCount:requiredIds.length,signedSignerCount:signedIds.length,documentId:ctx.documentId??null,provider:ctx.provider??input.provider??null,providerEventId:input.eventId,flags,requiresHumanReview:['blocked','signature_failed','signature_incomplete'].includes(decision),confidenceScore:decision==='executed'?98:decision==='pending_signature'?90:35},idempotencyKey}}];"
+      },
+      "id": "w442e",
+      "name": "Reconcile Contract Execution & Signature Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/contracts/esignature-execution-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"eventId","value":"={{$json.eventId}}"},{"name":"contractExecutionReconciliation","value":"={{JSON.stringify($json.contractExecutionReconciliation)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w442f","name":"Persist Contract Execution Reconciliation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/contracts/esignature-execution-reconciliation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "eventId",
+              "value": "={{$json.eventId}}"
+            },
+            {
+              "name": "contractExecutionReconciliation",
+              "value": "={{JSON.stringify($json.contractExecutionReconciliation)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w442f",
+      "name": "Persist Contract Execution Reconciliation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/contracts/esignature-execution-action","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"decision","value":"={{$json.contractExecutionReconciliation.decision}}"},{"name":"nextAction","value":"={{$json.contractExecutionReconciliation.nextAction}}"},{"name":"executionState","value":"={{$json.contractExecutionReconciliation.executionState}}"},{"name":"idempotencyKey","value":"={{'wf442:action:'+$json.leadId+':'+$json.dealId+':'+$json.contractId+':'+$json.eventId}}"}]},"options":{}},
-      "id":"w442g","name":"Persist Contract Execution Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/contracts/esignature-execution-action",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.contractExecutionReconciliation.decision}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.contractExecutionReconciliation.nextAction}}"
+            },
+            {
+              "name": "executionState",
+              "value": "={{$json.contractExecutionReconciliation.executionState}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf442:action:'+$json.leadId+':'+$json.dealId+':'+$json.contractId+':'+$json.eventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w442g",
+      "name": "Persist Contract Execution Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_esignature_contract_execution_reconciliation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"eventId","value":"={{$json.eventId}}"},{"name":"decision","value":"={{$json.contractExecutionReconciliation.decision}}"},{"name":"executionState","value":"={{$json.contractExecutionReconciliation.executionState}}"},{"name":"idempotencyKey","value":"={{'wf442:activity:'+$json.leadId+':'+$json.dealId+':'+$json.contractId+':'+$json.eventId}}"}]},"options":{}},
-      "id":"w442h","name":"Record Contract Execution Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "seller_esignature_contract_execution_reconciliation"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "eventId",
+              "value": "={{$json.eventId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.contractExecutionReconciliation.decision}}"
+            },
+            {
+              "name": "executionState",
+              "value": "={{$json.contractExecutionReconciliation.executionState}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf442:activity:'+$json.leadId+':'+$json.dealId+':'+$json.contractId+':'+$json.eventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w442h",
+      "name": "Record Contract Execution Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w442i","name":"Respond E-Signature Reconciliation","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w442i",
+      "name": "Respond E-Signature Reconciliation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, contractId, eventId and eventType are required'} }}","options":{}},
-      "id":"w442j","name":"Respond Invalid E-Signature Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, dealId, contractId, eventId and eventType are required'} }}",
+        "options": {}
+      },
+      "id": "w442j",
+      "name": "Respond Invalid E-Signature Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Seller E-Signature Webhook":{"main":[[{"node":"Normalize E-Signature Event","type":"main","index":0}]]},
-    "Normalize E-Signature Event":{"main":[[{"node":"Validate E-Signature Event","type":"main","index":0}]]},
-    "Validate E-Signature Event":{"main":[[{"node":"Fetch E-Signature Execution Context","type":"main","index":0}],[{"node":"Respond Invalid E-Signature Event","type":"main","index":0}]]},
-    "Fetch E-Signature Execution Context":{"main":[[{"node":"Reconcile Contract Execution & Signature Evidence","type":"main","index":0}]]},
-    "Reconcile Contract Execution & Signature Evidence":{"main":[[{"node":"Persist Contract Execution Reconciliation","type":"main","index":0}]]},
-    "Persist Contract Execution Reconciliation":{"main":[[{"node":"Persist Contract Execution Action","type":"main","index":0}]]},
-    "Persist Contract Execution Action":{"main":[[{"node":"Record Contract Execution Activity","type":"main","index":0}]]},
-    "Record Contract Execution Activity":{"main":[[{"node":"Respond E-Signature Reconciliation","type":"main","index":0}]]}
+  "connections": {
+    "Seller E-Signature Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize E-Signature Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize E-Signature Event": {
+      "main": [
+        [
+          {
+            "node": "Validate E-Signature Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate E-Signature Event": {
+      "main": [
+        [
+          {
+            "node": "Fetch E-Signature Execution Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid E-Signature Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch E-Signature Execution Context": {
+      "main": [
+        [
+          {
+            "node": "Reconcile Contract Execution & Signature Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconcile Contract Execution & Signature Evidence": {
+      "main": [
+        [
+          {
+            "node": "Persist Contract Execution Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Contract Execution Reconciliation": {
+      "main": [
+        [
+          {
+            "node": "Persist Contract Execution Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Contract Execution Action": {
+      "main": [
+        [
+          {
+            "node": "Record Contract Execution Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Contract Execution Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond E-Signature Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-442"},{"name":"e-signature"},{"name":"contract-execution"},{"name":"seller"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-442","contractStatus":"scaffolded","idempotency":"wf442:{leadId}:{dealId}:{contractId}:{eventId}","notes":"Reconciles seller e-signature provider events into contract execution state. Actual legal execution depends on verified document/e-signature provider evidence and production InsulaCRM schema/API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-442"
+    },
+    {
+      "name": "e-signature"
+    },
+    {
+      "name": "contract-execution"
+    },
+    {
+      "name": "seller"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-442",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf442:{leadId}:{dealId}:{contractId}:{eventId}",
+    "notes": "Reconciles seller e-signature provider events into contract execution state. Actual legal execution depends on verified document/e-signature provider evidence and production InsulaCRM schema/API contracts."
+  },
+  "id": "e0618d52-c49c-4b4d-84b6-8dbf110e8796"
 }

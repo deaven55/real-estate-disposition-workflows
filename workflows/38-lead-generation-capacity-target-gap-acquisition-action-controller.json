@@ -12,7 +12,10 @@
       "name": "Lead Generation Capacity Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Capacity Target Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -31,7 +37,10 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Accept", "value": "application/json" }
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
           ]
         },
         "options": {}
@@ -40,7 +49,10 @@
       "name": "Fetch InsulaCRM Capacity Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -50,7 +62,10 @@
       "name": "Validate Forecast & Capacity Inputs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -60,7 +75,10 @@
       "name": "Analyze Capacity Gaps & Acquisition Actions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -69,8 +87,14 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Accept", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -82,7 +106,10 @@
       "name": "Persist Capacity Analysis to InsulaCRM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, 0]
+      "position": [
+        1100,
+        0
+      ]
     },
     {
       "parameters": {
@@ -91,7 +118,10 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -103,7 +133,10 @@
       "name": "Record Capacity Analytics Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, 0]
+      "position": [
+        1320,
+        0
+      ]
     },
     {
       "parameters": {
@@ -114,17 +147,90 @@
       "name": "Respond Capacity Analysis Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, 0]
+      "position": [
+        1540,
+        0
+      ]
     }
   ],
   "connections": {
-    "Lead Generation Capacity Webhook": { "main": [[{ "node": "Normalize Capacity Target Request", "type": "main", "index": 0 }]] },
-    "Normalize Capacity Target Request": { "main": [[{ "node": "Fetch InsulaCRM Capacity Context", "type": "main", "index": 0 }]] },
-    "Fetch InsulaCRM Capacity Context": { "main": [[{ "node": "Validate Forecast & Capacity Inputs", "type": "main", "index": 0 }]] },
-    "Validate Forecast & Capacity Inputs": { "main": [[{ "node": "Analyze Capacity Gaps & Acquisition Actions", "type": "main", "index": 0 }]] },
-    "Analyze Capacity Gaps & Acquisition Actions": { "main": [[{ "node": "Persist Capacity Analysis to InsulaCRM", "type": "main", "index": 0 }]] },
-    "Persist Capacity Analysis to InsulaCRM": { "main": [[{ "node": "Record Capacity Analytics Activity", "type": "main", "index": 0 }]] },
-    "Record Capacity Analytics Activity": { "main": [[{ "node": "Respond Capacity Analysis Result", "type": "main", "index": 0 }]] }
+    "Lead Generation Capacity Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Capacity Target Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Capacity Target Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch InsulaCRM Capacity Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch InsulaCRM Capacity Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Forecast & Capacity Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Forecast & Capacity Inputs": {
+      "main": [
+        [
+          {
+            "node": "Analyze Capacity Gaps & Acquisition Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Capacity Gaps & Acquisition Actions": {
+      "main": [
+        [
+          {
+            "node": "Persist Capacity Analysis to InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Capacity Analysis to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Record Capacity Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Capacity Analytics Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Capacity Analysis Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -133,5 +239,6 @@
     "saveManualExecutions": true
   },
   "active": false,
-  "versionId": "wf-400-v1"
+  "versionId": "wf-400-v1",
+  "id": "fc301438-7d27-442c-8b94-205cfed18e27"
 }

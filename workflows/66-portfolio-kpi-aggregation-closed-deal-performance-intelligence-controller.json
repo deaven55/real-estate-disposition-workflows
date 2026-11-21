@@ -2,52 +2,335 @@
   "name": "WF-428 — Portfolio KPI Aggregation & Closed-Deal Performance Intelligence Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"portfolio-kpi-closed-deal-performance-intelligence","responseMode":"lastNode","options":{}},
-      "id":"w428a","name":"Portfolio KPI Intelligence Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "portfolio-kpi-closed-deal-performance-intelligence",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w428a",
+      "name": "Portfolio KPI Intelligence Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'default').trim(); const period=String(b.period??'all_time').trim(); const asOfDate=b.asOfDate??new Date().toISOString(); return [{json:{...b,portfolioId,period,asOfDate,receivedAt:new Date().toISOString()}}];"},
-      "id":"w428b","name":"Normalize Portfolio KPI Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const portfolioId=String(b.portfolioId??'default').trim(); const period=String(b.period??'all_time').trim(); const asOfDate=b.asOfDate??new Date().toISOString(); return [{json:{...b,portfolioId,period,asOfDate,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w428b",
+      "name": "Normalize Portfolio KPI Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.period}}","operation":"notEmpty"}]}},
-      "id":"w428c","name":"Validate Portfolio KPI Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w428c",
+      "name": "Validate Portfolio KPI Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-closed-deal-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"}]},"options":{}},
-      "id":"w428d","name":"Fetch Portfolio Closed Deal Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/portfolio-closed-deal-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w428d",
+      "name": "Fetch Portfolio Closed Deal Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Portfolio KPI Request').first().json; const ctx=$json.context??$json; const deals=Array.isArray(ctx.closedDeals)?ctx.closedDeals:[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const closedDeals=deals.filter(d=>String(d.status??d.lifecycleState??'').toLowerCase()==='closed'); const count=closedDeals.length; let grossRevenue=0,assignmentFees=0,closingCosts=0,otherCosts=0,netProfit=0,profitableDeals=0,lossDeals=0; for(const d of closedDeals){const gross=n(d.grossRevenue??d.financials?.grossRevenue);const fee=n(d.assignmentFee??d.financials?.assignmentFee);const cc=n(d.closingCosts??d.financials?.closingCosts);const oc=n(d.otherCosts??d.financials?.otherCosts);const profit=n(d.netProfit??d.financials?.netProfit);grossRevenue+=gross;assignmentFees+=fee;closingCosts+=cc;otherCosts+=oc;netProfit+=profit;if(profit>0)profitableDeals++;if(profit<0)lossDeals++;} const averageNetProfit=count?netProfit/count:0; const averageAssignmentFee=count?assignmentFees/count:0; const profitMargin=grossRevenue?netProfit/grossRevenue:0; const winRate=count?profitableDeals/count:0; const roiBase=ctx.totalInvestment??closedDeals.reduce((s,d)=>s+n(d.totalInvestment??d.purchasePrice??d.financials?.purchasePrice),0); const portfolioRoi=roiBase?netProfit/n(roiBase):null; const topDeals=[...closedDeals].sort((a,b)=>n(b.netProfit??b.financials?.netProfit)-n(a.netProfit??a.financials?.netProfit)).slice(0,5).map(d=>({dealId:d.dealId??d.id,propertyId:d.propertyId,netProfit:n(d.netProfit??d.financials?.netProfit),assignmentFee:n(d.assignmentFee??d.financials?.assignmentFee)})); const performance=count===0?'no_closed_deals':netProfit>0?'profitable_portfolio':netProfit<0?'loss_portfolio':'break_even_portfolio'; const idempotencyKey='wf428:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,portfolioPerformance:{status:count?'aggregated':'blocked',performance,metrics:{closedDealCount:count,grossRevenue,assignmentFees,closingCosts,otherCosts,netProfit,averageNetProfit,averageAssignmentFee,profitMargin,profitableDeals,lossDeals,winRate,portfolioRoi},topDeals,flags:count?[]:['no_closed_deals'],nextAction:count?'publish_portfolio_kpis_and_performance_intelligence':'acquire_or_reconcile_closed_deal_records',confidenceScore:count?97:35},idempotencyKey}}];"},
-      "id":"w428e","name":"Aggregate Portfolio KPI & Performance Intelligence","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Portfolio KPI Request').first().json; const ctx=$json.context??$json; const deals=Array.isArray(ctx.closedDeals)?ctx.closedDeals:[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const closedDeals=deals.filter(d=>String(d.status??d.lifecycleState??'').toLowerCase()==='closed'); const count=closedDeals.length; let grossRevenue=0,assignmentFees=0,closingCosts=0,otherCosts=0,netProfit=0,profitableDeals=0,lossDeals=0; for(const d of closedDeals){const gross=n(d.grossRevenue??d.financials?.grossRevenue);const fee=n(d.assignmentFee??d.financials?.assignmentFee);const cc=n(d.closingCosts??d.financials?.closingCosts);const oc=n(d.otherCosts??d.financials?.otherCosts);const profit=n(d.netProfit??d.financials?.netProfit);grossRevenue+=gross;assignmentFees+=fee;closingCosts+=cc;otherCosts+=oc;netProfit+=profit;if(profit>0)profitableDeals++;if(profit<0)lossDeals++;} const averageNetProfit=count?netProfit/count:0; const averageAssignmentFee=count?assignmentFees/count:0; const profitMargin=grossRevenue?netProfit/grossRevenue:0; const winRate=count?profitableDeals/count:0; const roiBase=ctx.totalInvestment??closedDeals.reduce((s,d)=>s+n(d.totalInvestment??d.purchasePrice??d.financials?.purchasePrice),0); const portfolioRoi=roiBase?netProfit/n(roiBase):null; const topDeals=[...closedDeals].sort((a,b)=>n(b.netProfit??b.financials?.netProfit)-n(a.netProfit??a.financials?.netProfit)).slice(0,5).map(d=>({dealId:d.dealId??d.id,propertyId:d.propertyId,netProfit:n(d.netProfit??d.financials?.netProfit),assignmentFee:n(d.assignmentFee??d.financials?.assignmentFee)})); const performance=count===0?'no_closed_deals':netProfit>0?'profitable_portfolio':netProfit<0?'loss_portfolio':'break_even_portfolio'; const idempotencyKey='wf428:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,portfolioPerformance:{status:count?'aggregated':'blocked',performance,metrics:{closedDealCount:count,grossRevenue,assignmentFees,closingCosts,otherCosts,netProfit,averageNetProfit,averageAssignmentFee,profitMargin,profitableDeals,lossDeals,winRate,portfolioRoi},topDeals,flags:count?[]:['no_closed_deals'],nextAction:count?'publish_portfolio_kpis_and_performance_intelligence':'acquire_or_reconcile_closed_deal_records',confidenceScore:count?97:35},idempotencyKey}}];"
+      },
+      "id": "w428e",
+      "name": "Aggregate Portfolio KPI & Performance Intelligence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-kpi-aggregation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"portfolioPerformance","value":"={{JSON.stringify($json.portfolioPerformance)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w428f","name":"Persist Portfolio KPI Aggregation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/portfolio-kpi-aggregation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "portfolioPerformance",
+              "value": "={{JSON.stringify($json.portfolioPerformance)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w428f",
+      "name": "Persist Portfolio KPI Aggregation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"portfolio_kpi_closed_deal_performance_intelligence"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"closedDealCount","value":"={{$json.portfolioPerformance.metrics.closedDealCount}}"},{"name":"netProfit","value":"={{$json.portfolioPerformance.metrics.netProfit}}"},{"name":"portfolioRoi","value":"={{$json.portfolioPerformance.metrics.portfolioRoi}}"},{"name":"idempotencyKey","value":"={{'wf428:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w428g","name":"Record Portfolio KPI Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "portfolio_kpi_closed_deal_performance_intelligence"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "closedDealCount",
+              "value": "={{$json.portfolioPerformance.metrics.closedDealCount}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.portfolioPerformance.metrics.netProfit}}"
+            },
+            {
+              "name": "portfolioRoi",
+              "value": "={{$json.portfolioPerformance.metrics.portfolioRoi}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf428:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w428g",
+      "name": "Record Portfolio KPI Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w428h","name":"Respond Portfolio KPI Intelligence","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w428h",
+      "name": "Respond Portfolio KPI Intelligence",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId and period are required'} }}","options":{}},
-      "id":"w428i","name":"Respond Invalid Portfolio KPI Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'portfolioId and period are required'} }}",
+        "options": {}
+      },
+      "id": "w428i",
+      "name": "Respond Invalid Portfolio KPI Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Portfolio KPI Intelligence Webhook":{"main":[[{"node":"Normalize Portfolio KPI Request","type":"main","index":0}]]},
-    "Normalize Portfolio KPI Request":{"main":[[{"node":"Validate Portfolio KPI Request","type":"main","index":0}]]},
-    "Validate Portfolio KPI Request":{"main":[[{"node":"Fetch Portfolio Closed Deal Context","type":"main","index":0}],[{"node":"Respond Invalid Portfolio KPI Request","type":"main","index":0}]]},
-    "Fetch Portfolio Closed Deal Context":{"main":[[{"node":"Aggregate Portfolio KPI & Performance Intelligence","type":"main","index":0}]]},
-    "Aggregate Portfolio KPI & Performance Intelligence":{"main":[[{"node":"Persist Portfolio KPI Aggregation","type":"main","index":0}]]},
-    "Persist Portfolio KPI Aggregation":{"main":[[{"node":"Record Portfolio KPI Activity","type":"main","index":0}]]},
-    "Record Portfolio KPI Activity":{"main":[[{"node":"Respond Portfolio KPI Intelligence","type":"main","index":0}]]}
+  "connections": {
+    "Portfolio KPI Intelligence Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Portfolio KPI Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Portfolio KPI Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Portfolio KPI Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Portfolio KPI Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Portfolio Closed Deal Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Portfolio KPI Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Portfolio Closed Deal Context": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Portfolio KPI & Performance Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Portfolio KPI & Performance Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Persist Portfolio KPI Aggregation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Portfolio KPI Aggregation": {
+      "main": [
+        [
+          {
+            "node": "Record Portfolio KPI Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Portfolio KPI Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Portfolio KPI Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-428"},{"name":"portfolio-kpi"},{"name":"closed-deal-performance"},{"name":"analytics"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-428","contractStatus":"scaffolded","idempotency":"wf428:{portfolioId}:{period}:{asOfDate}","notes":"Portfolio KPI aggregation is scaffolding pending verified InsulaCRM analytics schema, canonical closed-deal source, accounting definitions, and production API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-428"
+    },
+    {
+      "name": "portfolio-kpi"
+    },
+    {
+      "name": "closed-deal-performance"
+    },
+    {
+      "name": "analytics"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-428",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf428:{portfolioId}:{period}:{asOfDate}",
+    "notes": "Portfolio KPI aggregation is scaffolding pending verified InsulaCRM analytics schema, canonical closed-deal source, accounting definitions, and production API contracts."
+  },
+  "id": "ac258201-5181-437a-b1f0-17982b1e343a"
 }

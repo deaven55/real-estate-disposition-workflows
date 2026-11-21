@@ -2,57 +2,434 @@
   "name": "WF-445 — Title Clearance → Closing Date, Settlement & Buyer/Seller Coordination Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"title-clearance-closing-date-settlement-buyer-seller-coordination","responseMode":"lastNode","options":{}},
-      "id":"w445a","name":"Title Clearance Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "title-clearance-closing-date-settlement-buyer-seller-coordination",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w445a",
+      "name": "Title Clearance Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const titleOrderId=String(b.titleOrderId??'').trim(); const clearanceEventId=String(b.clearanceEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,titleOrderId,clearanceEventId,receivedAt:new Date().toISOString()}}];"},
-      "id":"w445b","name":"Normalize Title Clearance Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const titleOrderId=String(b.titleOrderId??'').trim(); const clearanceEventId=String(b.clearanceEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,titleOrderId,clearanceEventId,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w445b",
+      "name": "Normalize Title Clearance Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"},{"value1":"={{$json.titleOrderId}}","operation":"notEmpty"},{"value1":"={{$json.clearanceEventId}}","operation":"notEmpty"}]}},
-      "id":"w445c","name":"Validate Title Clearance Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.contractId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.titleOrderId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.clearanceEventId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w445c",
+      "name": "Validate Title Clearance Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/title-clearance-settlement-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"clearanceEventId","value":"={{$json.clearanceEventId}}"}]},"options":{}},
-      "id":"w445d","name":"Fetch Closing Coordination Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/title-clearance-settlement-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "titleOrderId",
+              "value": "={{$json.titleOrderId}}"
+            },
+            {
+              "name": "clearanceEventId",
+              "value": "={{$json.clearanceEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w445d",
+      "name": "Fetch Closing Coordination Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Title Clearance Request').first().json; const ctx=$json.context??$json; const flags=[]; const title=ctx.titleClearance??{}; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); if(['closed','cancelled','disputed','dnc','suppressed'].includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); if(title.cleared!==true)flags.push('title_not_cleared'); if(title.openIssueCount>0)flags.push('title_issues_unresolved'); const sellerReady=ctx.sellerClosingReady===true; const buyerReady=ctx.buyerClosingReady===true; const fundsReady=ctx.buyerFundsReady===true; const titleCompanyConfirmed=ctx.titleCompanyConfirmed===true; const settlementReady=ctx.settlementStatementReady===true; const purchasePrice=Number(ctx.purchasePrice??0); const assignmentFee=Number(ctx.assignmentFee??0); if(!sellerReady)flags.push('seller_closing_readiness_missing'); if(!buyerReady)flags.push('buyer_closing_readiness_missing'); if(!fundsReady)flags.push('buyer_funds_not_confirmed'); if(!titleCompanyConfirmed)flags.push('title_company_not_confirmed'); if(!settlementReady)flags.push('settlement_statement_not_ready'); if(!(purchasePrice>0))flags.push('purchase_price_missing'); const proposedDate=String(ctx.proposedClosingDate??ctx.requestedClosingDate??'').trim(); const confirmedDate=String(ctx.confirmedClosingDate??'').trim(); const closingDate=confirmedDate||proposedDate; const dateValid=Boolean(closingDate); if(!dateValid)flags.push('closing_date_missing'); const ready=flags.length===0; const decision=ready?'coordinate_final_closing':'hold_closing_coordination'; const nextAction=ready?'confirm_closing_date_and_issue_final_settlement_package':'resolve_closing_readiness_requirements'; const coordinationPackage={titleOrderId:input.titleOrderId,closingDate:closingDate||null,titleCompany:{id:ctx.titleCompanyId??null,name:ctx.titleCompanyName??null,contact:ctx.titleCompanyContact??null},buyer:{id:ctx.buyerId??null,name:ctx.buyerName??null,closingContact:ctx.buyerClosingContact??null},seller:{id:ctx.sellerId??null,name:ctx.sellerName??null,closingContact:ctx.sellerClosingContact??null},financials:{purchasePrice:purchasePrice||null,assignmentFee:assignmentFee||null,closingCosts:Number(ctx.closingCosts??0)||0},requiredClosingItems:ctx.requiredClosingItems??[]}; const idempotencyKey='wf445:'+input.leadId+':'+input.dealId+':'+input.titleOrderId+':'+input.clearanceEventId; return [{json:{...input,closingCoordinationDecision:{status:ready?'ready':'pending',decision,nextAction,closingDate:closingDate||null,dateSource:confirmedDate?'confirmed':'proposed',coordinationPackage,flags,requiresHumanReview:!ready,confidenceScore:ready?97:25},idempotencyKey}}];"},
-      "id":"w445e","name":"Assess Closing Readiness & Build Coordination Package","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Title Clearance Request').first().json; const ctx=$json.context??$json; const flags=[]; const title=ctx.titleClearance??{}; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); if(['closed','cancelled','disputed','dnc','suppressed'].includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); if(title.cleared!==true)flags.push('title_not_cleared'); if(title.openIssueCount>0)flags.push('title_issues_unresolved'); const sellerReady=ctx.sellerClosingReady===true; const buyerReady=ctx.buyerClosingReady===true; const fundsReady=ctx.buyerFundsReady===true; const titleCompanyConfirmed=ctx.titleCompanyConfirmed===true; const settlementReady=ctx.settlementStatementReady===true; const purchasePrice=Number(ctx.purchasePrice??0); const assignmentFee=Number(ctx.assignmentFee??0); if(!sellerReady)flags.push('seller_closing_readiness_missing'); if(!buyerReady)flags.push('buyer_closing_readiness_missing'); if(!fundsReady)flags.push('buyer_funds_not_confirmed'); if(!titleCompanyConfirmed)flags.push('title_company_not_confirmed'); if(!settlementReady)flags.push('settlement_statement_not_ready'); if(!(purchasePrice>0))flags.push('purchase_price_missing'); const proposedDate=String(ctx.proposedClosingDate??ctx.requestedClosingDate??'').trim(); const confirmedDate=String(ctx.confirmedClosingDate??'').trim(); const closingDate=confirmedDate||proposedDate; const dateValid=Boolean(closingDate); if(!dateValid)flags.push('closing_date_missing'); const ready=flags.length===0; const decision=ready?'coordinate_final_closing':'hold_closing_coordination'; const nextAction=ready?'confirm_closing_date_and_issue_final_settlement_package':'resolve_closing_readiness_requirements'; const coordinationPackage={titleOrderId:input.titleOrderId,closingDate:closingDate||null,titleCompany:{id:ctx.titleCompanyId??null,name:ctx.titleCompanyName??null,contact:ctx.titleCompanyContact??null},buyer:{id:ctx.buyerId??null,name:ctx.buyerName??null,closingContact:ctx.buyerClosingContact??null},seller:{id:ctx.sellerId??null,name:ctx.sellerName??null,closingContact:ctx.sellerClosingContact??null},financials:{purchasePrice:purchasePrice||null,assignmentFee:assignmentFee||null,closingCosts:Number(ctx.closingCosts??0)||0},requiredClosingItems:ctx.requiredClosingItems??[]}; const idempotencyKey='wf445:'+input.leadId+':'+input.dealId+':'+input.titleOrderId+':'+input.clearanceEventId; return [{json:{...input,closingCoordinationDecision:{status:ready?'ready':'pending',decision,nextAction,closingDate:closingDate||null,dateSource:confirmedDate?'confirmed':'proposed',coordinationPackage,flags,requiresHumanReview:!ready,confidenceScore:ready?97:25},idempotencyKey}}];"
+      },
+      "id": "w445e",
+      "name": "Assess Closing Readiness & Build Coordination Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/final-date-settlement-coordination-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"closingCoordinationDecision","value":"={{JSON.stringify($json.closingCoordinationDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w445f","name":"Persist Closing Coordination Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/final-date-settlement-coordination-reconciliation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "titleOrderId",
+              "value": "={{$json.titleOrderId}}"
+            },
+            {
+              "name": "closingCoordinationDecision",
+              "value": "={{JSON.stringify($json.closingCoordinationDecision)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w445f",
+      "name": "Persist Closing Coordination Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/final-date-settlement-buyer-seller-coordination","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"closingDate","value":"={{$json.closingCoordinationDecision.closingDate}}"},{"name":"coordinationPackage","value":"={{JSON.stringify($json.closingCoordinationDecision.coordinationPackage)}}"},{"name":"nextAction","value":"={{$json.closingCoordinationDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf445:coordination:'+$json.leadId+':'+$json.dealId+':'+$json.titleOrderId+':'+$json.clearanceEventId}}"}]},"options":{}},
-      "id":"w445g","name":"Coordinate Closing Date Settlement Buyer Seller","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/final-date-settlement-buyer-seller-coordination",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "titleOrderId",
+              "value": "={{$json.titleOrderId}}"
+            },
+            {
+              "name": "closingDate",
+              "value": "={{$json.closingCoordinationDecision.closingDate}}"
+            },
+            {
+              "name": "coordinationPackage",
+              "value": "={{JSON.stringify($json.closingCoordinationDecision.coordinationPackage)}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.closingCoordinationDecision.nextAction}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf445:coordination:'+$json.leadId+':'+$json.dealId+':'+$json.titleOrderId+':'+$json.clearanceEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w445g",
+      "name": "Coordinate Closing Date Settlement Buyer Seller",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"title_clearance_closing_date_settlement_buyer_seller_coordination"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"titleOrderId","value":"={{$json.titleOrderId}}"},{"name":"decision","value":"={{$json.closingCoordinationDecision.decision}}"},{"name":"closingDate","value":"={{$json.closingCoordinationDecision.closingDate}}"},{"name":"idempotencyKey","value":"={{'wf445:activity:'+$json.leadId+':'+$json.dealId+':'+$json.titleOrderId+':'+$json.clearanceEventId}}"}]},"options":{}},
-      "id":"w445h","name":"Record Closing Coordination Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "title_clearance_closing_date_settlement_buyer_seller_coordination"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "titleOrderId",
+              "value": "={{$json.titleOrderId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.closingCoordinationDecision.decision}}"
+            },
+            {
+              "name": "closingDate",
+              "value": "={{$json.closingCoordinationDecision.closingDate}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf445:activity:'+$json.leadId+':'+$json.dealId+':'+$json.titleOrderId+':'+$json.clearanceEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w445h",
+      "name": "Record Closing Coordination Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w445i","name":"Respond Closing Coordination","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w445i",
+      "name": "Respond Closing Coordination",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, contractId, titleOrderId and clearanceEventId are required'} }}","options":{}},
-      "id":"w445j","name":"Respond Invalid Title Clearance Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, dealId, contractId, titleOrderId and clearanceEventId are required'} }}",
+        "options": {}
+      },
+      "id": "w445j",
+      "name": "Respond Invalid Title Clearance Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Title Clearance Webhook":{"main":[[{"node":"Normalize Title Clearance Request","type":"main","index":0}]]},
-    "Normalize Title Clearance Request":{"main":[[{"node":"Validate Title Clearance Request","type":"main","index":0}]]},
-    "Validate Title Clearance Request":{"main":[[{"node":"Fetch Closing Coordination Context","type":"main","index":0}],[{"node":"Respond Invalid Title Clearance Request","type":"main","index":0}]]},
-    "Fetch Closing Coordination Context":{"main":[[{"node":"Assess Closing Readiness & Build Coordination Package","type":"main","index":0}]]},
-    "Assess Closing Readiness & Build Coordination Package":{"main":[[{"node":"Persist Closing Coordination Decision","type":"main","index":0}]]},
-    "Persist Closing Coordination Decision":{"main":[[{"node":"Coordinate Closing Date Settlement Buyer Seller","type":"main","index":0}]]},
-    "Coordinate Closing Date Settlement Buyer Seller":{"main":[[{"node":"Record Closing Coordination Activity","type":"main","index":0}]]},
-    "Record Closing Coordination Activity":{"main":[[{"node":"Respond Closing Coordination","type":"main","index":0}]]}
+  "connections": {
+    "Title Clearance Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Title Clearance Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Title Clearance Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Title Clearance Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Title Clearance Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Closing Coordination Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Title Clearance Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Closing Coordination Context": {
+      "main": [
+        [
+          {
+            "node": "Assess Closing Readiness & Build Coordination Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Closing Readiness & Build Coordination Package": {
+      "main": [
+        [
+          {
+            "node": "Persist Closing Coordination Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Closing Coordination Decision": {
+      "main": [
+        [
+          {
+            "node": "Coordinate Closing Date Settlement Buyer Seller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coordinate Closing Date Settlement Buyer Seller": {
+      "main": [
+        [
+          {
+            "node": "Record Closing Coordination Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Closing Coordination Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Closing Coordination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-445"},{"name":"title-clearance"},{"name":"closing-date"},{"name":"settlement"},{"name":"buyer-seller-coordination"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-445","contractStatus":"scaffolded","idempotency":"wf445:{leadId}:{dealId}:{titleOrderId}:{clearanceEventId}","notes":"Coordinates final closing date, settlement readiness, buyer/seller readiness and title-company handoff after title clearance. Production use requires verified InsulaCRM closing schema, title/closing provider integrations, jurisdiction-specific closing requirements and accounting/settlement controls."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-445"
+    },
+    {
+      "name": "title-clearance"
+    },
+    {
+      "name": "closing-date"
+    },
+    {
+      "name": "settlement"
+    },
+    {
+      "name": "buyer-seller-coordination"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-445",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf445:{leadId}:{dealId}:{titleOrderId}:{clearanceEventId}",
+    "notes": "Coordinates final closing date, settlement readiness, buyer/seller readiness and title-company handoff after title clearance. Production use requires verified InsulaCRM closing schema, title/closing provider integrations, jurisdiction-specific closing requirements and accounting/settlement controls."
+  },
+  "id": "b973cfd3-6dbf-46de-8f88-c3c8379420ce"
 }

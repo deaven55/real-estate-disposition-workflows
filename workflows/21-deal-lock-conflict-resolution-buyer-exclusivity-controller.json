@@ -6,7 +6,10 @@
       "name": "Deal Lock Conflict Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-deal-lock-conflict",
@@ -19,7 +22,10 @@
       "name": "Normalize Lock Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [470, 300],
+      "position": [
+        470,
+        300
+      ],
       "parameters": {
         "jsCode": "var b=$input.first().json.body||$input.first().json;\nreturn [{json:{...b,dealId:String(b.dealId||''),assignmentId:String(b.assignmentId||''),buyerId:String(b.buyerId||''),offerAmount:Number(b.offerAmount||0),receivedAt:new Date().toISOString()}}];"
       }
@@ -29,7 +35,10 @@
       "name": "Fetch Current Deal Lock State",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 300],
+      "position": [
+        700,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/deal-lock-context",
@@ -43,7 +52,10 @@
       "name": "Resolve Lock Conflict & Exclusivity",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [930, 300],
+      "position": [
+        930,
+        300
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar state=String(d.dealStatus||'').toLowerCase();\nvar existing=String(d.lockStatus||'').toLowerCase();\nvar activeBuyer=String(d.lockedBuyerId||'');\nvar requested=String(d.buyerId||'');\nvar protectedState=['closed','cancelled','disputed'].indexOf(state)>=0;\nvar existingExclusive=['locked','exclusive','under_contract'].indexOf(existing)>=0;\nvar sameBuyer=!!activeBuyer&&activeBuyer===requested;\nvar buyerBlocked=d.buyerActive===false||d.buyerSuppressed===true||d.dnc===true;\nvar identity=!!d.dealId&&!!d.assignmentId&&!!requested;\nvar conflict=existingExclusive&&!sameBuyer;\nvar lockAllowed=identity&&!protectedState&&!buyerBlocked&&!conflict&&Number(d.offerAmount)>0;\nvar decision=lockAllowed?(sameBuyer?'refresh_lock':'grant_lock'):conflict?'conflict':protectedState?'protected':buyerBlocked?'buyer_blocked':'invalid';\nvar reason=conflict?'deal_already_locked_to_other_buyer':protectedState?'deal_protected':buyerBlocked?'buyer_blocked':!identity?'missing_identity':Number(d.offerAmount)<=0?'invalid_offer':null;\nreturn [{json:{...d,lockDecision:decision,lockAllowed:lockAllowed,lockConflict:conflict,exclusiveBuyerId:activeBuyer||null,blockedReason:reason}}];"
       }
@@ -53,12 +65,30 @@
       "name": "IF Lock Allowed",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1160, 300],
+      "position": [
+        1160,
+        300
+      ],
       "parameters": {
         "conditions": {
-          "options":{"version":2,"leftValue":"","caseSensitive":true,"typeValidation":"strict"},
-          "combinator":"and",
-          "conditions":[{"id":"allowed","leftValue":"={{ $json.lockAllowed }}","rightValue":true,"operator":{"type":"boolean","operation":"equals"}}]
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.lockAllowed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
         }
       }
     },
@@ -67,13 +97,16 @@
       "name": "Persist Exclusive Deal Lock",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 150],
+      "position": [
+        1390,
+        150
+      ],
       "parameters": {
-        "method":"POST",
-        "url":"https://YOUR_INSULACRM_API/buyers/deal-lock-exclusive",
-        "sendBody":true,
-        "specifyBody":"json",
-        "jsonBody":"={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,offerAmount:$json.offerAmount,lockDecision:$json.lockDecision,exclusiveBuyerId:$json.buyerId,idempotencyKey:'wf383:lock:'+String($json.dealId)+':'+String($json.assignmentId)+':'+String($json.buyerId)}) }}"
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/buyers/deal-lock-exclusive",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,offerAmount:$json.offerAmount,lockDecision:$json.lockDecision,exclusiveBuyerId:$json.buyerId,idempotencyKey:'wf383:lock:'+String($json.dealId)+':'+String($json.assignmentId)+':'+String($json.buyerId)}) }}"
       }
     },
     {
@@ -81,13 +114,16 @@
       "name": "Persist Lock Conflict",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 450],
+      "position": [
+        1390,
+        450
+      ],
       "parameters": {
-        "method":"POST",
-        "url":"https://YOUR_INSULACRM_API/buyers/deal-lock-conflict",
-        "sendBody":true,
-        "specifyBody":"json",
-        "jsonBody":"={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,exclusiveBuyerId:$json.exclusiveBuyerId,lockDecision:$json.lockDecision,reason:$json.blockedReason||'deal_lock_conflict',idempotencyKey:'wf383:conflict:'+String($json.dealId)+':'+String($json.buyerId)}) }}"
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/buyers/deal-lock-conflict",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,exclusiveBuyerId:$json.exclusiveBuyerId,lockDecision:$json.lockDecision,reason:$json.blockedReason||'deal_lock_conflict',idempotencyKey:'wf383:conflict:'+String($json.dealId)+':'+String($json.buyerId)}) }}"
       }
     },
     {
@@ -95,11 +131,14 @@
       "name": "Respond Lock Granted",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1620, 150],
+      "position": [
+        1620,
+        150
+      ],
       "parameters": {
-        "respondWith":"json",
-        "responseCode":200,
-        "responseBody":"={{ JSON.stringify({success:true,workflow:'WF-383',lockGranted:true,lockDecision:$json.lockDecision,dealId:$json.dealId,buyerId:$json.buyerId,offerAmount:$json.offerAmount}) }}"
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({success:true,workflow:'WF-383',lockGranted:true,lockDecision:$json.lockDecision,dealId:$json.dealId,buyerId:$json.buyerId,offerAmount:$json.offerAmount}) }}"
       }
     },
     {
@@ -107,31 +146,112 @@
       "name": "Respond Lock Conflict",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1620, 450],
+      "position": [
+        1620,
+        450
+      ],
       "parameters": {
-        "respondWith":"json",
-        "responseCode":200,
-        "responseBody":"={{ JSON.stringify({success:true,workflow:'WF-383',lockGranted:false,lockDecision:$json.lockDecision,reason:$json.blockedReason||'lock_not_granted',dealId:$json.dealId,buyerId:$json.buyerId,exclusiveBuyerId:$json.exclusiveBuyerId||null}) }}"
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({success:true,workflow:'WF-383',lockGranted:false,lockDecision:$json.lockDecision,reason:$json.blockedReason||'lock_not_granted',dealId:$json.dealId,buyerId:$json.buyerId,exclusiveBuyerId:$json.exclusiveBuyerId||null}) }}"
       }
     }
   ],
   "connections": {
-    "Deal Lock Conflict Webhook":{"main":[[{"node":"Normalize Lock Request","type":"main","index":0}]]},
-    "Normalize Lock Request":{"main":[[{"node":"Fetch Current Deal Lock State","type":"main","index":0}]]},
-    "Fetch Current Deal Lock State":{"main":[[{"node":"Resolve Lock Conflict & Exclusivity","type":"main","index":0}]]},
-    "Resolve Lock Conflict & Exclusivity":{"main":[[{"node":"IF Lock Allowed","type":"main","index":0}]]},
-    "IF Lock Allowed":{"main":[[{"node":"Persist Exclusive Deal Lock","type":"main","index":0}],[{"node":"Persist Lock Conflict","type":"main","index":0}]]},
-    "Persist Exclusive Deal Lock":{"main":[[{"node":"Respond Lock Granted","type":"main","index":0}]]},
-    "Persist Lock Conflict":{"main":[[{"node":"Respond Lock Conflict","type":"main","index":0}]]}
+    "Deal Lock Conflict Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lock Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lock Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Current Deal Lock State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current Deal Lock State": {
+      "main": [
+        [
+          {
+            "node": "Resolve Lock Conflict & Exclusivity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Lock Conflict & Exclusivity": {
+      "main": [
+        [
+          {
+            "node": "IF Lock Allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Lock Allowed": {
+      "main": [
+        [
+          {
+            "node": "Persist Exclusive Deal Lock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Lock Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Exclusive Deal Lock": {
+      "main": [
+        [
+          {
+            "node": "Respond Lock Granted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Lock Conflict": {
+      "main": [
+        [
+          {
+            "node": "Respond Lock Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{
-    "executionOrder":"v1",
-    "saveDataErrorExecution":"all",
-    "saveDataSuccessExecution":"all",
-    "saveManualExecutions":true,
-    "saveExecutionProgress":true,
-    "callerPolicy":"workflowsFromSameOwner",
-    "availableInMCP":false
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "active":false
+  "active": false,
+  "id": "72fc67af-88df-4298-b7dc-a800bacefc07"
 }

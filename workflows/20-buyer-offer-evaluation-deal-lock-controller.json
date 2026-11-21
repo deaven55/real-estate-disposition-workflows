@@ -6,7 +6,10 @@
       "name": "Buyer Offer Evaluation Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-buyer-offer-evaluation",
@@ -19,7 +22,10 @@
       "name": "Normalize Buyer Offer",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [470, 300],
+      "position": [
+        470,
+        300
+      ],
       "parameters": {
         "jsCode": "var b=$input.first().json.body||$input.first().json;\nvar offer=Number(b.offerAmount||b.price||0);\nreturn [{json:{...b,offerAmount:offer,receivedAt:new Date().toISOString()}}];"
       }
@@ -29,7 +35,10 @@
       "name": "Fetch Buyer Offer Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 300],
+      "position": [
+        700,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/offer-context",
@@ -43,7 +52,10 @@
       "name": "Evaluate Buyer Offer",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [930, 300],
+      "position": [
+        930,
+        300
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar offer=Number(d.offerAmount||0);\nvar purchase=Number(d.purchasePrice||d.contractPrice||0);\nvar fee=Number(d.assignmentFee||0);\nvar mao=Number(d.protectedMAO||0);\nvar arv=Number(d.arv||0);\nvar repairs=Number(d.estimatedRepairs||0);\nvar state=String(d.dealStatus||'').toLowerCase();\nvar economics=offer>0&&purchase>0&&offer>=purchase+fee;\nvar ceiling=!mao||offer<=mao;\nvar spread=arv>0?offer/arv:0;\nvar dealSafe=['closed','cancelled','disputed','contracted'].indexOf(state)===-1;\nvar score=Math.round(Math.max(0,Math.min(1,(economics?0.35:0)+(ceiling?0.3:0)+(spread>0&&spread<=0.8?0.2:spread<=0.9?0.1:0)+(repairs>=0?0.15:0)))*100);\nvar decision=!dealSafe?'blocked':!economics?'reject':!ceiling?'human_review':score>=80?'lock':score>=60?'counter':score>=40?'human_review':'reject';\nreturn [{json:{...d,offerAmount:offer,purchasePrice:purchase,assignmentFee:fee,protectedMAO:mao,offerToARV:spread,buyerOfferScore:score,offerDecision:decision,dealLockEligible:decision==='lock'}}];"
       }
@@ -53,7 +65,10 @@
       "name": "Enforce Deal-Lock Guardrails",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1160, 300],
+      "position": [
+        1160,
+        300
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar buyerBlocked=d.buyerActive===false||d.buyerSuppressed===true||d.dnc===true;\nvar identity=!!d.dealId&&!!d.assignmentId&&!!d.buyerId;\nvar amount=Number(d.offerAmount)>0;\nvar lockAllowed=d.offerDecision==='lock'&&d.dealLockEligible===true&&!buyerBlocked&&identity&&amount;\nvar blockedReason=!identity?'missing_identity':buyerBlocked?'buyer_blocked':!amount?'invalid_offer':d.offerDecision==='blocked'?'deal_protected':null;\nreturn [{json:{...d,lockAllowed:lockAllowed,blockedReason:blockedReason}}];"
       }
@@ -63,7 +78,10 @@
       "name": "Persist Buyer Offer Evaluation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 150],
+      "position": [
+        1390,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/offer-evaluation",
@@ -77,7 +95,10 @@
       "name": "Persist Deal Lock Decision",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 150],
+      "position": [
+        1620,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/deal-lock",
@@ -91,7 +112,10 @@
       "name": "Respond Deal Lock",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1850, 100],
+      "position": [
+        1850,
+        100
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -103,7 +127,10 @@
       "name": "Respond Offer Evaluation",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1620, 450],
+      "position": [
+        1620,
+        450
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -112,22 +139,93 @@
     }
   ],
   "connections": {
-    "Buyer Offer Evaluation Webhook":{"main":[[{"node":"Normalize Buyer Offer","type":"main","index":0}]]},
-    "Normalize Buyer Offer":{"main":[[{"node":"Fetch Buyer Offer Context","type":"main","index":0}]]},
-    "Fetch Buyer Offer Context":{"main":[[{"node":"Evaluate Buyer Offer","type":"main","index":0}]]},
-    "Evaluate Buyer Offer":{"main":[[{"node":"Enforce Deal-Lock Guardrails","type":"main","index":0}]]},
-    "Enforce Deal-Lock Guardrails":{"main":[[{"node":"Persist Buyer Offer Evaluation","type":"main","index":0}]]},
-    "Persist Buyer Offer Evaluation":{"main":[[{"node":"Persist Deal Lock Decision","type":"main","index":0}]]},
-    "Persist Deal Lock Decision":{"main":[[{"node":"Respond Deal Lock","type":"main","index":0}]]}
+    "Buyer Offer Evaluation Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Buyer Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Buyer Offer": {
+      "main": [
+        [
+          {
+            "node": "Fetch Buyer Offer Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Buyer Offer Context": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Buyer Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Buyer Offer": {
+      "main": [
+        [
+          {
+            "node": "Enforce Deal-Lock Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Deal-Lock Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Persist Buyer Offer Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Buyer Offer Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Persist Deal Lock Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Deal Lock Decision": {
+      "main": [
+        [
+          {
+            "node": "Respond Deal Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{
-    "executionOrder":"v1",
-    "saveDataErrorExecution":"all",
-    "saveDataSuccessExecution":"all",
-    "saveManualExecutions":true,
-    "saveExecutionProgress":true,
-    "callerPolicy":"workflowsFromSameOwner",
-    "availableInMCP":false
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "active":false
+  "active": false,
+  "id": "e46c1630-7bbb-4d66-a72d-984e90f0b958"
 }

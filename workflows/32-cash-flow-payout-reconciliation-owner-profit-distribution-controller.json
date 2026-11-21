@@ -12,7 +12,10 @@
       "name": "Cash Flow Payout Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Payout Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Fetch Final Payout Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -58,7 +67,10 @@
       "name": "Validate Settlement & Reconcile Payout",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -87,7 +99,10 @@
       "name": "IF Payout Eligible",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -146,7 +161,10 @@
       "name": "Persist Cash Flow Reconciliation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, -120]
+      "position": [
+        1100,
+        -120
+      ]
     },
     {
       "parameters": {
@@ -201,7 +219,10 @@
       "name": "Persist Owner Profit Distribution",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, -120]
+      "position": [
+        1320,
+        -120
+      ]
     },
     {
       "parameters": {
@@ -248,7 +269,10 @@
       "name": "Persist Payout Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, -120]
+      "position": [
+        1540,
+        -120
+      ]
     },
     {
       "parameters": {
@@ -262,7 +286,10 @@
       "name": "Respond Payout Reconciled",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1760, -120]
+      "position": [
+        1760,
+        -120
+      ]
     },
     {
       "parameters": {
@@ -276,36 +303,107 @@
       "name": "Respond Payout Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     }
   ],
   "connections": {
     "Cash Flow Payout Webhook": {
-      "main": [[{"node": "Normalize Payout Request", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Payout Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Payout Request": {
-      "main": [[{"node": "Fetch Final Payout Context", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Fetch Final Payout Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Final Payout Context": {
-      "main": [[{"node": "Validate Settlement & Reconcile Payout", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Validate Settlement & Reconcile Payout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Settlement & Reconcile Payout": {
-      "main": [[{"node": "IF Payout Eligible", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "IF Payout Eligible",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF Payout Eligible": {
       "main": [
-        [{"node": "Persist Cash Flow Reconciliation", "type": "main", "index": 0}],
-        [{"node": "Respond Payout Blocked", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Persist Cash Flow Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Payout Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Persist Cash Flow Reconciliation": {
-      "main": [[{"node": "Persist Owner Profit Distribution", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Owner Profit Distribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Owner Profit Distribution": {
-      "main": [[{"node": "Persist Payout Activity", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Payout Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Payout Activity": {
-      "main": [[{"node": "Respond Payout Reconciled", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Payout Reconciled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -318,5 +416,14 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["real-estate", "insula-crm", "finance", "cash-flow", "payout", "profit", "wf-394"]
+  "tags": [
+    "real-estate",
+    "insula-crm",
+    "finance",
+    "cash-flow",
+    "payout",
+    "profit",
+    "wf-394"
+  ],
+  "id": "926597a9-c761-4a77-b9a4-0d9ddf75e6df"
 }

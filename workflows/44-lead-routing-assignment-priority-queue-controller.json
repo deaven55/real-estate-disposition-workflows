@@ -12,7 +12,10 @@
       "name": "Lead Routing Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Lead Routing Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -39,7 +45,10 @@
       "name": "Validate Lead Routing Identity",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -69,7 +78,10 @@
       "name": "Fetch Lead Routing Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [660, -80]
+      "position": [
+        660,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -79,7 +91,10 @@
       "name": "Determine Lead Route & Priority Queue",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, -80]
+      "position": [
+        880,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -109,7 +124,10 @@
       "name": "Persist Lead Routing & Queue Assignment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, -80]
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -155,7 +173,10 @@
       "name": "Record Lead Routing Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, -80]
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -167,7 +188,10 @@
       "name": "Respond Lead Routing",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, -80]
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -179,33 +203,96 @@
       "name": "Respond Invalid Routing Request",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [660, 140]
+      "position": [
+        660,
+        140
+      ]
     }
   ],
   "connections": {
     "Lead Routing Webhook": {
-      "main": [[{"node":"Normalize Lead Routing Input","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Routing Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Lead Routing Input": {
-      "main": [[{"node":"Validate Lead Routing Identity","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Validate Lead Routing Identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Lead Routing Identity": {
       "main": [
-        [{"node":"Fetch Lead Routing Context","type":"main","index":0}],
-        [{"node":"Respond Invalid Routing Request","type":"main","index":0}]
+        [
+          {
+            "node": "Fetch Lead Routing Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Routing Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Fetch Lead Routing Context": {
-      "main": [[{"node":"Determine Lead Route & Priority Queue","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Determine Lead Route & Priority Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Determine Lead Route & Priority Queue": {
-      "main": [[{"node":"Persist Lead Routing & Queue Assignment","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Lead Routing & Queue Assignment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Lead Routing & Queue Assignment": {
-      "main": [[{"node":"Record Lead Routing Activity","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Record Lead Routing Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Record Lead Routing Activity": {
-      "main": [[{"node":"Respond Lead Routing","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Lead Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -215,16 +302,27 @@
     "saveManualExecutions": true
   },
   "tags": [
-    {"name":"WF-406"},
-    {"name":"lead-generation"},
-    {"name":"lead-routing"},
-    {"name":"priority-queue"},
-    {"name":"InsulaCRM"}
+    {
+      "name": "WF-406"
+    },
+    {
+      "name": "lead-generation"
+    },
+    {
+      "name": "lead-routing"
+    },
+    {
+      "name": "priority-queue"
+    },
+    {
+      "name": "InsulaCRM"
+    }
   ],
   "meta": {
-    "workflowId":"WF-406",
-    "contractStatus":"scaffolded",
-    "idempotency":"wf406:{leadId}:{queue}",
-    "notes":"Routing scaffold supports priority queues and eligible assignee selection pending production InsulaCRM assignee/capacity schema and API contract mapping."
-  }
+    "workflowId": "WF-406",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf406:{leadId}:{queue}",
+    "notes": "Routing scaffold supports priority queues and eligible assignee selection pending production InsulaCRM assignee/capacity schema and API contract mapping."
+  },
+  "id": "d0985dca-71f8-4f03-bec4-4f4027b1bf19"
 }

@@ -2,52 +2,322 @@
   "name": "WF-433 — Seller Follow-Up SLA Monitoring & Escalation Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"seller-follow-up-sla-monitoring-escalation","responseMode":"lastNode","options":{}},
-      "id":"w433a","name":"Seller SLA Monitoring Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seller-follow-up-sla-monitoring-escalation",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w433a",
+      "name": "Seller SLA Monitoring Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'default').trim(); const asOfDate=b.asOfDate??new Date().toISOString(); return [{json:{...b,portfolioId,asOfDate,receivedAt:new Date().toISOString()}}];"},
-      "id":"w433b","name":"Normalize Seller SLA Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const portfolioId=String(b.portfolioId??'default').trim(); const asOfDate=b.asOfDate??new Date().toISOString(); return [{json:{...b,portfolioId,asOfDate,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w433b",
+      "name": "Normalize Seller SLA Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"}]}},
-      "id":"w433c","name":"Validate Seller SLA Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w433c",
+      "name": "Validate Seller SLA Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/seller-follow-up-sla-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"}]},"options":{}},
-      "id":"w433d","name":"Fetch Seller Follow-Up SLA Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/seller-follow-up-sla-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w433d",
+      "name": "Fetch Seller Follow-Up SLA Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Seller SLA Request').first().json; const ctx=$json.context??$json; const leads=Array.isArray(ctx.leads)?ctx.leads:[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const now=new Date(input.asOfDate).getTime(); const defaultSla={hot:60,warm:240,standard:1440,nurture:4320}; const sla={...defaultSla,...(ctx.slaMinutes??{})}; const active=leads.filter(l=>!['closed','cancelled','dnc','suppressed'].includes(String(l.status??'').toLowerCase())); const monitored=active.map(l=>{const queue=String(l.queue??(n(l.priorityScore)>=80?'hot':n(l.priorityScore)>=60?'warm':n(l.priorityScore)>=35?'standard':'nurture')).toLowerCase(); const lastContact=l.lastContactAt??l.lastOutreachAt??l.lastActivityAt??null; const dueAt=l.nextFollowUpAt??null; const elapsed=lastContact?Math.max(0,(now-new Date(lastContact).getTime())/60000):null; const slaLimit=n(sla[queue]??sla.standard); const overdue=dueAt?new Date(dueAt).getTime()<now:(elapsed!==null&&elapsed>slaLimit); const urgency=queue==='hot'&&overdue?'critical':overdue?'high':queue==='hot'?'priority':'normal'; return{leadId:l.leadId??l.id,queue,priorityScore:n(l.priorityScore),lastContactAt:lastContact,nextFollowUpAt:dueAt,elapsedMinutes:elapsed,slaMinutes:slaLimit,overdue,urgency,assignedTo:l.assignedTo??l.ownerId??null};}); const overdue=monitored.filter(x=>x.overdue); const critical=overdue.filter(x=>x.urgency==='critical'); const escalationActions=overdue.map(x=>({leadId:x.leadId,action:x.urgency==='critical'?'immediate_human_escalation':x.queue==='warm'?'priority_follow_up':'schedule_follow_up',queue:x.queue,assignedTo:x.assignedTo})); const status=monitored.length?'assessed':'blocked'; const idempotencyKey='wf433:'+input.portfolioId+':'+input.asOfDate; return [{json:{...input,sellerFollowUpSLA:{status,summary:{activeLeads:monitored.length,overdueFollowUps:overdue.length,criticalEscalations:critical.length,overdueRate:monitored.length?overdue.length/monitored.length:0},slaMinutes:sla,leadAssessments:monitored,escalationActions,flags:monitored.length?[]:['no_active_seller_leads'],nextAction:critical.length?'escalate_critical_seller_follow_ups':overdue.length?'execute_overdue_follow_up_queue':'maintain_sla_monitoring',confidenceScore:monitored.length?93:20},idempotencyKey}}];"},
-      "id":"w433e","name":"Evaluate Seller Follow-Up SLA & Escalations","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Seller SLA Request').first().json; const ctx=$json.context??$json; const leads=Array.isArray(ctx.leads)?ctx.leads:[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const now=new Date(input.asOfDate).getTime(); const defaultSla={hot:60,warm:240,standard:1440,nurture:4320}; const sla={...defaultSla,...(ctx.slaMinutes??{})}; const active=leads.filter(l=>!['closed','cancelled','dnc','suppressed'].includes(String(l.status??'').toLowerCase())); const monitored=active.map(l=>{const queue=String(l.queue??(n(l.priorityScore)>=80?'hot':n(l.priorityScore)>=60?'warm':n(l.priorityScore)>=35?'standard':'nurture')).toLowerCase(); const lastContact=l.lastContactAt??l.lastOutreachAt??l.lastActivityAt??null; const dueAt=l.nextFollowUpAt??null; const elapsed=lastContact?Math.max(0,(now-new Date(lastContact).getTime())/60000):null; const slaLimit=n(sla[queue]??sla.standard); const overdue=dueAt?new Date(dueAt).getTime()<now:(elapsed!==null&&elapsed>slaLimit); const urgency=queue==='hot'&&overdue?'critical':overdue?'high':queue==='hot'?'priority':'normal'; return{leadId:l.leadId??l.id,queue,priorityScore:n(l.priorityScore),lastContactAt:lastContact,nextFollowUpAt:dueAt,elapsedMinutes:elapsed,slaMinutes:slaLimit,overdue,urgency,assignedTo:l.assignedTo??l.ownerId??null};}); const overdue=monitored.filter(x=>x.overdue); const critical=overdue.filter(x=>x.urgency==='critical'); const escalationActions=overdue.map(x=>({leadId:x.leadId,action:x.urgency==='critical'?'immediate_human_escalation':x.queue==='warm'?'priority_follow_up':'schedule_follow_up',queue:x.queue,assignedTo:x.assignedTo})); const status=monitored.length?'assessed':'blocked'; const idempotencyKey='wf433:'+input.portfolioId+':'+input.asOfDate; return [{json:{...input,sellerFollowUpSLA:{status,summary:{activeLeads:monitored.length,overdueFollowUps:overdue.length,criticalEscalations:critical.length,overdueRate:monitored.length?overdue.length/monitored.length:0},slaMinutes:sla,leadAssessments:monitored,escalationActions,flags:monitored.length?[]:['no_active_seller_leads'],nextAction:critical.length?'escalate_critical_seller_follow_ups':overdue.length?'execute_overdue_follow_up_queue':'maintain_sla_monitoring',confidenceScore:monitored.length?93:20},idempotencyKey}}];"
+      },
+      "id": "w433e",
+      "name": "Evaluate Seller Follow-Up SLA & Escalations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/seller-follow-up-sla-assessment","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"sellerFollowUpSLA","value":"={{JSON.stringify($json.sellerFollowUpSLA)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w433f","name":"Persist Seller SLA Assessment","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/seller-follow-up-sla-assessment",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "sellerFollowUpSLA",
+              "value": "={{JSON.stringify($json.sellerFollowUpSLA)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w433f",
+      "name": "Persist Seller SLA Assessment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_follow_up_sla_monitoring_escalation"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"activeLeads","value":"={{$json.sellerFollowUpSLA.summary.activeLeads}}"},{"name":"overdueFollowUps","value":"={{$json.sellerFollowUpSLA.summary.overdueFollowUps}}"},{"name":"criticalEscalations","value":"={{$json.sellerFollowUpSLA.summary.criticalEscalations}}"},{"name":"idempotencyKey","value":"={{'wf433:activity:'+$json.portfolioId+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w433g","name":"Record Seller SLA Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "seller_follow_up_sla_monitoring_escalation"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "activeLeads",
+              "value": "={{$json.sellerFollowUpSLA.summary.activeLeads}}"
+            },
+            {
+              "name": "overdueFollowUps",
+              "value": "={{$json.sellerFollowUpSLA.summary.overdueFollowUps}}"
+            },
+            {
+              "name": "criticalEscalations",
+              "value": "={{$json.sellerFollowUpSLA.summary.criticalEscalations}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf433:activity:'+$json.portfolioId+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w433g",
+      "name": "Record Seller SLA Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w433h","name":"Respond Seller SLA Assessment","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w433h",
+      "name": "Respond Seller SLA Assessment",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId is required'} }}","options":{}},
-      "id":"w433i","name":"Respond Invalid Seller SLA Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'portfolioId is required'} }}",
+        "options": {}
+      },
+      "id": "w433i",
+      "name": "Respond Invalid Seller SLA Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Seller SLA Monitoring Webhook":{"main":[[{"node":"Normalize Seller SLA Request","type":"main","index":0}]]},
-    "Normalize Seller SLA Request":{"main":[[{"node":"Validate Seller SLA Request","type":"main","index":0}]]},
-    "Validate Seller SLA Request":{"main":[[{"node":"Fetch Seller Follow-Up SLA Context","type":"main","index":0}],[{"node":"Respond Invalid Seller SLA Request","type":"main","index":0}]]},
-    "Fetch Seller Follow-Up SLA Context":{"main":[[{"node":"Evaluate Seller Follow-Up SLA & Escalations","type":"main","index":0}]]},
-    "Evaluate Seller Follow-Up SLA & Escalations":{"main":[[{"node":"Persist Seller SLA Assessment","type":"main","index":0}]]},
-    "Persist Seller SLA Assessment":{"main":[[{"node":"Record Seller SLA Activity","type":"main","index":0}]]},
-    "Record Seller SLA Activity":{"main":[[{"node":"Respond Seller SLA Assessment","type":"main","index":0}]]}
+  "connections": {
+    "Seller SLA Monitoring Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Seller SLA Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Seller SLA Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Seller SLA Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Seller SLA Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Seller Follow-Up SLA Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Seller SLA Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Seller Follow-Up SLA Context": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Seller Follow-Up SLA & Escalations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Seller Follow-Up SLA & Escalations": {
+      "main": [
+        [
+          {
+            "node": "Persist Seller SLA Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Seller SLA Assessment": {
+      "main": [
+        [
+          {
+            "node": "Record Seller SLA Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Seller SLA Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Seller SLA Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-433"},{"name":"seller-follow-up"},{"name":"SLA"},{"name":"escalation"},{"name":"lead-management"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-433","contractStatus":"scaffolded","idempotency":"wf433:{portfolioId}:{asOfDate}","notes":"Seller follow-up SLA monitoring is scaffolding pending verified InsulaCRM activity timestamps, SLA policy source, assignee schema, communication provider, and production escalation contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-433"
+    },
+    {
+      "name": "seller-follow-up"
+    },
+    {
+      "name": "SLA"
+    },
+    {
+      "name": "escalation"
+    },
+    {
+      "name": "lead-management"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-433",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf433:{portfolioId}:{asOfDate}",
+    "notes": "Seller follow-up SLA monitoring is scaffolding pending verified InsulaCRM activity timestamps, SLA policy source, assignee schema, communication provider, and production escalation contracts."
+  },
+  "id": "34fb1682-54bb-4a18-8bca-c02a4dfba39c"
 }

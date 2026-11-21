@@ -2,52 +2,362 @@
   "name": "WF-423 — Title Clearance → Closing Date & Final Settlement Coordination Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"title-clearance-closing-date-final-settlement-coordination","responseMode":"lastNode","options":{}},
-      "id":"w423a","name":"Title Clearance Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "title-clearance-closing-date-final-settlement-coordination",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w423a",
+      "name": "Title Clearance Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const assignmentId=String(b.assignmentId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,assignmentId,receivedAt:new Date().toISOString()}}];"},
-      "id":"w423b","name":"Normalize Final Settlement Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); const assignmentId=String(b.assignmentId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,assignmentId,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w423b",
+      "name": "Normalize Final Settlement Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.assignmentId}}","operation":"notEmpty"}]}},
-      "id":"w423c","name":"Validate Final Settlement Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.propertyId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.assignmentId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w423c",
+      "name": "Validate Final Settlement Identity",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/final-settlement-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"}]},"options":{}},
-      "id":"w423d","name":"Fetch Final Settlement Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/final-settlement-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w423d",
+      "name": "Fetch Final Settlement Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Final Settlement Request').first().json; const ctx=$json.context??$json; const title=ctx.title??{}; const closing=ctx.closing??{}; const settlement=ctx.settlement??{}; const d=ctx.deal??{}; const flags=[]; const titleClear=title.clearToClose===true||title.status==='clear'; const contractExecuted=ctx.contractExecutionStatus==='executed'||d.assignmentContractExecuted===true; const fundsReady=settlement.fundsReady===true; const buyerReady=ctx.buyerReady===true||ctx.buyer?.closingReady===true; const sellerReady=ctx.sellerReady===true||ctx.seller?.closingReady===true; if(!contractExecuted)flags.push('assignment_contract_not_executed'); if(!titleClear)flags.push('title_not_clear'); if(!fundsReady)flags.push('funds_not_ready'); if(!buyerReady)flags.push('buyer_closing_readiness_missing'); if(!sellerReady)flags.push('seller_closing_readiness_missing'); if(closing.status&&['failed','cancelled'].includes(String(closing.status).toLowerCase()))flags.push('closing_process_blocked'); const hardBlock=flags.includes('assignment_contract_not_executed')||flags.includes('title_not_clear')||flags.includes('closing_process_blocked'); const ready=flags.length===0; const status=hardBlock?'blocked':ready?'ready_for_scheduling':'pending_requirements'; const proposedDate=ctx.proposedClosingDate??closing.proposedDate??null; const confirmedDate=ctx.confirmedClosingDate??closing.confirmedDate??null; const settlementPackage={assignmentId:input.assignmentId,dealId:input.dealId,propertyId:input.propertyId,closingDate:confirmedDate??proposedDate,titleStatus:title.status??null,contractExecuted,fundsReady,buyerReady,sellerReady,settlementStatementId:settlement.statementId??null,expectedAssignmentFee:settlement.assignmentFee??d.assignmentFee??null,expectedBuyerFunds:settlement.buyerFunds??null,expectedSellerPayoff:settlement.sellerPayoff??null}; const nextAction=status==='ready_for_scheduling'?'confirm_closing_date_and_finalize_settlement':status==='blocked'?'resolve_title_contract_or_closing_blocker':'collect_remaining_closing_requirements'; const idempotencyKey='wf423:'+input.leadId+':'+input.propertyId+':'+input.dealId+':'+input.assignmentId; return [{json:{...input,finalSettlementCoordination:{status,nextAction,flags,settlementPackage,requiredActions:status==='ready_for_scheduling'?['confirm_closing_date','finalize_settlement_statement','confirm_buyer_funds','confirm_seller_payoff','confirm_assignment_fee','release_final_closing_package']:['resolve_blockers','refresh_title_and_closing_readiness','recalculate_settlement'],confidenceScore:ready?95:Math.max(0,65-flags.length*8)},idempotencyKey}}];"},
-      "id":"w423e","name":"Build Final Settlement Coordination","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Final Settlement Request').first().json; const ctx=$json.context??$json; const title=ctx.title??{}; const closing=ctx.closing??{}; const settlement=ctx.settlement??{}; const d=ctx.deal??{}; const flags=[]; const titleClear=title.clearToClose===true||title.status==='clear'; const contractExecuted=ctx.contractExecutionStatus==='executed'||d.assignmentContractExecuted===true; const fundsReady=settlement.fundsReady===true; const buyerReady=ctx.buyerReady===true||ctx.buyer?.closingReady===true; const sellerReady=ctx.sellerReady===true||ctx.seller?.closingReady===true; if(!contractExecuted)flags.push('assignment_contract_not_executed'); if(!titleClear)flags.push('title_not_clear'); if(!fundsReady)flags.push('funds_not_ready'); if(!buyerReady)flags.push('buyer_closing_readiness_missing'); if(!sellerReady)flags.push('seller_closing_readiness_missing'); if(closing.status&&['failed','cancelled'].includes(String(closing.status).toLowerCase()))flags.push('closing_process_blocked'); const hardBlock=flags.includes('assignment_contract_not_executed')||flags.includes('title_not_clear')||flags.includes('closing_process_blocked'); const ready=flags.length===0; const status=hardBlock?'blocked':ready?'ready_for_scheduling':'pending_requirements'; const proposedDate=ctx.proposedClosingDate??closing.proposedDate??null; const confirmedDate=ctx.confirmedClosingDate??closing.confirmedDate??null; const settlementPackage={assignmentId:input.assignmentId,dealId:input.dealId,propertyId:input.propertyId,closingDate:confirmedDate??proposedDate,titleStatus:title.status??null,contractExecuted,fundsReady,buyerReady,sellerReady,settlementStatementId:settlement.statementId??null,expectedAssignmentFee:settlement.assignmentFee??d.assignmentFee??null,expectedBuyerFunds:settlement.buyerFunds??null,expectedSellerPayoff:settlement.sellerPayoff??null}; const nextAction=status==='ready_for_scheduling'?'confirm_closing_date_and_finalize_settlement':status==='blocked'?'resolve_title_contract_or_closing_blocker':'collect_remaining_closing_requirements'; const idempotencyKey='wf423:'+input.leadId+':'+input.propertyId+':'+input.dealId+':'+input.assignmentId; return [{json:{...input,finalSettlementCoordination:{status,nextAction,flags,settlementPackage,requiredActions:status==='ready_for_scheduling'?['confirm_closing_date','finalize_settlement_statement','confirm_buyer_funds','confirm_seller_payoff','confirm_assignment_fee','release_final_closing_package']:['resolve_blockers','refresh_title_and_closing_readiness','recalculate_settlement'],confidenceScore:ready?95:Math.max(0,65-flags.length*8)},idempotencyKey}}];"
+      },
+      "id": "w423e",
+      "name": "Build Final Settlement Coordination",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/assignments/final-settlement-coordination","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"finalSettlementCoordination","value":"={{JSON.stringify($json.finalSettlementCoordination)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w423f","name":"Persist Final Settlement Coordination","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/assignments/final-settlement-coordination",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "finalSettlementCoordination",
+              "value": "={{JSON.stringify($json.finalSettlementCoordination)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w423f",
+      "name": "Persist Final Settlement Coordination",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"title_clearance_closing_date_final_settlement_coordination"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"assignmentId","value":"={{$json.assignmentId}}"},{"name":"status","value":"={{$json.finalSettlementCoordination.status}}"},{"name":"nextAction","value":"={{$json.finalSettlementCoordination.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf423:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId+':'+$json.assignmentId}}"}]},"options":{}},
-      "id":"w423g","name":"Record Final Settlement Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "title_clearance_closing_date_final_settlement_coordination"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "assignmentId",
+              "value": "={{$json.assignmentId}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.finalSettlementCoordination.status}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.finalSettlementCoordination.nextAction}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf423:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId+':'+$json.assignmentId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w423g",
+      "name": "Record Final Settlement Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w423h","name":"Respond Final Settlement Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w423h",
+      "name": "Respond Final Settlement Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId, dealId and assignmentId are required'} }}","options":{}},
-      "id":"w423i","name":"Respond Invalid Final Settlement Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, propertyId, dealId and assignmentId are required'} }}",
+        "options": {}
+      },
+      "id": "w423i",
+      "name": "Respond Invalid Final Settlement Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Title Clearance Webhook":{"main":[[{"node":"Normalize Final Settlement Request","type":"main","index":0}]]},
-    "Normalize Final Settlement Request":{"main":[[{"node":"Validate Final Settlement Identity","type":"main","index":0}]]},
-    "Validate Final Settlement Identity":{"main":[[{"node":"Fetch Final Settlement Context","type":"main","index":0}],[{"node":"Respond Invalid Final Settlement Request","type":"main","index":0}]]},
-    "Fetch Final Settlement Context":{"main":[[{"node":"Build Final Settlement Coordination","type":"main","index":0}]]},
-    "Build Final Settlement Coordination":{"main":[[{"node":"Persist Final Settlement Coordination","type":"main","index":0}]]},
-    "Persist Final Settlement Coordination":{"main":[[{"node":"Record Final Settlement Activity","type":"main","index":0}]]},
-    "Record Final Settlement Activity":{"main":[[{"node":"Respond Final Settlement Result","type":"main","index":0}]]}
+  "connections": {
+    "Title Clearance Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Final Settlement Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Final Settlement Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Final Settlement Identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Final Settlement Identity": {
+      "main": [
+        [
+          {
+            "node": "Fetch Final Settlement Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Final Settlement Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Final Settlement Context": {
+      "main": [
+        [
+          {
+            "node": "Build Final Settlement Coordination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Settlement Coordination": {
+      "main": [
+        [
+          {
+            "node": "Persist Final Settlement Coordination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Final Settlement Coordination": {
+      "main": [
+        [
+          {
+            "node": "Record Final Settlement Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Final Settlement Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Final Settlement Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-423"},{"name":"title-clearance"},{"name":"closing-date"},{"name":"settlement"},{"name":"assignment"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-423","contractStatus":"scaffolded","idempotency":"wf423:{leadId}:{propertyId}:{dealId}:{assignmentId}","notes":"Final settlement coordination is workflow scaffolding pending verified InsulaCRM settlement schema, title/closing provider integrations, final settlement statement data, and production API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-423"
+    },
+    {
+      "name": "title-clearance"
+    },
+    {
+      "name": "closing-date"
+    },
+    {
+      "name": "settlement"
+    },
+    {
+      "name": "assignment"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-423",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf423:{leadId}:{propertyId}:{dealId}:{assignmentId}",
+    "notes": "Final settlement coordination is workflow scaffolding pending verified InsulaCRM settlement schema, title/closing provider integrations, final settlement statement data, and production API contracts."
+  },
+  "id": "dba10c32-85fb-4a81-9a0b-d96d5b36e2fa"
 }

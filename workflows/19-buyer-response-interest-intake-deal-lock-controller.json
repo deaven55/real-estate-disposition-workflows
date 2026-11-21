@@ -6,7 +6,10 @@
       "name": "Buyer Response Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-buyer-response-interest",
@@ -19,7 +22,10 @@
       "name": "Normalize Buyer Interest",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [470, 300],
+      "position": [
+        470,
+        300
+      ],
       "parameters": {
         "jsCode": "var b=$input.first().json.body||$input.first().json;\nvar raw=String(b.intent||b.responseType||b.status||'').toLowerCase().trim();\nvar intent=['interested','offer','lock_request','schedule_call','declined','dnc','expired'].indexOf(raw)>=0?raw:'other';\nvar amount=Number(b.offerAmount||b.price||0);\nreturn [{json:{...b,intent:intent,offerAmount:amount,receivedAt:new Date().toISOString()}}];"
       }
@@ -29,7 +35,10 @@
       "name": "Fetch Buyer Deal Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 300],
+      "position": [
+        700,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/response-context",
@@ -43,7 +52,10 @@
       "name": "Enforce Buyer Response Guardrails",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [930, 300],
+      "position": [
+        930,
+        300
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar state=String(d.dealStatus||'').toLowerCase();\nvar protectedState=['closed','cancelled','disputed','contracted'].indexOf(state)>=0;\nvar buyerBlocked=d.buyerActive===false||d.buyerSuppressed===true||d.dnc===true;\nvar hasIds=!!d.dealId&&!!d.assignmentId&&!!d.buyerId;\nvar offerValid=d.intent!=='offer'||(Number(d.offerAmount)>0&&(!d.protectedMAO||Number(d.offerAmount)<=Number(d.protectedMAO)));\nvar blocked=!hasIds||protectedState||buyerBlocked||!offerValid;\nvar reason=!hasIds?'missing_identity':protectedState?'deal_protected':buyerBlocked?'buyer_blocked':!offerValid?'offer_outside_guardrails':null;\nreturn [{json:{...d,blocked:blocked,blockedReason:reason}}];"
       }
@@ -53,18 +65,42 @@
       "name": "Route Buyer Intent",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [1160, 300],
+      "position": [
+        1160,
+        300
+      ],
       "parameters": {
         "dataType": "string",
         "value1": "={{ $json.intent }}",
         "rules": [
-          {"operation":"equal","value2":"interested"},
-          {"operation":"equal","value2":"offer"},
-          {"operation":"equal","value2":"lock_request"},
-          {"operation":"equal","value2":"schedule_call"},
-          {"operation":"equal","value2":"declined"},
-          {"operation":"equal","value2":"dnc"},
-          {"operation":"equal","value2":"expired"}
+          {
+            "operation": "equal",
+            "value2": "interested"
+          },
+          {
+            "operation": "equal",
+            "value2": "offer"
+          },
+          {
+            "operation": "equal",
+            "value2": "lock_request"
+          },
+          {
+            "operation": "equal",
+            "value2": "schedule_call"
+          },
+          {
+            "operation": "equal",
+            "value2": "declined"
+          },
+          {
+            "operation": "equal",
+            "value2": "dnc"
+          },
+          {
+            "operation": "equal",
+            "value2": "expired"
+          }
         ]
       }
     },
@@ -73,13 +109,16 @@
       "name": "Persist Buyer Interest / Lock Request",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 80],
+      "position": [
+        1390,
+        80
+      ],
       "parameters": {
-        "method":"POST",
-        "url":"https://YOUR_INSULACRM_API/buyers/interest-lock",
-        "sendBody":true,
-        "specifyBody":"json",
-        "jsonBody":"={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,intent:$json.intent,offerAmount:$json.offerAmount||null,idempotencyKey:'wf381:interest:'+String($json.dealId)+':'+String($json.assignmentId)+':'+String($json.buyerId)+':'+String($json.intent)}) }}"
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/buyers/interest-lock",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,intent:$json.intent,offerAmount:$json.offerAmount||null,idempotencyKey:'wf381:interest:'+String($json.dealId)+':'+String($json.assignmentId)+':'+String($json.buyerId)+':'+String($json.intent)}) }}"
       }
     },
     {
@@ -87,13 +126,16 @@
       "name": "Persist Buyer Decline",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 400],
+      "position": [
+        1390,
+        400
+      ],
       "parameters": {
-        "method":"POST",
-        "url":"https://YOUR_INSULACRM_API/buyers/decline",
-        "sendBody":true,
-        "specifyBody":"json",
-        "jsonBody":"={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,intent:$json.intent,idempotencyKey:'wf381:decline:'+String($json.dealId)+':'+String($json.assignmentId)+':'+String($json.buyerId)}) }}"
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/buyers/decline",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,intent:$json.intent,idempotencyKey:'wf381:decline:'+String($json.dealId)+':'+String($json.assignmentId)+':'+String($json.buyerId)}) }}"
       }
     },
     {
@@ -101,13 +143,16 @@
       "name": "Persist Buyer DNC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 520],
+      "position": [
+        1390,
+        520
+      ],
       "parameters": {
-        "method":"POST",
-        "url":"https://YOUR_INSULACRM_API/buyers/dnc",
-        "sendBody":true,
-        "specifyBody":"json",
-        "jsonBody":"={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,intent:'dnc',idempotencyKey:'wf381:dnc:'+String($json.buyerId)}) }}"
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/buyers/dnc",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,intent:'dnc',idempotencyKey:'wf381:dnc:'+String($json.buyerId)}) }}"
       }
     },
     {
@@ -115,13 +160,16 @@
       "name": "Persist Buyer Other Response",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 640],
+      "position": [
+        1390,
+        640
+      ],
       "parameters": {
-        "method":"POST",
-        "url":"https://YOUR_INSULACRM_API/buyers/response",
-        "sendBody":true,
-        "specifyBody":"json",
-        "jsonBody":"={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,intent:$json.intent,offerAmount:$json.offerAmount||null,idempotencyKey:'wf381:response:'+String($json.dealId)+':'+String($json.buyerId)+':'+String($json.intent)}) }}"
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/buyers/response",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,intent:$json.intent,offerAmount:$json.offerAmount||null,idempotencyKey:'wf381:response:'+String($json.dealId)+':'+String($json.buyerId)+':'+String($json.intent)}) }}"
       }
     },
     {
@@ -129,11 +177,14 @@
       "name": "Respond Buyer Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1710, 300],
+      "position": [
+        1710,
+        300
+      ],
       "parameters": {
-        "respondWith":"json",
-        "responseCode":200,
-        "responseBody":"={{ JSON.stringify({success:true,workflow:'WF-381',intent:$json.intent,dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,blocked:$json.blocked||false}) }}"
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({success:true,workflow:'WF-381',intent:$json.intent,dealId:$json.dealId,assignmentId:$json.assignmentId,buyerId:$json.buyerId,blocked:$json.blocked||false}) }}"
       }
     },
     {
@@ -141,41 +192,169 @@
       "name": "Respond Buyer Response Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1390, 800],
+      "position": [
+        1390,
+        800
+      ],
       "parameters": {
-        "respondWith":"json",
-        "responseCode":200,
-        "responseBody":"={{ JSON.stringify({success:true,workflow:'WF-381',processed:false,reason:$json.blockedReason||'buyer_response_blocked',dealId:$json.dealId||null,buyerId:$json.buyerId||null}) }}"
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({success:true,workflow:'WF-381',processed:false,reason:$json.blockedReason||'buyer_response_blocked',dealId:$json.dealId||null,buyerId:$json.buyerId||null}) }}"
       }
     }
   ],
   "connections": {
-    "Buyer Response Webhook":{"main":[[{"node":"Normalize Buyer Interest","type":"main","index":0}]]},
-    "Normalize Buyer Interest":{"main":[[{"node":"Fetch Buyer Deal Context","type":"main","index":0}]]},
-    "Fetch Buyer Deal Context":{"main":[[{"node":"Enforce Buyer Response Guardrails","type":"main","index":0}]]},
-    "Enforce Buyer Response Guardrails":{"main":[[{"node":"Route Buyer Intent","type":"main","index":0}]]},
-    "Route Buyer Intent":{"main":[
-      [{"node":"Persist Buyer Interest / Lock Request","type":"main","index":0}],
-      [{"node":"Persist Buyer Interest / Lock Request","type":"main","index":0}],
-      [{"node":"Persist Buyer Interest / Lock Request","type":"main","index":0}],
-      [{"node":"Persist Buyer Interest / Lock Request","type":"main","index":0}],
-      [{"node":"Persist Buyer Decline","type":"main","index":0}],
-      [{"node":"Persist Buyer DNC","type":"main","index":0}],
-      [{"node":"Persist Buyer Other Response","type":"main","index":0}]
-    ]},
-    "Persist Buyer Interest / Lock Request":{"main":[[{"node":"Respond Buyer Response","type":"main","index":0}]]},
-    "Persist Buyer Decline":{"main":[[{"node":"Respond Buyer Response","type":"main","index":0}]]},
-    "Persist Buyer DNC":{"main":[[{"node":"Respond Buyer Response","type":"main","index":0}]]},
-    "Persist Buyer Other Response":{"main":[[{"node":"Respond Buyer Response","type":"main","index":0}]]}
+    "Buyer Response Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Buyer Interest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Buyer Interest": {
+      "main": [
+        [
+          {
+            "node": "Fetch Buyer Deal Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Buyer Deal Context": {
+      "main": [
+        [
+          {
+            "node": "Enforce Buyer Response Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Buyer Response Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Route Buyer Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Buyer Intent": {
+      "main": [
+        [
+          {
+            "node": "Persist Buyer Interest / Lock Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Buyer Interest / Lock Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Buyer Interest / Lock Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Buyer Interest / Lock Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Buyer Decline",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Buyer DNC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Buyer Other Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Buyer Interest / Lock Request": {
+      "main": [
+        [
+          {
+            "node": "Respond Buyer Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Buyer Decline": {
+      "main": [
+        [
+          {
+            "node": "Respond Buyer Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Buyer DNC": {
+      "main": [
+        [
+          {
+            "node": "Respond Buyer Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Buyer Other Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Buyer Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{
-    "executionOrder":"v1",
-    "saveDataErrorExecution":"all",
-    "saveDataSuccessExecution":"all",
-    "saveManualExecutions":true,
-    "saveExecutionProgress":true,
-    "callerPolicy":"workflowsFromSameOwner",
-    "availableInMCP":false
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "active":false
+  "active": false,
+  "id": "387983a7-c8b0-4384-9fcc-8508b374dcf3"
 }

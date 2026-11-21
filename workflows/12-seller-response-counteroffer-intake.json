@@ -6,7 +6,10 @@
       "name": "Seller Response Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-seller-response-intake",
@@ -20,7 +23,10 @@
       "name": "Normalize Seller Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 300],
+      "position": [
+        480,
+        300
+      ],
       "parameters": {
         "jsCode": "var b = $input.first().json.body || $input.first().json;\nvar text = String(b.message || b.responseText || '').trim();\nvar lower = text.toLowerCase();\nvar intent = 'other';\nif (/\\b(no|nope|pass|decline|reject|not interested)\\b/.test(lower)) intent = 'reject';\nelse if (/\\b(yes|accept|accepted|deal|agreed|sounds good)\\b/.test(lower)) intent = 'accept';\nelse if (/\\b(counter|counteroffer|counter offer|i can do|would take|need)\\b/.test(lower)) intent = 'counteroffer';\nelse if (/\\b(call|talk|phone)\\b/.test(lower)) intent = 'call_request';\nelse if (/\\b(stop|unsubscribe|remove|do not contact|dnc)\\b/.test(lower)) intent = 'dnc';\nreturn [{ json: { ...b, normalizedText: text, intent: intent, receivedAt: Date.now(), source: b.source || 'seller' } }];"
       }
@@ -30,7 +36,10 @@
       "name": "Fetch Deal Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [720, 300],
+      "position": [
+        720,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/deals/get",
@@ -44,7 +53,10 @@
       "name": "Response Safety Guard",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 300],
+      "position": [
+        960,
+        300
+      ],
       "parameters": {
         "jsCode": "var r = $input.first().json.data || $input.first().json;\nvar incoming = $('Normalize Seller Response').first().json;\nvar dnc = r.dnc === true || r.sellerStatus === 'dnc';\nvar protectedState = ['closed','cancelled','human_review','disputed'].indexOf(String(r.dealStatus || '').toLowerCase()) !== -1;\nvar duplicateKey = 'wf374:' + String(incoming.decisionId || '') + ':' + String(incoming.messageId || incoming.receivedAt);\nreturn [{ json: { ...r, ...incoming, duplicateKey: duplicateKey, blocked: protectedState && incoming.intent !== 'dnc', blockedReason: protectedState ? 'deal_state_protected' : null, dnc: dnc } }];"
       }
@@ -54,14 +66,101 @@
       "name": "Route Seller Intent",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [1200, 300],
+      "position": [
+        1200,
+        300
+      ],
       "parameters": {
         "rules": {
           "values": [
-            { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "counteroffer", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "counteroffer" },
-            { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "accept", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "accept" },
-            { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "reject", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "reject" },
-            { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "dnc", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "dnc" }
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "counteroffer",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "counteroffer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "accept",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "accept"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reject"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "dnc",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "dnc"
+            }
           ]
         },
         "fallbackOutput": "other"
@@ -72,7 +171,10 @@
       "name": "Create Counteroffer Event",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 150],
+      "position": [
+        1440,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/activities",
@@ -86,7 +188,10 @@
       "name": "Create Acceptance Event",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 300],
+      "position": [
+        1440,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/activities",
@@ -100,7 +205,10 @@
       "name": "Create Rejection Event",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 450],
+      "position": [
+        1440,
+        450
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/activities",
@@ -114,7 +222,10 @@
       "name": "Create DNC Event",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 600],
+      "position": [
+        1440,
+        600
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/activities",
@@ -128,7 +239,10 @@
       "name": "Respond Intake",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1690, 300],
+      "position": [
+        1690,
+        300
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -137,23 +251,133 @@
     }
   ],
   "connections": {
-    "Seller Response Webhook": { "main": [[{ "node": "Normalize Seller Response", "type": "main", "index": 0 }]] },
-    "Normalize Seller Response": { "main": [[{ "node": "Fetch Deal Context", "type": "main", "index": 0 }]] },
-    "Fetch Deal Context": { "main": [[{ "node": "Response Safety Guard", "type": "main", "index": 0 }]] },
-    "Response Safety Guard": { "main": [[{ "node": "Route Seller Intent", "type": "main", "index": 0 }]] },
-    "Route Seller Intent": {
+    "Seller Response Webhook": {
       "main": [
-        [{ "node": "Create Counteroffer Event", "type": "main", "index": 0 }],
-        [{ "node": "Create Acceptance Event", "type": "main", "index": 0 }],
-        [{ "node": "Create Rejection Event", "type": "main", "index": 0 }],
-        [{ "node": "Create DNC Event", "type": "main", "index": 0 }],
-        [{ "node": "Respond Intake", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Normalize Seller Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Create Counteroffer Event": { "main": [[{ "node": "Respond Intake", "type": "main", "index": 0 }]] },
-    "Create Acceptance Event": { "main": [[{ "node": "Respond Intake", "type": "main", "index": 0 }]] },
-    "Create Rejection Event": { "main": [[{ "node": "Respond Intake", "type": "main", "index": 0 }]] },
-    "Create DNC Event": { "main": [[{ "node": "Respond Intake", "type": "main", "index": 0 }]] }
+    "Normalize Seller Response": {
+      "main": [
+        [
+          {
+            "node": "Fetch Deal Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Deal Context": {
+      "main": [
+        [
+          {
+            "node": "Response Safety Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Safety Guard": {
+      "main": [
+        [
+          {
+            "node": "Route Seller Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Seller Intent": {
+      "main": [
+        [
+          {
+            "node": "Create Counteroffer Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Acceptance Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Rejection Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create DNC Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Counteroffer Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Acceptance Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Rejection Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create DNC Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -164,5 +388,6 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "active": false
+  "active": false,
+  "id": "ab357e65-9590-43e3-9379-89a5119f3ca3"
 }

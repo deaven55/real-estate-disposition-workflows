@@ -340,5 +340,6 @@
     "workflowId": "WF-401",
     "contractStatus": "scaffolded",
     "idempotency": "wf401:{experimentId}:{period}"
-  }
+  },
+  "id": "7a98f3d8-f8cc-4561-9c3f-e43ef296dc4c"
 }

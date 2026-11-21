@@ -2,57 +2,402 @@
   "name": "WF-450 — Portfolio Performance Intelligence → Source ROI, Deal Profitability & Growth Action Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"portfolio-performance-source-roi-profitability-growth-action","responseMode":"lastNode","options":{}},
-      "id":"w450a","name":"Portfolio Performance Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "portfolio-performance-source-roi-profitability-growth-action",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w450a",
+      "name": "Portfolio Performance Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const period=String(b.period??'').trim(); const asOfDate=String(b.asOfDate??new Date().toISOString().slice(0,10)).trim(); return [{json:{...b,portfolioId,period,asOfDate,receivedAt:new Date().toISOString()}}];"},
-      "id":"w450b","name":"Normalize Portfolio Performance Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const period=String(b.period??'').trim(); const asOfDate=String(b.asOfDate??new Date().toISOString().slice(0,10)).trim(); return [{json:{...b,portfolioId,period,asOfDate,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w450b",
+      "name": "Normalize Portfolio Performance Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.period}}","operation":"notEmpty"},{"value1":"={{$json.asOfDate}}","operation":"notEmpty"}]}},
-      "id":"w450c","name":"Validate Portfolio Performance Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.asOfDate}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w450c",
+      "name": "Validate Portfolio Performance Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-performance-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"}]},"options":{}},
-      "id":"w450d","name":"Fetch Portfolio Performance Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/portfolio-performance-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w450d",
+      "name": "Fetch Portfolio Performance Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Portfolio Performance Request').first().json; const ctx=$json.context??$json; const deals=Array.isArray(ctx.closedDeals)?ctx.closedDeals:[]; const sources=Array.isArray(ctx.sourcePerformance)?ctx.sourcePerformance:[]; const flags=[]; if(!deals.length)flags.push('no_closed_deals'); const n=v=>Number.isFinite(Number(v))?Number(v):0; const totalGross=deals.reduce((s,d)=>s+n(d.grossRevenue??d.assignmentFee),0); const totalNet=deals.reduce((s,d)=>s+n(d.netProfit),0); const totalSpend=deals.reduce((s,d)=>s+n(d.sourceSpend??d.spend),0); const profitable=deals.filter(d=>n(d.netProfit)>0).length; const lossDeals=deals.filter(d=>n(d.netProfit)<0).length; const avgProfit=deals.length?Math.round(totalNet/deals.length*100)/100:0; const portfolioROI=totalSpend>0?Math.round(totalNet/totalSpend*10000)/100:0; const dealRankings=deals.map(d=>({dealId:d.dealId,netProfit:n(d.netProfit),grossRevenue:n(d.grossRevenue??d.assignmentFee),source:String(d.source??'unknown'),channel:String(d.channel??'unknown'),campaign:String(d.campaign??'unknown')})).sort((a,b)=>b.netProfit-a.netProfit); const topDeals=dealRankings.slice(0,5); const sourceIntelligence=sources.map(s=>{const spend=n(s.spend??s.sourceSpend); const net=n(s.netProfit); const closed=n(s.closedDeals); const leads=n(s.leads); const roi=spend>0?Math.round(net/spend*10000)/100:null; const profitPerLead=leads>0?Math.round(net/leads*100)/100:null; const profitPerClosed=closed>0?Math.round(net/closed*100)/100:null; const closeRate=leads>0?Math.round(closed/leads*10000)/100:null; let action='collect_more_data'; if(spend>0&&roi>=100&&closeRate!==null&&closeRate>=2&&net>0)action='scale_or_expand'; else if(spend>0&&roi>=0&&net>=0)action='maintain_and_optimize'; else if(spend>0&&net<0)action='reduce_or_pause'; return {...s,roi,profitPerLead,profitPerClosed,closeRate,recommendedAction:action};}).sort((a,b)=>n(b.netProfit)-n(a.netProfit)); const growthActions=[]; if(totalNet>0)growthActions.push('protect_profitable_sources_and_reinvest_based_on_verified_roi'); if(sourceIntelligence.some(s=>s.recommendedAction==='scale_or_expand'))growthActions.push('increase_budget_for_high_confidence_profitable_sources'); if(sourceIntelligence.some(s=>s.recommendedAction==='reduce_or_pause'))growthActions.push('reduce_or_pause_negative_profit_sources'); if(avgProfit>0)growthActions.push('improve_deal_volume_without_lowering_underwriting_standards'); if(!growthActions.length)growthActions.push('collect_more_performance_data_before_scaling'); const performanceState=deals.length===0?'insufficient_data':totalNet>0?'profitable_portfolio':'profitability_recovery_needed'; const decision=performanceState==='profitable_portfolio'?'optimize_and_scale_selectively':performanceState==='profitability_recovery_needed'?'protect_cash_and_reprice_acquisition':'collect_more_data'; const idempotencyKey='wf450:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,portfolioPerformanceIntelligence:{status:performanceState,decision,closedDealCount:deals.length,totalGrossRevenue:Math.round(totalGross*100)/100,totalNetProfit:Math.round(totalNet*100)/100,totalSourceSpend:Math.round(totalSpend*100)/100,profitableDeals:profitable,lossDeals,averageNetProfit:avgProfit,portfolioROI,topProfitableDeals:topDeals,sourceIntelligence,growthActions,flags,requiresHumanReview:flags.length>0,confidenceScore:deals.length>=10?95:deals.length>=3?80:45},idempotencyKey}}];"},
-      "id":"w450e","name":"Calculate Portfolio ROI Profitability & Growth Intelligence","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Portfolio Performance Request').first().json; const ctx=$json.context??$json; const deals=Array.isArray(ctx.closedDeals)?ctx.closedDeals:[]; const sources=Array.isArray(ctx.sourcePerformance)?ctx.sourcePerformance:[]; const flags=[]; if(!deals.length)flags.push('no_closed_deals'); const n=v=>Number.isFinite(Number(v))?Number(v):0; const totalGross=deals.reduce((s,d)=>s+n(d.grossRevenue??d.assignmentFee),0); const totalNet=deals.reduce((s,d)=>s+n(d.netProfit),0); const totalSpend=deals.reduce((s,d)=>s+n(d.sourceSpend??d.spend),0); const profitable=deals.filter(d=>n(d.netProfit)>0).length; const lossDeals=deals.filter(d=>n(d.netProfit)<0).length; const avgProfit=deals.length?Math.round(totalNet/deals.length*100)/100:0; const portfolioROI=totalSpend>0?Math.round(totalNet/totalSpend*10000)/100:0; const dealRankings=deals.map(d=>({dealId:d.dealId,netProfit:n(d.netProfit),grossRevenue:n(d.grossRevenue??d.assignmentFee),source:String(d.source??'unknown'),channel:String(d.channel??'unknown'),campaign:String(d.campaign??'unknown')})).sort((a,b)=>b.netProfit-a.netProfit); const topDeals=dealRankings.slice(0,5); const sourceIntelligence=sources.map(s=>{const spend=n(s.spend??s.sourceSpend); const net=n(s.netProfit); const closed=n(s.closedDeals); const leads=n(s.leads); const roi=spend>0?Math.round(net/spend*10000)/100:null; const profitPerLead=leads>0?Math.round(net/leads*100)/100:null; const profitPerClosed=closed>0?Math.round(net/closed*100)/100:null; const closeRate=leads>0?Math.round(closed/leads*10000)/100:null; let action='collect_more_data'; if(spend>0&&roi>=100&&closeRate!==null&&closeRate>=2&&net>0)action='scale_or_expand'; else if(spend>0&&roi>=0&&net>=0)action='maintain_and_optimize'; else if(spend>0&&net<0)action='reduce_or_pause'; return {...s,roi,profitPerLead,profitPerClosed,closeRate,recommendedAction:action};}).sort((a,b)=>n(b.netProfit)-n(a.netProfit)); const growthActions=[]; if(totalNet>0)growthActions.push('protect_profitable_sources_and_reinvest_based_on_verified_roi'); if(sourceIntelligence.some(s=>s.recommendedAction==='scale_or_expand'))growthActions.push('increase_budget_for_high_confidence_profitable_sources'); if(sourceIntelligence.some(s=>s.recommendedAction==='reduce_or_pause'))growthActions.push('reduce_or_pause_negative_profit_sources'); if(avgProfit>0)growthActions.push('improve_deal_volume_without_lowering_underwriting_standards'); if(!growthActions.length)growthActions.push('collect_more_performance_data_before_scaling'); const performanceState=deals.length===0?'insufficient_data':totalNet>0?'profitable_portfolio':'profitability_recovery_needed'; const decision=performanceState==='profitable_portfolio'?'optimize_and_scale_selectively':performanceState==='profitability_recovery_needed'?'protect_cash_and_reprice_acquisition':'collect_more_data'; const idempotencyKey='wf450:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,portfolioPerformanceIntelligence:{status:performanceState,decision,closedDealCount:deals.length,totalGrossRevenue:Math.round(totalGross*100)/100,totalNetProfit:Math.round(totalNet*100)/100,totalSourceSpend:Math.round(totalSpend*100)/100,profitableDeals:profitable,lossDeals,averageNetProfit:avgProfit,portfolioROI,topProfitableDeals:topDeals,sourceIntelligence,growthActions,flags,requiresHumanReview:flags.length>0,confidenceScore:deals.length>=10?95:deals.length>=3?80:45},idempotencyKey}}];"
+      },
+      "id": "w450e",
+      "name": "Calculate Portfolio ROI Profitability & Growth Intelligence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-performance-intelligence","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"},{"name":"portfolioPerformanceIntelligence","value":"={{JSON.stringify($json.portfolioPerformanceIntelligence)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w450f","name":"Persist Portfolio Performance Intelligence","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/portfolio-performance-intelligence",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            },
+            {
+              "name": "portfolioPerformanceIntelligence",
+              "value": "={{JSON.stringify($json.portfolioPerformanceIntelligence)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w450f",
+      "name": "Persist Portfolio Performance Intelligence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/growth-action-recommendations","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"decision","value":"={{$json.portfolioPerformanceIntelligence.decision}}"},{"name":"growthActions","value":"={{JSON.stringify($json.portfolioPerformanceIntelligence.growthActions)}}"},{"name":"idempotencyKey","value":"={{'wf450:growth:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w450g","name":"Persist Growth Action Recommendations","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/growth-action-recommendations",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.portfolioPerformanceIntelligence.decision}}"
+            },
+            {
+              "name": "growthActions",
+              "value": "={{JSON.stringify($json.portfolioPerformanceIntelligence.growthActions)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf450:growth:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w450g",
+      "name": "Persist Growth Action Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"portfolio_performance_source_roi_profitability_growth_action"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"decision","value":"={{$json.portfolioPerformanceIntelligence.decision}}"},{"name":"performanceState","value":"={{$json.portfolioPerformanceIntelligence.status}}"},{"name":"totalNetProfit","value":"={{$json.portfolioPerformanceIntelligence.totalNetProfit}}"},{"name":"portfolioROI","value":"={{$json.portfolioPerformanceIntelligence.portfolioROI}}"},{"name":"idempotencyKey","value":"={{'wf450:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w450h","name":"Record Portfolio Performance Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "portfolio_performance_source_roi_profitability_growth_action"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.portfolioPerformanceIntelligence.decision}}"
+            },
+            {
+              "name": "performanceState",
+              "value": "={{$json.portfolioPerformanceIntelligence.status}}"
+            },
+            {
+              "name": "totalNetProfit",
+              "value": "={{$json.portfolioPerformanceIntelligence.totalNetProfit}}"
+            },
+            {
+              "name": "portfolioROI",
+              "value": "={{$json.portfolioPerformanceIntelligence.portfolioROI}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf450:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w450h",
+      "name": "Record Portfolio Performance Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w450i","name":"Respond Portfolio Performance Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w450i",
+      "name": "Respond Portfolio Performance Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId, period and asOfDate are required'} }}","options":{}},
-      "id":"w450j","name":"Respond Invalid Portfolio Performance Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'portfolioId, period and asOfDate are required'} }}",
+        "options": {}
+      },
+      "id": "w450j",
+      "name": "Respond Invalid Portfolio Performance Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Portfolio Performance Webhook":{"main":[[{"node":"Normalize Portfolio Performance Request","type":"main","index":0}]]},
-    "Normalize Portfolio Performance Request":{"main":[[{"node":"Validate Portfolio Performance Request","type":"main","index":0}]]},
-    "Validate Portfolio Performance Request":{"main":[[{"node":"Fetch Portfolio Performance Context","type":"main","index":0}],[{"node":"Respond Invalid Portfolio Performance Request","type":"main","index":0}]]},
-    "Fetch Portfolio Performance Context":{"main":[[{"node":"Calculate Portfolio ROI Profitability & Growth Intelligence","type":"main","index":0}]]},
-    "Calculate Portfolio ROI Profitability & Growth Intelligence":{"main":[[{"node":"Persist Portfolio Performance Intelligence","type":"main","index":0}]]},
-    "Persist Portfolio Performance Intelligence":{"main":[[{"node":"Persist Growth Action Recommendations","type":"main","index":0}]]},
-    "Persist Growth Action Recommendations":{"main":[[{"node":"Record Portfolio Performance Activity","type":"main","index":0}]]},
-    "Record Portfolio Performance Activity":{"main":[[{"node":"Respond Portfolio Performance Result","type":"main","index":0}]]}
+  "connections": {
+    "Portfolio Performance Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Portfolio Performance Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Portfolio Performance Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Portfolio Performance Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Portfolio Performance Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Portfolio Performance Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Portfolio Performance Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Portfolio Performance Context": {
+      "main": [
+        [
+          {
+            "node": "Calculate Portfolio ROI Profitability & Growth Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Portfolio ROI Profitability & Growth Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Persist Portfolio Performance Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Portfolio Performance Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Persist Growth Action Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Growth Action Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Record Portfolio Performance Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Portfolio Performance Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Portfolio Performance Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-450"},{"name":"portfolio-performance"},{"name":"source-roi"},{"name":"profitability"},{"name":"growth-actions"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-450","contractStatus":"scaffolded","idempotency":"wf450:{portfolioId}:{period}:{asOfDate}","notes":"Aggregates verified closed-deal performance, source ROI and profitability and produces selective growth actions. Production use requires canonical closed-deal accounting definitions, validated source-spend attribution, portfolio analytics schema and production InsulaCRM API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-450"
+    },
+    {
+      "name": "portfolio-performance"
+    },
+    {
+      "name": "source-roi"
+    },
+    {
+      "name": "profitability"
+    },
+    {
+      "name": "growth-actions"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-450",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf450:{portfolioId}:{period}:{asOfDate}",
+    "notes": "Aggregates verified closed-deal performance, source ROI and profitability and produces selective growth actions. Production use requires canonical closed-deal accounting definitions, validated source-spend attribution, portfolio analytics schema and production InsulaCRM API contracts."
+  },
+  "id": "3b14f569-00a9-4560-9495-6a0f70bc7e25"
 }

@@ -12,7 +12,10 @@
       "name": "Deal Performance Analytics Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Performance Analytics Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Fetch Deal Performance Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -58,7 +67,10 @@
       "name": "Calculate Deal ROI & Source Attribution",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -87,7 +99,10 @@
       "name": "IF ROI Analytics Eligible",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -108,30 +123,80 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"dealId","value":"={{$json.dealId}}"},
-            {"name":"sourceName","value":"={{$json.sourceName}}"},
-            {"name":"campaign","value":"={{$json.campaign}}"},
-            {"name":"dispositionChannel","value":"={{$json.dispositionChannel}}"},
-            {"name":"grossRevenue","value":"={{$json.grossRevenue}}"},
-            {"name":"totalCosts","value":"={{$json.totalCosts}}"},
-            {"name":"netProfit","value":"={{$json.netProfit}}"},
-            {"name":"acquisitionCost","value":"={{$json.acquisitionCost}}"},
-            {"name":"sourceSpend","value":"={{$json.sourceSpend}}"},
-            {"name":"totalInvestment","value":"={{$json.totalInvestment}}"},
-            {"name":"roi","value":"={{$json.roi}}"},
-            {"name":"profitMultiple","value":"={{$json.profitMultiple}}"},
-            {"name":"daysToClose","value":"={{$json.daysToClose}}"},
-            {"name":"leadToContractDays","value":"={{$json.leadToContractDays}}"},
-            {"name":"contractToCloseDays","value":"={{$json.contractToCloseDays}}"}
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "sourceName",
+              "value": "={{$json.sourceName}}"
+            },
+            {
+              "name": "campaign",
+              "value": "={{$json.campaign}}"
+            },
+            {
+              "name": "dispositionChannel",
+              "value": "={{$json.dispositionChannel}}"
+            },
+            {
+              "name": "grossRevenue",
+              "value": "={{$json.grossRevenue}}"
+            },
+            {
+              "name": "totalCosts",
+              "value": "={{$json.totalCosts}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            },
+            {
+              "name": "acquisitionCost",
+              "value": "={{$json.acquisitionCost}}"
+            },
+            {
+              "name": "sourceSpend",
+              "value": "={{$json.sourceSpend}}"
+            },
+            {
+              "name": "totalInvestment",
+              "value": "={{$json.totalInvestment}}"
+            },
+            {
+              "name": "roi",
+              "value": "={{$json.roi}}"
+            },
+            {
+              "name": "profitMultiple",
+              "value": "={{$json.profitMultiple}}"
+            },
+            {
+              "name": "daysToClose",
+              "value": "={{$json.daysToClose}}"
+            },
+            {
+              "name": "leadToContractDays",
+              "value": "={{$json.leadToContractDays}}"
+            },
+            {
+              "name": "contractToCloseDays",
+              "value": "={{$json.contractToCloseDays}}"
+            }
           ]
         },
-        "options": {"timeout": 30000}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "wf395-roi",
       "name": "Persist Deal ROI & Source Attribution",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, -100]
+      "position": [
+        1100,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -140,30 +205,62 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name":"Authorization","value":"Bearer {{$env.INSULACRM_API_KEY}}"},
-            {"name":"Idempotency-Key","value":"={{$json.idempotencyKey}}:source"}
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:source"
+            }
           ]
         },
         "sendBody": true,
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"dealId","value":"={{$json.dealId}}"},
-            {"name":"sourceName","value":"={{$json.sourceName}}"},
-            {"name":"campaign","value":"={{$json.campaign}}"},
-            {"name":"sourceSpend","value":"={{$json.sourceSpend}}"},
-            {"name":"netProfit","value":"={{$json.netProfit}}"},
-            {"name":"roi","value":"={{$json.roi}}"},
-            {"name":"daysToClose","value":"={{$json.daysToClose}}"}
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "sourceName",
+              "value": "={{$json.sourceName}}"
+            },
+            {
+              "name": "campaign",
+              "value": "={{$json.campaign}}"
+            },
+            {
+              "name": "sourceSpend",
+              "value": "={{$json.sourceSpend}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            },
+            {
+              "name": "roi",
+              "value": "={{$json.roi}}"
+            },
+            {
+              "name": "daysToClose",
+              "value": "={{$json.daysToClose}}"
+            }
           ]
         },
-        "options": {"timeout": 30000}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "wf395-source",
       "name": "Persist Source Performance",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, -100]
+      "position": [
+        1320,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -172,63 +269,186 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name":"Authorization","value":"Bearer {{$env.INSULACRM_API_KEY}}"},
-            {"name":"Idempotency-Key","value":"={{$json.idempotencyKey}}:activity"}
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.INSULACRM_API_KEY}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}:activity"
+            }
           ]
         },
         "sendBody": true,
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"dealId","value":"={{$json.dealId}}"},
-            {"name":"activityType","value":"deal_roi_reconciled"},
-            {"name":"sourceName","value":"={{$json.sourceName}}"},
-            {"name":"netProfit","value":"={{$json.netProfit}}"},
-            {"name":"roi","value":"={{$json.roi}}"}
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "activityType",
+              "value": "deal_roi_reconciled"
+            },
+            {
+              "name": "sourceName",
+              "value": "={{$json.sourceName}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.netProfit}}"
+            },
+            {
+              "name": "roi",
+              "value": "={{$json.roi}}"
+            }
           ]
         },
-        "options": {"timeout": 30000}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "wf395-activity",
       "name": "Persist Performance Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, -100]
+      "position": [
+        1540,
+        -100
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { success: true, workflow: 'WF-395', status: 'roi_reconciled', dealId: $json.dealId, source: $json.sourceName, netProfit: $json.netProfit, roi: $json.roi, message: 'Deal performance, source attribution, and ROI analytics were persisted.' } }}",
-        "options": {"responseCode": 200}
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "wf395-response",
       "name": "Respond ROI Reconciled",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1760, -100]
+      "position": [
+        1760,
+        -100
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { success: false, workflow: 'WF-395', status: 'blocked', dealId: $json.dealId, issues: $json.issues, message: 'ROI analytics blocked because the deal was not confirmed closed or financial attribution data was invalid.' } }}",
-        "options": {"responseCode": 409}
+        "options": {
+          "responseCode": 409
+        }
       },
       "id": "wf395-response-blocked",
       "name": "Respond ROI Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     }
   ],
   "connections": {
-    "Deal Performance Analytics Webhook": {"main":[[{"node":"Normalize Performance Analytics Request","type":"main","index":0}]]},
-    "Normalize Performance Analytics Request": {"main":[[{"node":"Fetch Deal Performance Context","type":"main","index":0}]]},
-    "Fetch Deal Performance Context": {"main":[[{"node":"Calculate Deal ROI & Source Attribution","type":"main","index":0}]]},
-    "Calculate Deal ROI & Source Attribution": {"main":[[{"node":"IF ROI Analytics Eligible","type":"main","index":0}]]},
-    "IF ROI Analytics Eligible": {"main":[[{"node":"Persist Deal ROI & Source Attribution","type":"main","index":0}],[{"node":"Respond ROI Blocked","type":"main","index":0}]]},
-    "Persist Deal ROI & Source Attribution": {"main":[[{"node":"Persist Source Performance","type":"main","index":0}]]},
-    "Persist Source Performance": {"main":[[{"node":"Persist Performance Activity","type":"main","index":0}]]},
-    "Persist Performance Activity": {"main":[[{"node":"Respond ROI Reconciled","type":"main","index":0}]]}
+    "Deal Performance Analytics Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Performance Analytics Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Performance Analytics Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Deal Performance Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Deal Performance Context": {
+      "main": [
+        [
+          {
+            "node": "Calculate Deal ROI & Source Attribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Deal ROI & Source Attribution": {
+      "main": [
+        [
+          {
+            "node": "IF ROI Analytics Eligible",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF ROI Analytics Eligible": {
+      "main": [
+        [
+          {
+            "node": "Persist Deal ROI & Source Attribution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond ROI Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Deal ROI & Source Attribution": {
+      "main": [
+        [
+          {
+            "node": "Persist Source Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Source Performance": {
+      "main": [
+        [
+          {
+            "node": "Persist Performance Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Performance Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond ROI Reconciled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "pinData": {},
   "settings": {
@@ -240,5 +460,14 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["real-estate","insula-crm","analytics","roi","source-attribution","performance","wf-395"]
+  "tags": [
+    "real-estate",
+    "insula-crm",
+    "analytics",
+    "roi",
+    "source-attribution",
+    "performance",
+    "wf-395"
+  ],
+  "id": "0e9289a1-d213-4c8b-818c-a97ec2bb11eb"
 }

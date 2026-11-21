@@ -295,5 +295,6 @@
     "contractStatus": "scaffolded",
     "idempotency": "wf403:{experimentId}:{period}:{action}",
     "notes": "This controller records and validates approved budget changes; live ad-platform execution remains behind the final production API/approval integration."
-  }
+  },
+  "id": "63a0b27f-0316-4b5e-8f6f-fc6d710747aa"
 }

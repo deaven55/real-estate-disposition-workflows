@@ -2,57 +2,462 @@
   "name": "WF-459 — Seller Counteroffer → Underwriting Recalculation, MAO Protection & Negotiation Decision Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"seller-counteroffer-underwriting-mao-negotiation-decision","responseMode":"lastNode","options":{}},
-      "id":"w459a","name":"Counteroffer Decision Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seller-counteroffer-underwriting-mao-negotiation-decision",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w459a",
+      "name": "Counteroffer Decision Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const dealId=String(b.dealId??'').trim(); const counterofferId=String(b.counterofferId??b.responseId??'').trim(); const counteroffer=Number(b.counteroffer??b.counterofferAmount??0); return [{json:{...b,leadId,portfolioId,dealId,counterofferId,counteroffer,receivedAt:new Date().toISOString()}}];"},
-      "id":"w459b","name":"Normalize Counteroffer Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const dealId=String(b.dealId??'').trim(); const counterofferId=String(b.counterofferId??b.responseId??'').trim(); const counteroffer=Number(b.counteroffer??b.counterofferAmount??0); return [{json:{...b,leadId,portfolioId,dealId,counterofferId,counteroffer,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w459b",
+      "name": "Normalize Counteroffer Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.counterofferId}}","operation":"notEmpty"}]}},
-      "id":"w459c","name":"Validate Counteroffer Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.counterofferId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w459c",
+      "name": "Validate Counteroffer Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/counteroffer-underwriting-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"counteroffer","value":"={{$json.counteroffer}}"}]},"options":{}},
-      "id":"w459d","name":"Fetch Counteroffer Underwriting Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/counteroffer-underwriting-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "counterofferId",
+              "value": "={{$json.counterofferId}}"
+            },
+            {
+              "name": "counteroffer",
+              "value": "={{$json.counteroffer}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w459d",
+      "name": "Fetch Counteroffer Underwriting Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Counteroffer Request').first().json; const ctx=$json.context??$json; const num=v=>Number.isFinite(Number(v))?Number(v):0; const arv=num(ctx.arv??ctx.ARV); const repairs=num(ctx.repairs??ctx.repairEstimate); const contingency=Math.max(0,num(ctx.repairContingencyPercent??10)); const closingCosts=num(ctx.closingCosts); const holdingCosts=num(ctx.holdingCosts); const wholesaleCosts=num(ctx.wholesaleCosts); const protectedMao=num(ctx.protectedMAO??ctx.protectedMao); const currentOffer=num(ctx.currentOffer); const sellerMotivation=Math.max(0,Math.min(100,num(ctx.motivationScore??50))); const risk=String(ctx.riskLevel??'medium').toLowerCase(); const repairContingency=repairs*(contingency/100); const allCosts=repairs+repairContingency+closingCosts+holdingCosts+wholesaleCosts; const conventionalMao=arv*0.70-allCosts; const investorMarginMao=arv*0.72-allCosts; const calculatedMao=Math.max(0,Math.min(conventionalMao,investorMarginMao)); const canonicalProtectedMao=protectedMao>0?protectedMao:Math.max(0,calculatedMao); const offer=counteroffer(input); function counteroffer(x){return Number(x.counteroffer)||0;} const gap=offer-currentOffer; const gapToMao=canonicalProtectedMao-offer; const utilization=canonicalProtectedMao>0?offer/canonicalProtectedMao:1; const profitAtCounter=arv-allCosts-offer; const blocked=ctx.dnc===true||ctx.suppressed===true||['closed','cancelled','disputed'].includes(String(ctx.dealStatus??'').toLowerCase()); const flags=[]; if(blocked)flags.push('protected_or_blocked_deal'); if(offer<=0)flags.push('invalid_counteroffer'); if(canonicalProtectedMao<=0)flags.push('missing_protected_mao'); if(offer>canonicalProtectedMao)flags.push('counteroffer_above_protected_mao'); if(profitAtCounter<0)flags.push('negative_projected_profit'); if(risk==='high'||risk==='critical')flags.push('elevated_deal_risk'); let decision='human_review'; let nextAction='review_counteroffer'; if(blocked)decision='blocked'; else if(offer<=0||canonicalProtectedMao<=0)decision='human_review'; else if(offer<=canonicalProtectedMao && profitAtCounter>=0){ if(offer<=currentOffer){decision='accept_or_contract';nextAction='move_to_contract_readiness';} else if(offer<=canonicalProtectedMao*0.97){decision='controlled_concession';nextAction='counter_with_protected_concession';} else if(offer<=canonicalProtectedMao){decision='accept_or_contract';nextAction='accept_or_finalize_within_mao';} } else if(offer>canonicalProtectedMao){decision='reprice_or_walk_away';nextAction=sellerMotivation>=70?'restate_value_and_reengage':'walk_away_or_nurture';} const confidence=blocked||flags.includes('missing_protected_mao')?25:flags.length>=3?55:90; const idempotencyKey='wf459:'+input.leadId+':'+input.dealId+':'+input.counterofferId; return [{json:{...input,underwriting:{arv,repairs,repairContingency,closingCosts,holdingCosts,wholesaleCosts,totalCosts:allCosts,conventionalMao,investorMarginMao,calculatedMao,protectedMAO:canonicalProtectedMao,currentOffer,counteroffer:offer,negotiationGap:gap,gapToProtectedMAO:gapToMao,maoutilization:utilization,projectedProfitAtCounter:profitAtCounter,sellerMotivation,riskLevel:risk,decision,nextAction,flags,confidenceScore:confidence,requiresHumanReview:decision==='human_review'||risk==='high'||risk==='critical'},idempotencyKey}}];"},
-      "id":"w459e","name":"Recalculate Underwriting & Negotiation Decision","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Counteroffer Request').first().json; const ctx=$json.context??$json; const num=v=>Number.isFinite(Number(v))?Number(v):0; const arv=num(ctx.arv??ctx.ARV); const repairs=num(ctx.repairs??ctx.repairEstimate); const contingency=Math.max(0,num(ctx.repairContingencyPercent??10)); const closingCosts=num(ctx.closingCosts); const holdingCosts=num(ctx.holdingCosts); const wholesaleCosts=num(ctx.wholesaleCosts); const protectedMao=num(ctx.protectedMAO??ctx.protectedMao); const currentOffer=num(ctx.currentOffer); const sellerMotivation=Math.max(0,Math.min(100,num(ctx.motivationScore??50))); const risk=String(ctx.riskLevel??'medium').toLowerCase(); const repairContingency=repairs*(contingency/100); const allCosts=repairs+repairContingency+closingCosts+holdingCosts+wholesaleCosts; const conventionalMao=arv*0.70-allCosts; const investorMarginMao=arv*0.72-allCosts; const calculatedMao=Math.max(0,Math.min(conventionalMao,investorMarginMao)); const canonicalProtectedMao=protectedMao>0?protectedMao:Math.max(0,calculatedMao); const offer=counteroffer(input); function counteroffer(x){return Number(x.counteroffer)||0;} const gap=offer-currentOffer; const gapToMao=canonicalProtectedMao-offer; const utilization=canonicalProtectedMao>0?offer/canonicalProtectedMao:1; const profitAtCounter=arv-allCosts-offer; const blocked=ctx.dnc===true||ctx.suppressed===true||['closed','cancelled','disputed'].includes(String(ctx.dealStatus??'').toLowerCase()); const flags=[]; if(blocked)flags.push('protected_or_blocked_deal'); if(offer<=0)flags.push('invalid_counteroffer'); if(canonicalProtectedMao<=0)flags.push('missing_protected_mao'); if(offer>canonicalProtectedMao)flags.push('counteroffer_above_protected_mao'); if(profitAtCounter<0)flags.push('negative_projected_profit'); if(risk==='high'||risk==='critical')flags.push('elevated_deal_risk'); let decision='human_review'; let nextAction='review_counteroffer'; if(blocked)decision='blocked'; else if(offer<=0||canonicalProtectedMao<=0)decision='human_review'; else if(offer<=canonicalProtectedMao && profitAtCounter>=0){ if(offer<=currentOffer){decision='accept_or_contract';nextAction='move_to_contract_readiness';} else if(offer<=canonicalProtectedMao*0.97){decision='controlled_concession';nextAction='counter_with_protected_concession';} else if(offer<=canonicalProtectedMao){decision='accept_or_contract';nextAction='accept_or_finalize_within_mao';} } else if(offer>canonicalProtectedMao){decision='reprice_or_walk_away';nextAction=sellerMotivation>=70?'restate_value_and_reengage':'walk_away_or_nurture';} const confidence=blocked||flags.includes('missing_protected_mao')?25:flags.length>=3?55:90; const idempotencyKey='wf459:'+input.leadId+':'+input.dealId+':'+input.counterofferId; return [{json:{...input,underwriting:{arv,repairs,repairContingency,closingCosts,holdingCosts,wholesaleCosts,totalCosts:allCosts,conventionalMao,investorMarginMao,calculatedMao,protectedMAO:canonicalProtectedMao,currentOffer,counteroffer:offer,negotiationGap:gap,gapToProtectedMAO:gapToMao,maoutilization:utilization,projectedProfitAtCounter:profitAtCounter,sellerMotivation,riskLevel:risk,decision,nextAction,flags,confidenceScore:confidence,requiresHumanReview:decision==='human_review'||risk==='high'||risk==='critical'},idempotencyKey}}];"
+      },
+      "id": "w459e",
+      "name": "Recalculate Underwriting & Negotiation Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/counteroffer-underwriting-result","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"decision","value":"={{$json.underwriting.decision}}"},{"name":"nextAction","value":"={{$json.underwriting.nextAction}}"},{"name":"protectedMAO","value":"={{$json.underwriting.protectedMAO}}"},{"name":"counteroffer","value":"={{$json.underwriting.counteroffer}}"},{"name":"projectedProfitAtCounter","value":"={{$json.underwriting.projectedProfitAtCounter}}"},{"name":"negotiationGap","value":"={{$json.underwriting.negotiationGap}}"},{"name":"flags","value":"={{JSON.stringify($json.underwriting.flags)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w459f","name":"Persist Counteroffer Underwriting Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/counteroffer-underwriting-result",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "counterofferId",
+              "value": "={{$json.counterofferId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.underwriting.decision}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.underwriting.nextAction}}"
+            },
+            {
+              "name": "protectedMAO",
+              "value": "={{$json.underwriting.protectedMAO}}"
+            },
+            {
+              "name": "counteroffer",
+              "value": "={{$json.underwriting.counteroffer}}"
+            },
+            {
+              "name": "projectedProfitAtCounter",
+              "value": "={{$json.underwriting.projectedProfitAtCounter}}"
+            },
+            {
+              "name": "negotiationGap",
+              "value": "={{$json.underwriting.negotiationGap}}"
+            },
+            {
+              "name": "flags",
+              "value": "={{JSON.stringify($json.underwriting.flags)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w459f",
+      "name": "Persist Counteroffer Underwriting Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/negotiation-action","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"decision","value":"={{$json.underwriting.decision}}"},{"name":"nextAction","value":"={{$json.underwriting.nextAction}}"},{"name":"protectedMAO","value":"={{$json.underwriting.protectedMAO}}"},{"name":"requiresHumanReview","value":"={{$json.underwriting.requiresHumanReview}}"},{"name":"idempotencyKey","value":"={{'wf459:action:'+$json.leadId+':'+$json.dealId+':'+$json.counterofferId}}"}]},"options":{}},
-      "id":"w459g","name":"Route Negotiation Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/negotiation-action",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "counterofferId",
+              "value": "={{$json.counterofferId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.underwriting.decision}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.underwriting.nextAction}}"
+            },
+            {
+              "name": "protectedMAO",
+              "value": "={{$json.underwriting.protectedMAO}}"
+            },
+            {
+              "name": "requiresHumanReview",
+              "value": "={{$json.underwriting.requiresHumanReview}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf459:action:'+$json.leadId+':'+$json.dealId+':'+$json.counterofferId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w459g",
+      "name": "Route Negotiation Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"counteroffer_underwriting_mao_negotiation_decision"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"counterofferId","value":"={{$json.counterofferId}}"},{"name":"decision","value":"={{$json.underwriting.decision}}"},{"name":"protectedMAO","value":"={{$json.underwriting.protectedMAO}}"},{"name":"projectedProfitAtCounter","value":"={{$json.underwriting.projectedProfitAtCounter}}"},{"name":"idempotencyKey","value":"={{'wf459:activity:'+$json.leadId+':'+$json.dealId+':'+$json.counterofferId}}"}]},"options":{}},
-      "id":"w459h","name":"Record Counteroffer Decision Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "counteroffer_underwriting_mao_negotiation_decision"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "counterofferId",
+              "value": "={{$json.counterofferId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.underwriting.decision}}"
+            },
+            {
+              "name": "protectedMAO",
+              "value": "={{$json.underwriting.protectedMAO}}"
+            },
+            {
+              "name": "projectedProfitAtCounter",
+              "value": "={{$json.underwriting.projectedProfitAtCounter}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf459:activity:'+$json.leadId+':'+$json.dealId+':'+$json.counterofferId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w459h",
+      "name": "Record Counteroffer Decision Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w459i","name":"Respond Counteroffer Decision","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w459i",
+      "name": "Respond Counteroffer Decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, portfolioId, dealId and counterofferId are required'} }}","options":{}},
-      "id":"w459j","name":"Respond Invalid Counteroffer Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, portfolioId, dealId and counterofferId are required'} }}",
+        "options": {}
+      },
+      "id": "w459j",
+      "name": "Respond Invalid Counteroffer Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Counteroffer Decision Webhook":{"main":[[{"node":"Normalize Counteroffer Request","type":"main","index":0}]]},
-    "Normalize Counteroffer Request":{"main":[[{"node":"Validate Counteroffer Request","type":"main","index":0}]]},
-    "Validate Counteroffer Request":{"main":[[{"node":"Fetch Counteroffer Underwriting Context","type":"main","index":0}],[{"node":"Respond Invalid Counteroffer Request","type":"main","index":0}]]},
-    "Fetch Counteroffer Underwriting Context":{"main":[[{"node":"Recalculate Underwriting & Negotiation Decision","type":"main","index":0}]]},
-    "Recalculate Underwriting & Negotiation Decision":{"main":[[{"node":"Persist Counteroffer Underwriting Decision","type":"main","index":0}]]},
-    "Persist Counteroffer Underwriting Decision":{"main":[[{"node":"Route Negotiation Action","type":"main","index":0}]]},
-    "Route Negotiation Action":{"main":[[{"node":"Record Counteroffer Decision Activity","type":"main","index":0}]]},
-    "Record Counteroffer Decision Activity":{"main":[[{"node":"Respond Counteroffer Decision","type":"main","index":0}]]}
+  "connections": {
+    "Counteroffer Decision Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Counteroffer Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Counteroffer Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Counteroffer Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Counteroffer Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Counteroffer Underwriting Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Counteroffer Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Counteroffer Underwriting Context": {
+      "main": [
+        [
+          {
+            "node": "Recalculate Underwriting & Negotiation Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recalculate Underwriting & Negotiation Decision": {
+      "main": [
+        [
+          {
+            "node": "Persist Counteroffer Underwriting Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Counteroffer Underwriting Decision": {
+      "main": [
+        [
+          {
+            "node": "Route Negotiation Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Negotiation Action": {
+      "main": [
+        [
+          {
+            "node": "Record Counteroffer Decision Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Counteroffer Decision Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Counteroffer Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-459"},{"name":"counteroffer"},{"name":"underwriting"},{"name":"protected-mao"},{"name":"negotiation"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-459","contractStatus":"scaffolded","idempotency":"wf459:{leadId}:{dealId}:{counterofferId}","notes":"Recalculates deal economics when a seller counteroffer arrives, preserves the canonical protected MAO ceiling, evaluates projected profit and risk, and routes the counteroffer to accept/contract, controlled concession, reprice/walk-away or human review. Production use requires a canonical InsulaCRM MAO source, validated underwriting assumptions, accounting definitions and production API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-459"
+    },
+    {
+      "name": "counteroffer"
+    },
+    {
+      "name": "underwriting"
+    },
+    {
+      "name": "protected-mao"
+    },
+    {
+      "name": "negotiation"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-459",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf459:{leadId}:{dealId}:{counterofferId}",
+    "notes": "Recalculates deal economics when a seller counteroffer arrives, preserves the canonical protected MAO ceiling, evaluates projected profit and risk, and routes the counteroffer to accept/contract, controlled concession, reprice/walk-away or human review. Production use requires a canonical InsulaCRM MAO source, validated underwriting assumptions, accounting definitions and production API contracts."
+  },
+  "id": "6ecf857b-3f8f-46a1-a10c-6c4ead259762"
 }

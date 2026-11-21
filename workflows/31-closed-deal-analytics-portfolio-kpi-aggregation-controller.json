@@ -12,7 +12,10 @@
       "name": "Closed Deal Analytics Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Analytics Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Fetch Closed Deal Analytics Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -58,7 +67,10 @@
       "name": "Aggregate Closed Deal KPIs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -87,7 +99,10 @@
       "name": "IF Analytics Eligible",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -170,7 +185,10 @@
       "name": "Persist Portfolio KPI Reconciliation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, -100]
+      "position": [
+        1100,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -217,7 +235,10 @@
       "name": "Persist Analytics Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, -100]
+      "position": [
+        1320,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -231,7 +252,10 @@
       "name": "Respond Analytics Reconciled",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1540, -100]
+      "position": [
+        1540,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -245,33 +269,96 @@
       "name": "Respond Analytics Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     }
   ],
   "connections": {
     "Closed Deal Analytics Webhook": {
-      "main": [[{"node": "Normalize Analytics Request", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Analytics Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Analytics Request": {
-      "main": [[{"node": "Fetch Closed Deal Analytics Context", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Fetch Closed Deal Analytics Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Closed Deal Analytics Context": {
-      "main": [[{"node": "Aggregate Closed Deal KPIs", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Aggregate Closed Deal KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Aggregate Closed Deal KPIs": {
-      "main": [[{"node": "IF Analytics Eligible", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "IF Analytics Eligible",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF Analytics Eligible": {
       "main": [
-        [{"node": "Persist Portfolio KPI Reconciliation", "type": "main", "index": 0}],
-        [{"node": "Respond Analytics Blocked", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Persist Portfolio KPI Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Analytics Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Persist Portfolio KPI Reconciliation": {
-      "main": [[{"node": "Persist Analytics Activity", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Analytics Activity": {
-      "main": [[{"node": "Respond Analytics Reconciled", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Analytics Reconciled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -284,5 +371,14 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["real-estate", "insula-crm", "analytics", "kpi", "profit", "portfolio", "wf-393"]
+  "tags": [
+    "real-estate",
+    "insula-crm",
+    "analytics",
+    "kpi",
+    "profit",
+    "portfolio",
+    "wf-393"
+  ],
+  "id": "665821a6-4afc-497b-9d2d-7d49df526032"
 }

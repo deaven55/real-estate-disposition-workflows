@@ -12,7 +12,10 @@
       "name": "Post-Closing Settlement Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Settlement Outcome",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Fetch Post-Closing Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -58,7 +67,10 @@
       "name": "Validate Post-Closing Settlement",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -87,7 +99,10 @@
       "name": "IF Settlement Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -152,7 +167,10 @@
       "name": "Persist Financial Settlement Reconciliation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, -100]
+      "position": [
+        1100,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -201,7 +219,10 @@
       "name": "Reconcile Post-Closing Deal Lifecycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, -100]
+      "position": [
+        1320,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -250,7 +271,10 @@
       "name": "Persist Post-Closing Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, -100]
+      "position": [
+        1540,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -264,7 +288,10 @@
       "name": "Respond Settlement Reconciled",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1760, -100]
+      "position": [
+        1760,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -278,36 +305,107 @@
       "name": "Respond Settlement Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     }
   ],
   "connections": {
     "Post-Closing Settlement Webhook": {
-      "main": [[{"node": "Normalize Settlement Outcome", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Settlement Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Settlement Outcome": {
-      "main": [[{"node": "Fetch Post-Closing Context", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Fetch Post-Closing Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Post-Closing Context": {
-      "main": [[{"node": "Validate Post-Closing Settlement", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Validate Post-Closing Settlement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Post-Closing Settlement": {
-      "main": [[{"node": "IF Settlement Valid", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "IF Settlement Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF Settlement Valid": {
       "main": [
-        [{"node": "Persist Financial Settlement Reconciliation", "type": "main", "index": 0}],
-        [{"node": "Respond Settlement Blocked", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Persist Financial Settlement Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Settlement Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Persist Financial Settlement Reconciliation": {
-      "main": [[{"node": "Reconcile Post-Closing Deal Lifecycle", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Reconcile Post-Closing Deal Lifecycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Reconcile Post-Closing Deal Lifecycle": {
-      "main": [[{"node": "Persist Post-Closing Activity", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Post-Closing Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Post-Closing Activity": {
-      "main": [[{"node": "Respond Settlement Reconciled", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Settlement Reconciled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -320,5 +418,14 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["real-estate", "insula-crm", "assignment", "post-closing", "settlement", "reconciliation", "wf-390"]
+  "tags": [
+    "real-estate",
+    "insula-crm",
+    "assignment",
+    "post-closing",
+    "settlement",
+    "reconciliation",
+    "wf-390"
+  ],
+  "id": "d7a43383-0c18-45e7-a753-ed5b88446c6c"
 }

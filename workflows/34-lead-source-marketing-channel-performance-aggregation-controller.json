@@ -12,7 +12,10 @@
       "name": "Lead Source Performance Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Source Performance Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -31,7 +37,10 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Accept", "value": "application/json" }
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
           ]
         },
         "options": {}
@@ -40,7 +49,10 @@
       "name": "Fetch InsulaCRM Lead Source Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -50,7 +62,10 @@
       "name": "Validate Source Performance Dataset",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -60,7 +75,10 @@
       "name": "Aggregate Lead Source & Marketing Channel KPIs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -69,8 +87,14 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Accept", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -82,7 +106,10 @@
       "name": "Persist Source Channel Performance to InsulaCRM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, 0]
+      "position": [
+        1100,
+        0
+      ]
     },
     {
       "parameters": {
@@ -91,7 +118,10 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -103,7 +133,10 @@
       "name": "Record Analytics Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, 0]
+      "position": [
+        1320,
+        0
+      ]
     },
     {
       "parameters": {
@@ -114,17 +147,90 @@
       "name": "Respond Source Performance Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, 0]
+      "position": [
+        1540,
+        0
+      ]
     }
   ],
   "connections": {
-    "Lead Source Performance Webhook": { "main": [[{ "node": "Normalize Source Performance Request", "type": "main", "index": 0 }]] },
-    "Normalize Source Performance Request": { "main": [[{ "node": "Fetch InsulaCRM Lead Source Context", "type": "main", "index": 0 }]] },
-    "Fetch InsulaCRM Lead Source Context": { "main": [[{ "node": "Validate Source Performance Dataset", "type": "main", "index": 0 }]] },
-    "Validate Source Performance Dataset": { "main": [[{ "node": "Aggregate Lead Source & Marketing Channel KPIs", "type": "main", "index": 0 }]] },
-    "Aggregate Lead Source & Marketing Channel KPIs": { "main": [[{ "node": "Persist Source Channel Performance to InsulaCRM", "type": "main", "index": 0 }]] },
-    "Persist Source Channel Performance to InsulaCRM": { "main": [[{ "node": "Record Analytics Activity", "type": "main", "index": 0 }]] },
-    "Record Analytics Activity": { "main": [[{ "node": "Respond Source Performance Result", "type": "main", "index": 0 }]] }
+    "Lead Source Performance Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Source Performance Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Source Performance Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch InsulaCRM Lead Source Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch InsulaCRM Lead Source Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Source Performance Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Source Performance Dataset": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Lead Source & Marketing Channel KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Lead Source & Marketing Channel KPIs": {
+      "main": [
+        [
+          {
+            "node": "Persist Source Channel Performance to InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Source Channel Performance to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Record Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Analytics Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Source Performance Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -133,5 +239,6 @@
     "saveManualExecutions": true
   },
   "active": false,
-  "versionId": "wf-396-v1"
+  "versionId": "wf-396-v1",
+  "id": "84e965b6-63a4-4941-b4ce-501bf5bb6978"
 }

@@ -2,57 +2,414 @@
   "name": "WF-437 — Seller Offer Presentation, Objection Handling & Negotiation Follow-Up Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"seller-offer-presentation-objection-negotiation-follow-up","responseMode":"lastNode","options":{}},
-      "id":"w437a","name":"Seller Offer Presentation Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seller-offer-presentation-objection-negotiation-follow-up",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w437a",
+      "name": "Seller Offer Presentation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const offerId=String(b.offerId??'').trim(); const eventType=String(b.eventType??b.outcome??'').trim().toLowerCase(); return [{json:{...b,leadId,dealId,offerId,eventType,receivedAt:new Date().toISOString()}}];"},
-      "id":"w437b","name":"Normalize Seller Offer Event","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const offerId=String(b.offerId??'').trim(); const eventType=String(b.eventType??b.outcome??'').trim().toLowerCase(); return [{json:{...b,leadId,dealId,offerId,eventType,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w437b",
+      "name": "Normalize Seller Offer Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.offerId}}","operation":"notEmpty"},{"value1":"={{$json.eventType}}","operation":"notEmpty"}]}},
-      "id":"w437c","name":"Validate Seller Offer Event","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.offerId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.eventType}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w437c",
+      "name": "Validate Seller Offer Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-offer-presentation-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"offerId","value":"={{$json.offerId}}"},{"name":"eventType","value":"={{$json.eventType}}"}]},"options":{}},
-      "id":"w437d","name":"Fetch Seller Offer Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/seller-offer-presentation-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "offerId",
+              "value": "={{$json.offerId}}"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w437d",
+      "name": "Fetch Seller Offer Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Seller Offer Event').first().json; const ctx=$json.context??$json; const blocked=['dnc','suppressed','closed','cancelled','disputed']; const state=String(ctx.dealState??ctx.status??'').toLowerCase(); const flags=[]; if(blocked.includes(state)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); const event=input.eventType; const valid=['offer_presented','seller_question','objection','counteroffer','accepted','rejected','no_response','callback_requested','dnc']; if(!valid.includes(event))flags.push('unknown_event'); const objectionText=String(input.objection??input.message??ctx.latestSellerMessage??'').toLowerCase(); const objectionTypes=[]; if(/price|too low|offer/.test(objectionText))objectionTypes.push('price'); if(/repair|condition|work|fix/.test(objectionText))objectionTypes.push('property_condition'); if(/time|think|later|not ready/.test(objectionText))objectionTypes.push('timing'); if(/fee|commission|cost/.test(objectionText))objectionTypes.push('fees_or_costs'); if(/family|partner|spouse|discuss/.test(objectionText))objectionTypes.push('decision_maker'); if(/cash|financ|fund/.test(objectionText))objectionTypes.push('funding'); let negotiationState='manual_review',nextAction='review_seller_offer_event',followUp=null;if(flags.length){negotiationState='blocked';nextAction='stop_negotiation_follow_up';}else if(event==='accepted'){negotiationState='accepted';nextAction='advance_to_contract_readiness';}else if(event==='counteroffer'){negotiationState='counteroffer_received';nextAction='evaluate_counteroffer_against_protected_mao';}else if(event==='rejected'){negotiationState='rejected';nextAction='reengage_or_nurture';}else if(event==='dnc'){negotiationState='dnc';nextAction='stop_all_contact';}else if(event==='no_response'){negotiationState='awaiting_response';nextAction='schedule_negotiation_follow_up';followUp={cadenceMinutes:[240,1440,4320],maxAttempts:3};}else if(event==='callback_requested'){negotiationState='callback_requested';nextAction='schedule_callback';}else if(event==='objection'||event==='seller_question'){negotiationState='objection_handling';nextAction='prepare_objection_response_and_follow_up';followUp={objectionTypes,requiresHumanReview:objectionTypes.includes('decision_maker')||objectionTypes.includes('funding')};}else if(event==='offer_presented'){negotiationState='offer_presented';nextAction='monitor_seller_response';followUp={cadenceMinutes:[240,1440],maxAttempts:2};} const offer=Number(ctx.offerAmount??input.offerAmount??0); const protectedMao=Number(ctx.protectedMao??0); const safeOffer=offer>0&&(protectedMao<=0||offer<=protectedMao); if(!safeOffer&&!['accepted','rejected','dnc'].includes(event))flags.push('offer_economics_require_review'); const idempotencyKey='wf437:'+input.leadId+':'+input.dealId+':'+input.offerId+':'+input.eventType; return [{json:{...input,sellerOfferDecision:{status:flags.length?'review_required':'evaluated',negotiationState,nextAction,objectionTypes,followUp,offerAmount:offer,protectedMaoCheck:safeOffer?'within_protected_limit':'requires_economic_review',flags,requiresHumanReview:negotiationState==='manual_review'||(followUp?.requiresHumanReview===true),confidenceScore:flags.length?35:(negotiationState==='manual_review'?55:94)},idempotencyKey}}];"},
-      "id":"w437e","name":"Evaluate Offer Objection & Negotiation Follow-Up","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Seller Offer Event').first().json; const ctx=$json.context??$json; const blocked=['dnc','suppressed','closed','cancelled','disputed']; const state=String(ctx.dealState??ctx.status??'').toLowerCase(); const flags=[]; if(blocked.includes(state)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); const event=input.eventType; const valid=['offer_presented','seller_question','objection','counteroffer','accepted','rejected','no_response','callback_requested','dnc']; if(!valid.includes(event))flags.push('unknown_event'); const objectionText=String(input.objection??input.message??ctx.latestSellerMessage??'').toLowerCase(); const objectionTypes=[]; if(/price|too low|offer/.test(objectionText))objectionTypes.push('price'); if(/repair|condition|work|fix/.test(objectionText))objectionTypes.push('property_condition'); if(/time|think|later|not ready/.test(objectionText))objectionTypes.push('timing'); if(/fee|commission|cost/.test(objectionText))objectionTypes.push('fees_or_costs'); if(/family|partner|spouse|discuss/.test(objectionText))objectionTypes.push('decision_maker'); if(/cash|financ|fund/.test(objectionText))objectionTypes.push('funding'); let negotiationState='manual_review',nextAction='review_seller_offer_event',followUp=null;if(flags.length){negotiationState='blocked';nextAction='stop_negotiation_follow_up';}else if(event==='accepted'){negotiationState='accepted';nextAction='advance_to_contract_readiness';}else if(event==='counteroffer'){negotiationState='counteroffer_received';nextAction='evaluate_counteroffer_against_protected_mao';}else if(event==='rejected'){negotiationState='rejected';nextAction='reengage_or_nurture';}else if(event==='dnc'){negotiationState='dnc';nextAction='stop_all_contact';}else if(event==='no_response'){negotiationState='awaiting_response';nextAction='schedule_negotiation_follow_up';followUp={cadenceMinutes:[240,1440,4320],maxAttempts:3};}else if(event==='callback_requested'){negotiationState='callback_requested';nextAction='schedule_callback';}else if(event==='objection'||event==='seller_question'){negotiationState='objection_handling';nextAction='prepare_objection_response_and_follow_up';followUp={objectionTypes,requiresHumanReview:objectionTypes.includes('decision_maker')||objectionTypes.includes('funding')};}else if(event==='offer_presented'){negotiationState='offer_presented';nextAction='monitor_seller_response';followUp={cadenceMinutes:[240,1440],maxAttempts:2};} const offer=Number(ctx.offerAmount??input.offerAmount??0); const protectedMao=Number(ctx.protectedMao??0); const safeOffer=offer>0&&(protectedMao<=0||offer<=protectedMao); if(!safeOffer&&!['accepted','rejected','dnc'].includes(event))flags.push('offer_economics_require_review'); const idempotencyKey='wf437:'+input.leadId+':'+input.dealId+':'+input.offerId+':'+input.eventType; return [{json:{...input,sellerOfferDecision:{status:flags.length?'review_required':'evaluated',negotiationState,nextAction,objectionTypes,followUp,offerAmount:offer,protectedMaoCheck:safeOffer?'within_protected_limit':'requires_economic_review',flags,requiresHumanReview:negotiationState==='manual_review'||(followUp?.requiresHumanReview===true),confidenceScore:flags.length?35:(negotiationState==='manual_review'?55:94)},idempotencyKey}}];"
+      },
+      "id": "w437e",
+      "name": "Evaluate Offer Objection & Negotiation Follow-Up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/seller-offer-event-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"offerId","value":"={{$json.offerId}}"},{"name":"sellerOfferDecision","value":"={{JSON.stringify($json.sellerOfferDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w437f","name":"Persist Seller Offer Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/seller-offer-event-reconciliation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "offerId",
+              "value": "={{$json.offerId}}"
+            },
+            {
+              "name": "sellerOfferDecision",
+              "value": "={{JSON.stringify($json.sellerOfferDecision)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w437f",
+      "name": "Persist Seller Offer Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/negotiation-follow-up","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"offerId","value":"={{$json.offerId}}"},{"name":"nextAction","value":"={{$json.sellerOfferDecision.nextAction}}"},{"name":"followUp","value":"={{JSON.stringify($json.sellerOfferDecision.followUp)}}"},{"name":"idempotencyKey","value":"={{'wf437:followup:'+$json.leadId+':'+$json.dealId+':'+$json.offerId+':'+$json.eventType}}"}]},"options":{}},
-      "id":"w437g","name":"Persist Negotiation Follow-Up","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/negotiation-follow-up",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "offerId",
+              "value": "={{$json.offerId}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.sellerOfferDecision.nextAction}}"
+            },
+            {
+              "name": "followUp",
+              "value": "={{JSON.stringify($json.sellerOfferDecision.followUp)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf437:followup:'+$json.leadId+':'+$json.dealId+':'+$json.offerId+':'+$json.eventType}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w437g",
+      "name": "Persist Negotiation Follow-Up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"seller_offer_presentation_objection_negotiation_follow_up"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"offerId","value":"={{$json.offerId}}"},{"name":"eventType","value":"={{$json.eventType}}"},{"name":"negotiationState","value":"={{$json.sellerOfferDecision.negotiationState}}"},{"name":"nextAction","value":"={{$json.sellerOfferDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf437:activity:'+$json.leadId+':'+$json.dealId+':'+$json.offerId+':'+$json.eventType}}"}]},"options":{}},
-      "id":"w437h","name":"Record Negotiation Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "seller_offer_presentation_objection_negotiation_follow_up"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "offerId",
+              "value": "={{$json.offerId}}"
+            },
+            {
+              "name": "eventType",
+              "value": "={{$json.eventType}}"
+            },
+            {
+              "name": "negotiationState",
+              "value": "={{$json.sellerOfferDecision.negotiationState}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.sellerOfferDecision.nextAction}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf437:activity:'+$json.leadId+':'+$json.dealId+':'+$json.offerId+':'+$json.eventType}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w437h",
+      "name": "Record Negotiation Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w437i","name":"Respond Seller Offer Decision","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w437i",
+      "name": "Respond Seller Offer Decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, offerId and eventType are required'} }}","options":{}},
-      "id":"w437j","name":"Respond Invalid Seller Offer Event","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, dealId, offerId and eventType are required'} }}",
+        "options": {}
+      },
+      "id": "w437j",
+      "name": "Respond Invalid Seller Offer Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Seller Offer Presentation Webhook":{"main":[[{"node":"Normalize Seller Offer Event","type":"main","index":0}]]},
-    "Normalize Seller Offer Event":{"main":[[{"node":"Validate Seller Offer Event","type":"main","index":0}]]},
-    "Validate Seller Offer Event":{"main":[[{"node":"Fetch Seller Offer Context","type":"main","index":0}],[{"node":"Respond Invalid Seller Offer Event","type":"main","index":0}]]},
-    "Fetch Seller Offer Context":{"main":[[{"node":"Evaluate Offer Objection & Negotiation Follow-Up","type":"main","index":0}]]},
-    "Evaluate Offer Objection & Negotiation Follow-Up":{"main":[[{"node":"Persist Seller Offer Decision","type":"main","index":0}]]},
-    "Persist Seller Offer Decision":{"main":[[{"node":"Persist Negotiation Follow-Up","type":"main","index":0}]]},
-    "Persist Negotiation Follow-Up":{"main":[[{"node":"Record Negotiation Activity","type":"main","index":0}]]},
-    "Record Negotiation Activity":{"main":[[{"node":"Respond Seller Offer Decision","type":"main","index":0}]]}
+  "connections": {
+    "Seller Offer Presentation Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Seller Offer Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Seller Offer Event": {
+      "main": [
+        [
+          {
+            "node": "Validate Seller Offer Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Seller Offer Event": {
+      "main": [
+        [
+          {
+            "node": "Fetch Seller Offer Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Seller Offer Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Seller Offer Context": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Offer Objection & Negotiation Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Offer Objection & Negotiation Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Persist Seller Offer Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Seller Offer Decision": {
+      "main": [
+        [
+          {
+            "node": "Persist Negotiation Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Negotiation Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Record Negotiation Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Negotiation Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Seller Offer Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-437"},{"name":"seller-offer"},{"name":"objection-handling"},{"name":"negotiation"},{"name":"follow-up"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-437","contractStatus":"scaffolded","idempotency":"wf437:{leadId}:{dealId}:{offerId}:{eventType}","notes":"Seller offer presentation and objection handling is scaffolding pending verified InsulaCRM offer/negotiation schema, communication provider, seller-response classification, protected-MAO source of truth, and production API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-437"
+    },
+    {
+      "name": "seller-offer"
+    },
+    {
+      "name": "objection-handling"
+    },
+    {
+      "name": "negotiation"
+    },
+    {
+      "name": "follow-up"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-437",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf437:{leadId}:{dealId}:{offerId}:{eventType}",
+    "notes": "Seller offer presentation and objection handling is scaffolding pending verified InsulaCRM offer/negotiation schema, communication provider, seller-response classification, protected-MAO source of truth, and production API contracts."
+  },
+  "id": "2e689f03-71c2-40fe-8832-15e3435bc926"
 }

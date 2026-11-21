@@ -2,57 +2,438 @@
   "name": "WF-446 — Final Settlement Statement → Assignment Fee / Closing Cost / Funds Reconciliation Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"final-settlement-assignment-fee-closing-cost-funds-reconciliation","responseMode":"lastNode","options":{}},
-      "id":"w446a","name":"Final Settlement Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "final-settlement-assignment-fee-closing-cost-funds-reconciliation",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w446a",
+      "name": "Final Settlement Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const settlementId=String(b.settlementId??b.statementId??'').trim(); const settlementEventId=String(b.settlementEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,settlementId,settlementEventId,receivedAt:new Date().toISOString()}}];"},
-      "id":"w446b","name":"Normalize Final Settlement Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const settlementId=String(b.settlementId??b.statementId??'').trim(); const settlementEventId=String(b.settlementEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,settlementId,settlementEventId,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w446b",
+      "name": "Normalize Final Settlement Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"},{"value1":"={{$json.settlementId}}","operation":"notEmpty"},{"value1":"={{$json.settlementEventId}}","operation":"notEmpty"}]}},
-      "id":"w446c","name":"Validate Final Settlement Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.contractId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.settlementId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.settlementEventId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w446c",
+      "name": "Validate Final Settlement Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/final-settlement-reconciliation-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"settlementEventId","value":"={{$json.settlementEventId}}"}]},"options":{}},
-      "id":"w446d","name":"Fetch Final Settlement Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/final-settlement-reconciliation-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "settlementEventId",
+              "value": "={{$json.settlementEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w446d",
+      "name": "Fetch Final Settlement Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Final Settlement Request').first().json; const ctx=$json.context??$json; const flags=[]; const settlement=ctx.settlement??ctx; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); if(['closed','cancelled','disputed','dnc','suppressed'].includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); const statementStatus=String(settlement.status??settlement.statementStatus??'').toLowerCase(); const statementReady=['final','approved','issued','completed'].includes(statementStatus)||settlement.finalStatementReady===true; if(!statementReady)flags.push('final_settlement_statement_not_ready'); const n=v=>Number.isFinite(Number(v))?Number(v):0; const expectedAssignmentFee=n(ctx.expectedAssignmentFee??ctx.assignmentFee); const actualAssignmentFee=n(settlement.actualAssignmentFee??settlement.assignmentFee); const expectedClosingCosts=n(ctx.expectedClosingCosts??ctx.closingCosts); const actualClosingCosts=n(settlement.actualClosingCosts??settlement.closingCosts); const expectedOtherCosts=n(ctx.expectedOtherCosts??ctx.otherCosts); const actualOtherCosts=n(settlement.actualOtherCosts??settlement.otherCosts); const expectedBuyerFunds=n(ctx.expectedBuyerFunds??ctx.buyerFunds); const actualBuyerFunds=n(settlement.actualBuyerFunds??settlement.buyerFunds); const expectedSellerPayoff=n(ctx.expectedSellerPayoff??ctx.sellerPayoff); const actualSellerPayoff=n(settlement.actualSellerPayoff??settlement.sellerPayoff); const tol=Math.max(0.01,n(ctx.reconciliationTolerance??0.01)); const deltas={assignmentFee:Math.round((actualAssignmentFee-expectedAssignmentFee)*100)/100,closingCosts:Math.round((actualClosingCosts-expectedClosingCosts)*100)/100,otherCosts:Math.round((actualOtherCosts-expectedOtherCosts)*100)/100,buyerFunds:Math.round((actualBuyerFunds-expectedBuyerFunds)*100)/100,sellerPayoff:Math.round((actualSellerPayoff-expectedSellerPayoff)*100)/100}; const mismatches=Object.entries(deltas).filter(([,v])=>Math.abs(v)>tol).map(([k,v])=>({field:k,delta:v})); if(mismatches.length)flags.push('settlement_amount_mismatch'); const grossSettlementProceeds=actualAssignmentFee; const totalClosingCosts=actualClosingCosts+actualOtherCosts; const netSettlementProceeds=Math.round((grossSettlementProceeds-totalClosingCosts)*100)/100; const fundsBalanced=Math.abs(deltas.buyerFunds)<=tol&&Math.abs(deltas.sellerPayoff)<=tol; if(!fundsBalanced)flags.push('funds_not_reconciled'); let decision='hold_for_settlement_correction',nextAction='resolve_settlement_statement_mismatches',reconciliationState='exception'; if(flags.includes('deal_or_contact_blocked')){decision='blocked';nextAction='stop_settlement_flow';reconciliationState='blocked';}else if(statementReady&&mismatches.length===0&&fundsBalanced){decision='settlement_reconciled';nextAction='advance_to_closing_completion_and_funds_confirmation';reconciliationState='reconciled';}else if(!statementReady){decision='await_final_settlement_statement';nextAction='obtain_final_approved_settlement_statement';reconciliationState='pending';} const idempotencyKey='wf446:'+input.leadId+':'+input.dealId+':'+input.settlementId+':'+input.settlementEventId; return [{json:{...input,finalSettlementReconciliation:{status:reconciliationState,decision,nextAction,statementStatus,statementReady,expected:{assignmentFee:expectedAssignmentFee,closingCosts:expectedClosingCosts,otherCosts:expectedOtherCosts,buyerFunds:expectedBuyerFunds,sellerPayoff:expectedSellerPayoff},actual:{assignmentFee:actualAssignmentFee,closingCosts:actualClosingCosts,otherCosts:actualOtherCosts,buyerFunds:actualBuyerFunds,sellerPayoff:actualSellerPayoff},deltas,mismatches,grossSettlementProceeds,totalClosingCosts,netSettlementProceeds,fundsBalanced,reconciliationTolerance:tol,flags,requiresHumanReview:reconciliationState==='exception'||reconciliationState==='blocked',confidenceScore:reconciliationState==='reconciled'?99:reconciliationState==='pending'?75:25},idempotencyKey}}];"},
-      "id":"w446e","name":"Reconcile Settlement Fees Costs & Funds","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Final Settlement Request').first().json; const ctx=$json.context??$json; const flags=[]; const settlement=ctx.settlement??ctx; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); if(['closed','cancelled','disputed','dnc','suppressed'].includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); const statementStatus=String(settlement.status??settlement.statementStatus??'').toLowerCase(); const statementReady=['final','approved','issued','completed'].includes(statementStatus)||settlement.finalStatementReady===true; if(!statementReady)flags.push('final_settlement_statement_not_ready'); const n=v=>Number.isFinite(Number(v))?Number(v):0; const expectedAssignmentFee=n(ctx.expectedAssignmentFee??ctx.assignmentFee); const actualAssignmentFee=n(settlement.actualAssignmentFee??settlement.assignmentFee); const expectedClosingCosts=n(ctx.expectedClosingCosts??ctx.closingCosts); const actualClosingCosts=n(settlement.actualClosingCosts??settlement.closingCosts); const expectedOtherCosts=n(ctx.expectedOtherCosts??ctx.otherCosts); const actualOtherCosts=n(settlement.actualOtherCosts??settlement.otherCosts); const expectedBuyerFunds=n(ctx.expectedBuyerFunds??ctx.buyerFunds); const actualBuyerFunds=n(settlement.actualBuyerFunds??settlement.buyerFunds); const expectedSellerPayoff=n(ctx.expectedSellerPayoff??ctx.sellerPayoff); const actualSellerPayoff=n(settlement.actualSellerPayoff??settlement.sellerPayoff); const tol=Math.max(0.01,n(ctx.reconciliationTolerance??0.01)); const deltas={assignmentFee:Math.round((actualAssignmentFee-expectedAssignmentFee)*100)/100,closingCosts:Math.round((actualClosingCosts-expectedClosingCosts)*100)/100,otherCosts:Math.round((actualOtherCosts-expectedOtherCosts)*100)/100,buyerFunds:Math.round((actualBuyerFunds-expectedBuyerFunds)*100)/100,sellerPayoff:Math.round((actualSellerPayoff-expectedSellerPayoff)*100)/100}; const mismatches=Object.entries(deltas).filter(([,v])=>Math.abs(v)>tol).map(([k,v])=>({field:k,delta:v})); if(mismatches.length)flags.push('settlement_amount_mismatch'); const grossSettlementProceeds=actualAssignmentFee; const totalClosingCosts=actualClosingCosts+actualOtherCosts; const netSettlementProceeds=Math.round((grossSettlementProceeds-totalClosingCosts)*100)/100; const fundsBalanced=Math.abs(deltas.buyerFunds)<=tol&&Math.abs(deltas.sellerPayoff)<=tol; if(!fundsBalanced)flags.push('funds_not_reconciled'); let decision='hold_for_settlement_correction',nextAction='resolve_settlement_statement_mismatches',reconciliationState='exception'; if(flags.includes('deal_or_contact_blocked')){decision='blocked';nextAction='stop_settlement_flow';reconciliationState='blocked';}else if(statementReady&&mismatches.length===0&&fundsBalanced){decision='settlement_reconciled';nextAction='advance_to_closing_completion_and_funds_confirmation';reconciliationState='reconciled';}else if(!statementReady){decision='await_final_settlement_statement';nextAction='obtain_final_approved_settlement_statement';reconciliationState='pending';} const idempotencyKey='wf446:'+input.leadId+':'+input.dealId+':'+input.settlementId+':'+input.settlementEventId; return [{json:{...input,finalSettlementReconciliation:{status:reconciliationState,decision,nextAction,statementStatus,statementReady,expected:{assignmentFee:expectedAssignmentFee,closingCosts:expectedClosingCosts,otherCosts:expectedOtherCosts,buyerFunds:expectedBuyerFunds,sellerPayoff:expectedSellerPayoff},actual:{assignmentFee:actualAssignmentFee,closingCosts:actualClosingCosts,otherCosts:actualOtherCosts,buyerFunds:actualBuyerFunds,sellerPayoff:actualSellerPayoff},deltas,mismatches,grossSettlementProceeds,totalClosingCosts,netSettlementProceeds,fundsBalanced,reconciliationTolerance:tol,flags,requiresHumanReview:reconciliationState==='exception'||reconciliationState==='blocked',confidenceScore:reconciliationState==='reconciled'?99:reconciliationState==='pending'?75:25},idempotencyKey}}];"
+      },
+      "id": "w446e",
+      "name": "Reconcile Settlement Fees Costs & Funds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/final-settlement-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"finalSettlementReconciliation","value":"={{JSON.stringify($json.finalSettlementReconciliation)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w446f","name":"Persist Final Settlement Reconciliation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/final-settlement-reconciliation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "finalSettlementReconciliation",
+              "value": "={{JSON.stringify($json.finalSettlementReconciliation)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w446f",
+      "name": "Persist Final Settlement Reconciliation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/final-settlement-action","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"decision","value":"={{$json.finalSettlementReconciliation.decision}}"},{"name":"nextAction","value":"={{$json.finalSettlementReconciliation.nextAction}}"},{"name":"reconciliationState","value":"={{$json.finalSettlementReconciliation.status}}"},{"name":"idempotencyKey","value":"={{'wf446:action:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.settlementEventId}}"}]},"options":{}},
-      "id":"w446g","name":"Persist Settlement Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/final-settlement-action",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.finalSettlementReconciliation.decision}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.finalSettlementReconciliation.nextAction}}"
+            },
+            {
+              "name": "reconciliationState",
+              "value": "={{$json.finalSettlementReconciliation.status}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf446:action:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.settlementEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w446g",
+      "name": "Persist Settlement Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"final_settlement_assignment_fee_closing_cost_funds_reconciliation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"decision","value":"={{$json.finalSettlementReconciliation.decision}}"},{"name":"reconciliationState","value":"={{$json.finalSettlementReconciliation.status}}"},{"name":"netSettlementProceeds","value":"={{$json.finalSettlementReconciliation.netSettlementProceeds}}"},{"name":"idempotencyKey","value":"={{'wf446:activity:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.settlementEventId}}"}]},"options":{}},
-      "id":"w446h","name":"Record Settlement Reconciliation Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "final_settlement_assignment_fee_closing_cost_funds_reconciliation"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.finalSettlementReconciliation.decision}}"
+            },
+            {
+              "name": "reconciliationState",
+              "value": "={{$json.finalSettlementReconciliation.status}}"
+            },
+            {
+              "name": "netSettlementProceeds",
+              "value": "={{$json.finalSettlementReconciliation.netSettlementProceeds}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf446:activity:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.settlementEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w446h",
+      "name": "Record Settlement Reconciliation Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w446i","name":"Respond Final Settlement Reconciliation","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w446i",
+      "name": "Respond Final Settlement Reconciliation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, contractId, settlementId and settlementEventId are required'} }}","options":{}},
-      "id":"w446j","name":"Respond Invalid Final Settlement Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, dealId, contractId, settlementId and settlementEventId are required'} }}",
+        "options": {}
+      },
+      "id": "w446j",
+      "name": "Respond Invalid Final Settlement Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Final Settlement Webhook":{"main":[[{"node":"Normalize Final Settlement Request","type":"main","index":0}]]},
-    "Normalize Final Settlement Request":{"main":[[{"node":"Validate Final Settlement Request","type":"main","index":0}]]},
-    "Validate Final Settlement Request":{"main":[[{"node":"Fetch Final Settlement Context","type":"main","index":0}],[{"node":"Respond Invalid Final Settlement Request","type":"main","index":0}]]},
-    "Fetch Final Settlement Context":{"main":[[{"node":"Reconcile Settlement Fees Costs & Funds","type":"main","index":0}]]},
-    "Reconcile Settlement Fees Costs & Funds":{"main":[[{"node":"Persist Final Settlement Reconciliation","type":"main","index":0}]]},
-    "Persist Final Settlement Reconciliation":{"main":[[{"node":"Persist Settlement Action","type":"main","index":0}]]},
-    "Persist Settlement Action":{"main":[[{"node":"Record Settlement Reconciliation Activity","type":"main","index":0}]]},
-    "Record Settlement Reconciliation Activity":{"main":[[{"node":"Respond Final Settlement Reconciliation","type":"main","index":0}]]}
+  "connections": {
+    "Final Settlement Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Final Settlement Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Final Settlement Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Final Settlement Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Final Settlement Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Final Settlement Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Final Settlement Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Final Settlement Context": {
+      "main": [
+        [
+          {
+            "node": "Reconcile Settlement Fees Costs & Funds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconcile Settlement Fees Costs & Funds": {
+      "main": [
+        [
+          {
+            "node": "Persist Final Settlement Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Final Settlement Reconciliation": {
+      "main": [
+        [
+          {
+            "node": "Persist Settlement Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Settlement Action": {
+      "main": [
+        [
+          {
+            "node": "Record Settlement Reconciliation Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Settlement Reconciliation Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Final Settlement Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-446"},{"name":"settlement"},{"name":"assignment-fee"},{"name":"closing-costs"},{"name":"funds-reconciliation"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-446","contractStatus":"scaffolded","idempotency":"wf446:{leadId}:{dealId}:{settlementId}:{settlementEventId}","notes":"Reconciles final settlement statement, assignment fee, closing costs, other costs, buyer funds and seller payoff before closing completion. Production use requires verified settlement/accounting schema, authoritative funds evidence, jurisdiction-specific closing rules and production InsulaCRM API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-446"
+    },
+    {
+      "name": "settlement"
+    },
+    {
+      "name": "assignment-fee"
+    },
+    {
+      "name": "closing-costs"
+    },
+    {
+      "name": "funds-reconciliation"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-446",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf446:{leadId}:{dealId}:{settlementId}:{settlementEventId}",
+    "notes": "Reconciles final settlement statement, assignment fee, closing costs, other costs, buyer funds and seller payoff before closing completion. Production use requires verified settlement/accounting schema, authoritative funds evidence, jurisdiction-specific closing rules and production InsulaCRM API contracts."
+  },
+  "id": "6dcb434d-7cc1-4872-b7d1-28473453fc78"
 }

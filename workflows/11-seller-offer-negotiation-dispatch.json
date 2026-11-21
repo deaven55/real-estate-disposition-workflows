@@ -6,7 +6,10 @@
       "name": "Negotiation Dispatch Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-seller-offer-dispatch",
@@ -20,7 +23,10 @@
       "name": "Fetch WF-372 Decision",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [470, 300],
+      "position": [
+        470,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/decision/get",
@@ -34,7 +40,10 @@
       "name": "Validate Approved Decision",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 300],
+      "position": [
+        700,
+        300
+      ],
       "parameters": {
         "jsCode": "var input = $input.first().json.data || $input.first().json;\nvar allowed = ['contract_ready','revised_offer','re_engagement'];\nvar decisionType = String(input.decisionType || '').toLowerCase();\nvar protectedMao = input.protectedMAO;\nvar offerAmount = Number(input.offerAmount);\nvar humanReview = input.humanReviewRequired === true || decisionType === 'human_review';\nvar suppressed = input.suppressed === true || input.dnc === true;\nvar validAmount = Number.isFinite(offerAmount) && offerAmount > 0;\nvar valid = allowed.indexOf(decisionType) !== -1 && validAmount && !humanReview && !suppressed && Number.isFinite(Number(protectedMao)) && offerAmount <= Number(protectedMao);\nreturn [{ json: { ...input, decisionType: decisionType, offerAmount: offerAmount, valid: valid, blockedReason: humanReview ? 'human_review_required' : suppressed ? 'seller_suppressed_or_dnc' : !validAmount ? 'invalid_offer_amount' : allowed.indexOf(decisionType) === -1 ? 'unsupported_decision_type' : Number(offerAmount) > Number(protectedMao) ? 'offer_exceeds_protected_mao' : null } }];"
       }
@@ -44,7 +53,10 @@
       "name": "IF Dispatch Allowed",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [930, 300],
+      "position": [
+        930,
+        300
+      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -73,7 +85,10 @@
       "name": "Build Seller Offer Package",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1160, 150],
+      "position": [
+        1160,
+        150
+      ],
       "parameters": {
         "jsCode": "var d = $input.first().json;\nvar decisionId = String(d.decisionId || '');\nvar dealId = String(d.dealId || '');\nvar sellerId = String(d.sellerId || '');\nvar idem = 'wf373:' + decisionId + ':' + dealId + ':' + String(d.offerAmount);\nvar packageBody = { decisionId: decisionId, dealId: dealId, sellerId: sellerId, decisionType: d.decisionType, offerAmount: Number(d.offerAmount), terms: d.approvedTerms || {}, sellerMessage: d.sellerMessage || null, responseWindow: d.responseWindow || null };\nreturn [{ json: { ...d, idempotencyKey: idem, sellerOfferPackage: packageBody } }];"
       }
@@ -83,7 +98,10 @@
       "name": "Dispatch Seller Offer Package",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 150],
+      "position": [
+        1390,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/communications/negotiation-dispatch",
@@ -104,7 +122,10 @@
       "name": "Respond Dispatch Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1620, 150],
+      "position": [
+        1620,
+        150
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -116,7 +137,10 @@
       "name": "Respond Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1160, 450],
+      "position": [
+        1160,
+        450
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -126,25 +150,77 @@
   ],
   "connections": {
     "Negotiation Dispatch Webhook": {
-      "main": [[{ "node": "Fetch WF-372 Decision", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch WF-372 Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch WF-372 Decision": {
-      "main": [[{ "node": "Validate Approved Decision", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Validate Approved Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Approved Decision": {
-      "main": [[{ "node": "IF Dispatch Allowed", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "IF Dispatch Allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF Dispatch Allowed": {
       "main": [
-        [{ "node": "Build Seller Offer Package", "type": "main", "index": 0 }],
-        [{ "node": "Respond Blocked", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Build Seller Offer Package",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Seller Offer Package": {
-      "main": [[{ "node": "Dispatch Seller Offer Package", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Dispatch Seller Offer Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Dispatch Seller Offer Package": {
-      "main": [[{ "node": "Respond Dispatch Result", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond Dispatch Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -156,5 +232,6 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "active": false
+  "active": false,
+  "id": "49a27905-a57c-49c2-84b2-4a868a30e4a5"
 }

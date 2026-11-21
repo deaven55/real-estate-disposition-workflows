@@ -6,7 +6,10 @@
       "name": "Counteroffer Evaluation Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-counteroffer-evaluate",
@@ -19,7 +22,10 @@
       "name": "Fetch Counteroffer Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [470, 300],
+      "position": [
+        470,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/negotiations/context",
@@ -33,7 +39,10 @@
       "name": "Evaluate Counteroffer",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 300],
+      "position": [
+        700,
+        300
+      ],
       "parameters": {
         "jsCode": "var c = $input.first().json.data || $input.first().json;\nvar counter = Number(c.counterofferAmount);\nvar mao = Number(c.protectedMAO);\nvar current = Number(c.currentOfferAmount || 0);\nvar repair = Number(c.estimatedRepairs || 0);\nvar arv = Number(c.arv || 0);\nvar gap = Number.isFinite(counter) && Number.isFinite(current) ? counter - current : null;\nvar pctMao = Number.isFinite(counter) && mao > 0 ? counter / mao : null;\nvar decision = 'human_review';\nif (!Number.isFinite(counter) || counter <= 0 || !Number.isFinite(mao) || mao <= 0) decision = 'human_review';\nelse if (counter <= mao && counter <= current) decision = 'accept_or_contract';\nelse if (counter <= mao) decision = 'revised_offer';\nelse if (counter > mao) decision = 'walk_away_or_reengage';\nvar idempotencyKey = 'wf375:' + String(c.decisionId || c.activityId || '') + ':' + String(counter);\nreturn [{ json: { ...c, counterofferAmount: counter, currentOfferAmount: current, protectedMAO: mao, estimatedRepairs: repair, arv: arv, counterGap: gap, counterToMAORatio: pctMao, evaluationDecision: decision, humanReviewRequired: decision === 'human_review', idempotencyKey: idempotencyKey } }];"
       }
@@ -43,7 +52,10 @@
       "name": "Enforce Negotiation Guardrails",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [930, 300],
+      "position": [
+        930,
+        300
+      ],
       "parameters": {
         "jsCode": "var d = $input.first().json;\nvar invalid = !Number.isFinite(Number(d.counterofferAmount)) || Number(d.counterofferAmount) <= 0;\nvar protectedState = ['closed','cancelled','disputed'].indexOf(String(d.dealStatus || '').toLowerCase()) !== -1;\nvar blocked = invalid || protectedState;\nreturn [{ json: { ...d, blocked: blocked, blockedReason: invalid ? 'invalid_counteroffer' : protectedState ? 'deal_state_protected' : null } }];"
       }
@@ -53,13 +65,29 @@
       "name": "IF Evaluation Allowed",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1160, 300],
+      "position": [
+        1160,
+        300
+      ],
       "parameters": {
         "conditions": {
-          "options": { "version": 2, "leftValue": "", "caseSensitive": true, "typeValidation": "strict" },
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
           "combinator": "and",
           "conditions": [
-            { "id": "allowed", "leftValue": "={{ $json.blocked }}", "rightValue": false, "operator": { "type": "boolean", "operation": "equals" } }
+            {
+              "id": "allowed",
+              "leftValue": "={{ $json.blocked }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
           ]
         }
       }
@@ -69,7 +97,10 @@
       "name": "Persist Negotiation Evaluation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 150],
+      "position": [
+        1390,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/negotiations/evaluation",
@@ -83,7 +114,10 @@
       "name": "Respond Evaluation",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1620, 150],
+      "position": [
+        1620,
+        150
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -95,7 +129,10 @@
       "name": "Respond Evaluation Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1390, 450],
+      "position": [
+        1390,
+        450
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -104,17 +141,79 @@
     }
   ],
   "connections": {
-    "Counteroffer Evaluation Webhook": { "main": [[{ "node": "Fetch Counteroffer Context", "type": "main", "index": 0 }]] },
-    "Fetch Counteroffer Context": { "main": [[{ "node": "Evaluate Counteroffer", "type": "main", "index": 0 }]] },
-    "Evaluate Counteroffer": { "main": [[{ "node": "Enforce Negotiation Guardrails", "type": "main", "index": 0 }]] },
-    "Enforce Negotiation Guardrails": { "main": [[{ "node": "IF Evaluation Allowed", "type": "main", "index": 0 }]] },
-    "IF Evaluation Allowed": {
+    "Counteroffer Evaluation Webhook": {
       "main": [
-        [{ "node": "Persist Negotiation Evaluation", "type": "main", "index": 0 }],
-        [{ "node": "Respond Evaluation Blocked", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Fetch Counteroffer Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Persist Negotiation Evaluation": { "main": [[{ "node": "Respond Evaluation", "type": "main", "index": 0 }]] }
+    "Fetch Counteroffer Context": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Counteroffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Counteroffer": {
+      "main": [
+        [
+          {
+            "node": "Enforce Negotiation Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Negotiation Guardrails": {
+      "main": [
+        [
+          {
+            "node": "IF Evaluation Allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Evaluation Allowed": {
+      "main": [
+        [
+          {
+            "node": "Persist Negotiation Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Evaluation Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Negotiation Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Respond Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -125,5 +224,6 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "active": false
+  "active": false,
+  "id": "eeee32dc-f702-47b1-a115-6a2eb0b20dfe"
 }

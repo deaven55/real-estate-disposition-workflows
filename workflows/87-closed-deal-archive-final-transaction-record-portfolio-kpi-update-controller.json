@@ -2,62 +2,501 @@
   "name": "WF-449 — Closed Deal Archive → Final Transaction Record & Portfolio KPI Update Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"closed-deal-archive-final-transaction-kpi-update","responseMode":"lastNode","options":{}},
-      "id":"w449a","name":"Closed Deal Archive Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "closed-deal-archive-final-transaction-kpi-update",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w449a",
+      "name": "Closed Deal Archive Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const settlementId=String(b.settlementId??'').trim(); const archiveEventId=String(b.archiveEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,settlementId,archiveEventId,receivedAt:new Date().toISOString()}}];"},
-      "id":"w449b","name":"Normalize Closed Deal Archive Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const settlementId=String(b.settlementId??'').trim(); const archiveEventId=String(b.archiveEventId??b.eventId??'').trim(); return [{json:{...b,leadId,dealId,contractId,settlementId,archiveEventId,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w449b",
+      "name": "Normalize Closed Deal Archive Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"},{"value1":"={{$json.settlementId}}","operation":"notEmpty"},{"value1":"={{$json.archiveEventId}}","operation":"notEmpty"}]}},
-      "id":"w449c","name":"Validate Closed Deal Archive Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.contractId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.settlementId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.archiveEventId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w449c",
+      "name": "Validate Closed Deal Archive Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/closed-archive-final-kpi-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"archiveEventId","value":"={{$json.archiveEventId}}"}]},"options":{}},
-      "id":"w449d","name":"Fetch Closed Deal Archive KPI Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/closed-archive-final-kpi-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "archiveEventId",
+              "value": "={{$json.archiveEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w449d",
+      "name": "Fetch Closed Deal Archive KPI Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Closed Deal Archive Request').first().json; const ctx=$json.context??$json; const flags=[]; const state=String(ctx.dealState??ctx.lifecycleState??ctx.status??'').toLowerCase(); if(state!=='closed')flags.push('deal_not_closed'); if(ctx.settlementReconciled!==true&&ctx.settlementState!=='reconciled')flags.push('settlement_not_reconciled'); if(ctx.financialsReconciled!==true&&ctx.financialReconciliationState!=='reconciled')flags.push('financials_not_reconciled'); if(ctx.transactionCompleted!==true&&ctx.transactionCompletionState!=='completed')flags.push('transaction_not_completed'); if(ctx.archiveReady===false)flags.push('archive_not_ready'); const n=v=>Number.isFinite(Number(v))?Number(v):0; const grossRevenue=n(ctx.grossRevenue??ctx.assignmentFee); const purchasePrice=n(ctx.purchasePrice); const closingCosts=n(ctx.closingCosts); const otherCosts=n(ctx.otherCosts); const totalCosts=Math.round((purchasePrice+closingCosts+otherCosts)*100)/100; const netProfit=Math.round((grossRevenue-totalCosts)*100)/100; const investedCapital=Math.max(0,totalCosts); const roi=investedCapital>0?Math.round((netProfit/investedCapital)*10000)/100:0; const profitMargin=grossRevenue>0?Math.round((netProfit/grossRevenue)*10000)/100:0; const source=String(ctx.leadSource??ctx.source??'unknown').trim()||'unknown'; const channel=String(ctx.marketingChannel??ctx.channel??'unknown').trim()||'unknown'; const campaign=String(ctx.campaignId??ctx.campaign??'unknown').trim()||'unknown'; const closedAt=ctx.closedAt??ctx.closingCompletedAt??null; const contractAt=ctx.contractExecutedAt??ctx.contractSignedAt??null; const leadAt=ctx.leadCreatedAt??null; const days=(a,b)=>a&&b?Math.max(0,Math.round((new Date(b)-new Date(a))/86400000*100)/100):null; const leadToCloseDays=days(leadAt,closedAt); const contractToCloseDays=days(contractAt,closedAt); const transactionRecord={leadId:input.leadId,dealId:input.dealId,contractId:input.contractId,settlementId:input.settlementId,closedAt,grossRevenue,purchasePrice,closingCosts,otherCosts,totalCosts,netProfit,roi,profitMargin,source,channel,campaign,leadToCloseDays,contractToCloseDays}; const finalizable=flags.length===0; let decision='hold_archive',nextAction='resolve_archive_prerequisites',status='pending'; if(finalizable){decision='archive_and_update_kpis';nextAction='persist_permanent_transaction_record_and_refresh_portfolio_kpis';status='ready_to_archive';} const idempotencyKey='wf449:'+input.leadId+':'+input.dealId+':'+input.settlementId+':'+input.archiveEventId; return [{json:{...input,closedDealArchive:{status,decision,nextAction,transactionRecord,flags,archiveReady:finalizable,requiresHumanReview:!finalizable,confidenceScore:finalizable?99:25},idempotencyKey}}];"},
-      "id":"w449e","name":"Build Final Transaction Record & KPI Inputs","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Closed Deal Archive Request').first().json; const ctx=$json.context??$json; const flags=[]; const state=String(ctx.dealState??ctx.lifecycleState??ctx.status??'').toLowerCase(); if(state!=='closed')flags.push('deal_not_closed'); if(ctx.settlementReconciled!==true&&ctx.settlementState!=='reconciled')flags.push('settlement_not_reconciled'); if(ctx.financialsReconciled!==true&&ctx.financialReconciliationState!=='reconciled')flags.push('financials_not_reconciled'); if(ctx.transactionCompleted!==true&&ctx.transactionCompletionState!=='completed')flags.push('transaction_not_completed'); if(ctx.archiveReady===false)flags.push('archive_not_ready'); const n=v=>Number.isFinite(Number(v))?Number(v):0; const grossRevenue=n(ctx.grossRevenue??ctx.assignmentFee); const purchasePrice=n(ctx.purchasePrice); const closingCosts=n(ctx.closingCosts); const otherCosts=n(ctx.otherCosts); const totalCosts=Math.round((purchasePrice+closingCosts+otherCosts)*100)/100; const netProfit=Math.round((grossRevenue-totalCosts)*100)/100; const investedCapital=Math.max(0,totalCosts); const roi=investedCapital>0?Math.round((netProfit/investedCapital)*10000)/100:0; const profitMargin=grossRevenue>0?Math.round((netProfit/grossRevenue)*10000)/100:0; const source=String(ctx.leadSource??ctx.source??'unknown').trim()||'unknown'; const channel=String(ctx.marketingChannel??ctx.channel??'unknown').trim()||'unknown'; const campaign=String(ctx.campaignId??ctx.campaign??'unknown').trim()||'unknown'; const closedAt=ctx.closedAt??ctx.closingCompletedAt??null; const contractAt=ctx.contractExecutedAt??ctx.contractSignedAt??null; const leadAt=ctx.leadCreatedAt??null; const days=(a,b)=>a&&b?Math.max(0,Math.round((new Date(b)-new Date(a))/86400000*100)/100):null; const leadToCloseDays=days(leadAt,closedAt); const contractToCloseDays=days(contractAt,closedAt); const transactionRecord={leadId:input.leadId,dealId:input.dealId,contractId:input.contractId,settlementId:input.settlementId,closedAt,grossRevenue,purchasePrice,closingCosts,otherCosts,totalCosts,netProfit,roi,profitMargin,source,channel,campaign,leadToCloseDays,contractToCloseDays}; const finalizable=flags.length===0; let decision='hold_archive',nextAction='resolve_archive_prerequisites',status='pending'; if(finalizable){decision='archive_and_update_kpis';nextAction='persist_permanent_transaction_record_and_refresh_portfolio_kpis';status='ready_to_archive';} const idempotencyKey='wf449:'+input.leadId+':'+input.dealId+':'+input.settlementId+':'+input.archiveEventId; return [{json:{...input,closedDealArchive:{status,decision,nextAction,transactionRecord,flags,archiveReady:finalizable,requiresHumanReview:!finalizable,confidenceScore:finalizable?99:25},idempotencyKey}}];"
+      },
+      "id": "w449e",
+      "name": "Build Final Transaction Record & KPI Inputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/permanent-closed-transaction-record","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"transactionRecord","value":"={{JSON.stringify($json.closedDealArchive.transactionRecord)}}"},{"name":"archiveReady","value":"={{$json.closedDealArchive.archiveReady}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w449f","name":"Persist Permanent Closed Transaction Record","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/permanent-closed-transaction-record",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "transactionRecord",
+              "value": "={{JSON.stringify($json.closedDealArchive.transactionRecord)}}"
+            },
+            {
+              "name": "archiveReady",
+              "value": "={{$json.closedDealArchive.archiveReady}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w449f",
+      "name": "Persist Permanent Closed Transaction Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-kpi-update","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"dealId","value":"={{$json.dealId}}"},{"name":"closedDealCountDelta","value":"={{$json.closedDealArchive.archiveReady?1:0}}"},{"name":"grossRevenueDelta","value":"={{$json.closedDealArchive.transactionRecord.grossRevenue}}"},{"name":"netProfitDelta","value":"={{$json.closedDealArchive.transactionRecord.netProfit}}"},{"name":"assignmentFeeDelta","value":"={{$json.closedDealArchive.transactionRecord.grossRevenue}}"},{"name":"closingCostsDelta","value":"={{$json.closedDealArchive.transactionRecord.closingCosts}}"},{"name":"otherCostsDelta","value":"={{$json.closedDealArchive.transactionRecord.otherCosts}}"},{"name":"idempotencyKey","value":"={{'wf449:kpi:'+$json.leadId+':'+$json.dealId+':'+$json.archiveEventId}}"}]},"options":{}},
-      "id":"w449g","name":"Update Portfolio KPI Snapshot","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/portfolio-kpi-update",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "closedDealCountDelta",
+              "value": "={{$json.closedDealArchive.archiveReady?1:0}}"
+            },
+            {
+              "name": "grossRevenueDelta",
+              "value": "={{$json.closedDealArchive.transactionRecord.grossRevenue}}"
+            },
+            {
+              "name": "netProfitDelta",
+              "value": "={{$json.closedDealArchive.transactionRecord.netProfit}}"
+            },
+            {
+              "name": "assignmentFeeDelta",
+              "value": "={{$json.closedDealArchive.transactionRecord.grossRevenue}}"
+            },
+            {
+              "name": "closingCostsDelta",
+              "value": "={{$json.closedDealArchive.transactionRecord.closingCosts}}"
+            },
+            {
+              "name": "otherCostsDelta",
+              "value": "={{$json.closedDealArchive.transactionRecord.otherCosts}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf449:kpi:'+$json.leadId+':'+$json.dealId+':'+$json.archiveEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w449g",
+      "name": "Update Portfolio KPI Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/closed-deal-source-attribution","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"dealId","value":"={{$json.dealId}}"},{"name":"source","value":"={{$json.closedDealArchive.transactionRecord.source}}"},{"name":"channel","value":"={{$json.closedDealArchive.transactionRecord.channel}}"},{"name":"campaign","value":"={{$json.closedDealArchive.transactionRecord.campaign}}"},{"name":"grossRevenue","value":"={{$json.closedDealArchive.transactionRecord.grossRevenue}}"},{"name":"netProfit","value":"={{$json.closedDealArchive.transactionRecord.netProfit}}"},{"name":"idempotencyKey","value":"={{'wf449:attribution:'+$json.leadId+':'+$json.dealId+':'+$json.archiveEventId}}"}]},"options":{}},
-      "id":"w449h","name":"Update Closed Deal Source Attribution","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/closed-deal-source-attribution",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.closedDealArchive.transactionRecord.source}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.closedDealArchive.transactionRecord.channel}}"
+            },
+            {
+              "name": "campaign",
+              "value": "={{$json.closedDealArchive.transactionRecord.campaign}}"
+            },
+            {
+              "name": "grossRevenue",
+              "value": "={{$json.closedDealArchive.transactionRecord.grossRevenue}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.closedDealArchive.transactionRecord.netProfit}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf449:attribution:'+$json.leadId+':'+$json.dealId+':'+$json.archiveEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w449h",
+      "name": "Update Closed Deal Source Attribution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"closed_deal_archive_final_transaction_record_portfolio_kpi_update"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"settlementId","value":"={{$json.settlementId}}"},{"name":"decision","value":"={{$json.closedDealArchive.decision}}"},{"name":"archiveReady","value":"={{$json.closedDealArchive.archiveReady}}"},{"name":"netProfit","value":"={{$json.closedDealArchive.transactionRecord.netProfit}}"},{"name":"idempotencyKey","value":"={{'wf449:activity:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.archiveEventId}}"}]},"options":{}},
-      "id":"w449i","name":"Record Archive KPI Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1760,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "closed_deal_archive_final_transaction_record_portfolio_kpi_update"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "settlementId",
+              "value": "={{$json.settlementId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.closedDealArchive.decision}}"
+            },
+            {
+              "name": "archiveReady",
+              "value": "={{$json.closedDealArchive.archiveReady}}"
+            },
+            {
+              "name": "netProfit",
+              "value": "={{$json.closedDealArchive.transactionRecord.netProfit}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf449:activity:'+$json.leadId+':'+$json.dealId+':'+$json.settlementId+':'+$json.archiveEventId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w449i",
+      "name": "Record Archive KPI Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w449j","name":"Respond Closed Deal Archive Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1980,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w449j",
+      "name": "Respond Closed Deal Archive Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, contractId, settlementId and archiveEventId are required'} }}","options":{}},
-      "id":"w449k","name":"Respond Invalid Closed Deal Archive Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, dealId, contractId, settlementId and archiveEventId are required'} }}",
+        "options": {}
+      },
+      "id": "w449k",
+      "name": "Respond Invalid Closed Deal Archive Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Closed Deal Archive Webhook":{"main":[[{"node":"Normalize Closed Deal Archive Request","type":"main","index":0}]]},
-    "Normalize Closed Deal Archive Request":{"main":[[{"node":"Validate Closed Deal Archive Request","type":"main","index":0}]]},
-    "Validate Closed Deal Archive Request":{"main":[[{"node":"Fetch Closed Deal Archive KPI Context","type":"main","index":0}],[{"node":"Respond Invalid Closed Deal Archive Request","type":"main","index":0}]]},
-    "Fetch Closed Deal Archive KPI Context":{"main":[[{"node":"Build Final Transaction Record & KPI Inputs","type":"main","index":0}]]},
-    "Build Final Transaction Record & KPI Inputs":{"main":[[{"node":"Persist Permanent Closed Transaction Record","type":"main","index":0}]]},
-    "Persist Permanent Closed Transaction Record":{"main":[[{"node":"Update Portfolio KPI Snapshot","type":"main","index":0}]]},
-    "Update Portfolio KPI Snapshot":{"main":[[{"node":"Update Closed Deal Source Attribution","type":"main","index":0}]]},
-    "Update Closed Deal Source Attribution":{"main":[[{"node":"Record Archive KPI Activity","type":"main","index":0}]]},
-    "Record Archive KPI Activity":{"main":[[{"node":"Respond Closed Deal Archive Result","type":"main","index":0}]]}
+  "connections": {
+    "Closed Deal Archive Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Closed Deal Archive Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Closed Deal Archive Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Closed Deal Archive Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Closed Deal Archive Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Closed Deal Archive KPI Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Closed Deal Archive Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Closed Deal Archive KPI Context": {
+      "main": [
+        [
+          {
+            "node": "Build Final Transaction Record & KPI Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Transaction Record & KPI Inputs": {
+      "main": [
+        [
+          {
+            "node": "Persist Permanent Closed Transaction Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Permanent Closed Transaction Record": {
+      "main": [
+        [
+          {
+            "node": "Update Portfolio KPI Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Portfolio KPI Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Update Closed Deal Source Attribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Closed Deal Source Attribution": {
+      "main": [
+        [
+          {
+            "node": "Record Archive KPI Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Archive KPI Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Closed Deal Archive Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-449"},{"name":"closed-deal"},{"name":"archive"},{"name":"transaction-record"},{"name":"portfolio-kpi"},{"name":"source-attribution"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-449","contractStatus":"scaffolded","idempotency":"wf449:{leadId}:{dealId}:{settlementId}:{archiveEventId}","notes":"Creates a permanent closed transaction record and updates portfolio KPI/source attribution only after closed state, settlement reconciliation, financial reconciliation, transaction completion and archive readiness are verified. Production use requires canonical closed-deal accounting definitions, atomic KPI upsert semantics, verified InsulaCRM analytics schema and production API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-449"
+    },
+    {
+      "name": "closed-deal"
+    },
+    {
+      "name": "archive"
+    },
+    {
+      "name": "transaction-record"
+    },
+    {
+      "name": "portfolio-kpi"
+    },
+    {
+      "name": "source-attribution"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-449",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf449:{leadId}:{dealId}:{settlementId}:{archiveEventId}",
+    "notes": "Creates a permanent closed transaction record and updates portfolio KPI/source attribution only after closed state, settlement reconciliation, financial reconciliation, transaction completion and archive readiness are verified. Production use requires canonical closed-deal accounting definitions, atomic KPI upsert semantics, verified InsulaCRM analytics schema and production API contracts."
+  },
+  "id": "96ae1a75-fc85-4a4f-a8ca-81968dd604d8"
 }

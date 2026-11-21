@@ -300,5 +300,6 @@
   "meta": {
     "purpose": "Vendor-neutral provider adapter boundary for communications, e-signature, title/closing and funds.",
     "status": "deployment-configurable"
-  }
+  },
+  "id": "739fe221-a6b3-4c9c-a3ee-677a139f7db1"
 }

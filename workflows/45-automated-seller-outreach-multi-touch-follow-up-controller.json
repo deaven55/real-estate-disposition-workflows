@@ -12,7 +12,10 @@
       "name": "Seller Outreach Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Seller Outreach Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -39,7 +45,10 @@
       "name": "Validate Seller Outreach Identity",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -49,10 +58,22 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"sequenceId","value":"={{$json.sequenceId}}"},
-            {"name":"step","value":"={{$json.step}}"},
-            {"name":"channel","value":"={{$json.channel}}"}
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.sequenceId}}"
+            },
+            {
+              "name": "step",
+              "value": "={{$json.step}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            }
           ]
         },
         "options": {}
@@ -61,7 +82,10 @@
       "name": "Fetch Seller Outreach Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [660, -80]
+      "position": [
+        660,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -71,7 +95,10 @@
       "name": "Determine Outreach Eligibility & Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, -80]
+      "position": [
+        880,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -81,13 +108,34 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"channel","value":"={{$json.outreachDecision.channel}}"},
-            {"name":"sequenceId","value":"={{$json.outreachDecision.sequenceId}}"},
-            {"name":"step","value":"={{$json.outreachDecision.step}}"},
-            {"name":"message","value":"={{$json.outreachDecision.message}}"},
-            {"name":"status","value":"={{$json.outreachDecision.status}}"},
-            {"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.outreachDecision.channel}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.outreachDecision.sequenceId}}"
+            },
+            {
+              "name": "step",
+              "value": "={{$json.outreachDecision.step}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.outreachDecision.message}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.outreachDecision.status}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
           ]
         },
         "options": {}
@@ -96,7 +144,10 @@
       "name": "Dispatch Seller Outreach",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, -80]
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -106,13 +157,34 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"type","value":"seller_outreach_follow_up"},
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"channel","value":"={{$json.outreachDecision.channel}}"},
-            {"name":"sequenceId","value":"={{$json.outreachDecision.sequenceId}}"},
-            {"name":"step","value":"={{$json.outreachDecision.step}}"},
-            {"name":"status","value":"={{$json.outreachDecision.status}}"},
-            {"name":"idempotencyKey","value":"={{'wf407:activity:'+$json.leadId+':'+$json.outreachDecision.sequenceId+':'+$json.outreachDecision.step}}"}
+            {
+              "name": "type",
+              "value": "seller_outreach_follow_up"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.outreachDecision.channel}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.outreachDecision.sequenceId}}"
+            },
+            {
+              "name": "step",
+              "value": "={{$json.outreachDecision.step}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.outreachDecision.status}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf407:activity:'+$json.leadId+':'+$json.outreachDecision.sequenceId+':'+$json.outreachDecision.step}}"
+            }
           ]
         },
         "options": {}
@@ -121,7 +193,10 @@
       "name": "Record Seller Outreach Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, -80]
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -133,7 +208,10 @@
       "name": "Respond Seller Outreach",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, -80]
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -145,17 +223,97 @@
       "name": "Respond Invalid Outreach Request",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [660, 140]
+      "position": [
+        660,
+        140
+      ]
     }
   ],
   "connections": {
-    "Seller Outreach Webhook": {"main":[[{"node":"Normalize Seller Outreach Request","type":"main","index":0}]]},
-    "Normalize Seller Outreach Request": {"main":[[{"node":"Validate Seller Outreach Identity","type":"main","index":0}]]},
-    "Validate Seller Outreach Identity": {"main":[[{"node":"Fetch Seller Outreach Context","type":"main","index":0}],[{"node":"Respond Invalid Outreach Request","type":"main","index":0}]]},
-    "Fetch Seller Outreach Context": {"main":[[{"node":"Determine Outreach Eligibility & Message","type":"main","index":0}]]},
-    "Determine Outreach Eligibility & Message": {"main":[[{"node":"Dispatch Seller Outreach","type":"main","index":0}]]},
-    "Dispatch Seller Outreach": {"main":[[{"node":"Record Seller Outreach Activity","type":"main","index":0}]]},
-    "Record Seller Outreach Activity": {"main":[[{"node":"Respond Seller Outreach","type":"main","index":0}]]}
+    "Seller Outreach Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Seller Outreach Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Seller Outreach Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Seller Outreach Identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Seller Outreach Identity": {
+      "main": [
+        [
+          {
+            "node": "Fetch Seller Outreach Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Outreach Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Seller Outreach Context": {
+      "main": [
+        [
+          {
+            "node": "Determine Outreach Eligibility & Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Outreach Eligibility & Message": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Seller Outreach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Seller Outreach": {
+      "main": [
+        [
+          {
+            "node": "Record Seller Outreach Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Seller Outreach Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Seller Outreach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -164,16 +322,27 @@
     "saveManualExecutions": true
   },
   "tags": [
-    {"name":"WF-407"},
-    {"name":"seller-outreach"},
-    {"name":"follow-up"},
-    {"name":"communications"},
-    {"name":"InsulaCRM"}
+    {
+      "name": "WF-407"
+    },
+    {
+      "name": "seller-outreach"
+    },
+    {
+      "name": "follow-up"
+    },
+    {
+      "name": "communications"
+    },
+    {
+      "name": "InsulaCRM"
+    }
   ],
   "meta": {
-    "workflowId":"WF-407",
-    "contractStatus":"scaffolded",
-    "idempotency":"wf407:{leadId}:{sequenceId}:{step}",
-    "notes":"Outreach dispatch is scaffolded pending production communication provider, consent policy, template schema, and verified InsulaCRM API contract."
-  }
+    "workflowId": "WF-407",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf407:{leadId}:{sequenceId}:{step}",
+    "notes": "Outreach dispatch is scaffolded pending production communication provider, consent policy, template schema, and verified InsulaCRM API contract."
+  },
+  "id": "b6c73a52-046b-4704-bc99-fd47df48dd60"
 }

@@ -360,5 +360,6 @@
     "purpose": "Authenticated provider callback boundary that deduplicates callbacks before lifecycle state changes.",
     "status": "deployment-configurable",
     "activationRequirement": "Configure the Webhook Header Auth credential in n8n before activation."
-  }
+  },
+  "id": "066b2b15-9517-4120-89cb-6b23e8ffd981"
 }

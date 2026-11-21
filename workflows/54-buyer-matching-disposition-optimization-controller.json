@@ -2,52 +2,351 @@
   "name": "WF-416 — Buyer Matching & Disposition Optimization Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"buyer-matching-disposition-optimization","responseMode":"lastNode","options":{}},
-      "id":"w416a","name":"Buyer Matching Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "buyer-matching-disposition-optimization",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w416a",
+      "name": "Buyer Matching Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,receivedAt:new Date().toISOString()}}];"},
-      "id":"w416b","name":"Normalize Buyer Matching Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const dealId=String(b.dealId??'').trim(); return [{json:{...b,leadId,propertyId,dealId,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w416b",
+      "name": "Normalize Buyer Matching Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.propertyId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"}]}},
-      "id":"w416c","name":"Validate Buyer Matching Identity","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.propertyId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w416c",
+      "name": "Validate Buyer Matching Identity",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/buyer-matching-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"}]},"options":{}},
-      "id":"w416d","name":"Fetch Buyer Matching Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/buyer-matching-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w416d",
+      "name": "Fetch Buyer Matching Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Buyer Matching Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const p=ctx.property??{}; const buyers=Array.isArray(ctx.buyers)?ctx.buyers:[]; const num=v=>Number.isFinite(Number(v))?Number(v):null; const arv=num(d.arv??p.arv); const assignmentPrice=num(d.assignmentPrice??d.purchasePrice); const repairs=num(d.repairs??p.repairs); const propertyType=String(p.propertyType??p.type??'unknown').toLowerCase(); const city=String(p.city??'').toLowerCase(); const state=String(p.state??'').toLowerCase(); const zip=String(p.zip??p.postalCode??''); const eligible=buyers.map(b=>{const buyBox=b.buyBox??{}; const minPrice=num(buyBox.minPrice); const maxPrice=num(buyBox.maxPrice); const strategies=Array.isArray(buyBox.strategies)?buyBox.strategies.map(x=>String(x).toLowerCase()):[]; const geos=Array.isArray(buyBox.geographies)?buyBox.geographies.map(x=>String(x).toLowerCase()):[]; const scoreParts=[]; if(b.active===false||b.suppressed||b.dnc) return {...b,_blocked:'buyer_blocked'}; if(maxPrice!==null&&assignmentPrice!==null)scoreParts.push(assignmentPrice<=maxPrice?25:0); if(minPrice!==null&&assignmentPrice!==null)scoreParts.push(assignmentPrice>=minPrice?10:0); if(strategies.length)scoreParts.push(strategies.includes(propertyType)?20:0); else scoreParts.push(10); if(geos.length){const target=[city,state,zip].filter(Boolean);scoreParts.push(geos.some(g=>target.some(t=>g.includes(t)))?20:0);} else scoreParts.push(10); if(b.proofOfFundsVerified)scoreParts.push(10); if(b.assignmentEligible)scoreParts.push(5); if(b.responseRate!==undefined)scoreParts.push(Math.max(0,Math.min(5,Number(b.responseRate)*5))); const score=scoreParts.reduce((a,x)=>a+x,0); return {...b,matchScore:Math.round(score),_blocked:null};}).filter(b=>!b._blocked).sort((a,b)=>b.matchScore-a.matchScore); const tiers=eligible.map(b=>({...b,tier:b.matchScore>=80?'A':b.matchScore>=65?'B':b.matchScore>=50?'C':'D'})); const recommended=tiers.filter(b=>b.tier==='A'||b.tier==='B').slice(0,10); const flags=[]; if(!buyers.length)flags.push('no_buyers_available'); if(!recommended.length)flags.push('no_qualified_buyers'); if(assignmentPrice===null)flags.push('missing_assignment_price'); if(arv===null)flags.push('missing_arv'); const optimization= recommended.length? (recommended[0].matchScore>=80?'high_confidence_disposition':'targeted_buyer_distribution'):'expand_buyer_pool'; const confidence=Math.round(Math.max(0,Math.min(100,(buyers.length?20:0)+(recommended.length?35:0)+(assignmentPrice!==null?20:0)+(arv!==null?15:0)+(repairs!==null?10:0)))); const idempotencyKey='wf416:'+input.leadId+':'+input.propertyId+':'+input.dealId; return [{json:{...input,buyerMatching:{status:recommended.length?'optimized':'needs_buyer_pool',optimization,recommendedBuyers:recommended.map(b=>({buyerId:b.id??b.buyerId??null,name:b.name??null,matchScore:b.matchScore,tier:b.tier,proofOfFundsVerified:!!b.proofOfFundsVerified,assignmentEligible:!!b.assignmentEligible})),candidateCount:tiers.length,flags,confidenceScore:confidence,distribution:{maxRecipients:10,preferredTiers:['A','B'],excludeInactive:true,excludeSuppressed:true,excludeDNC:true}},idempotencyKey}}];"},
-      "id":"w416e","name":"Score Buyers & Optimize Disposition","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Buyer Matching Request').first().json; const ctx=$json.context??$json; const d=ctx.deal??{}; const p=ctx.property??{}; const buyers=Array.isArray(ctx.buyers)?ctx.buyers:[]; const num=v=>Number.isFinite(Number(v))?Number(v):null; const arv=num(d.arv??p.arv); const assignmentPrice=num(d.assignmentPrice??d.purchasePrice); const repairs=num(d.repairs??p.repairs); const propertyType=String(p.propertyType??p.type??'unknown').toLowerCase(); const city=String(p.city??'').toLowerCase(); const state=String(p.state??'').toLowerCase(); const zip=String(p.zip??p.postalCode??''); const eligible=buyers.map(b=>{const buyBox=b.buyBox??{}; const minPrice=num(buyBox.minPrice); const maxPrice=num(buyBox.maxPrice); const strategies=Array.isArray(buyBox.strategies)?buyBox.strategies.map(x=>String(x).toLowerCase()):[]; const geos=Array.isArray(buyBox.geographies)?buyBox.geographies.map(x=>String(x).toLowerCase()):[]; const scoreParts=[]; if(b.active===false||b.suppressed||b.dnc) return {...b,_blocked:'buyer_blocked'}; if(maxPrice!==null&&assignmentPrice!==null)scoreParts.push(assignmentPrice<=maxPrice?25:0); if(minPrice!==null&&assignmentPrice!==null)scoreParts.push(assignmentPrice>=minPrice?10:0); if(strategies.length)scoreParts.push(strategies.includes(propertyType)?20:0); else scoreParts.push(10); if(geos.length){const target=[city,state,zip].filter(Boolean);scoreParts.push(geos.some(g=>target.some(t=>g.includes(t)))?20:0);} else scoreParts.push(10); if(b.proofOfFundsVerified)scoreParts.push(10); if(b.assignmentEligible)scoreParts.push(5); if(b.responseRate!==undefined)scoreParts.push(Math.max(0,Math.min(5,Number(b.responseRate)*5))); const score=scoreParts.reduce((a,x)=>a+x,0); return {...b,matchScore:Math.round(score),_blocked:null};}).filter(b=>!b._blocked).sort((a,b)=>b.matchScore-a.matchScore); const tiers=eligible.map(b=>({...b,tier:b.matchScore>=80?'A':b.matchScore>=65?'B':b.matchScore>=50?'C':'D'})); const recommended=tiers.filter(b=>b.tier==='A'||b.tier==='B').slice(0,10); const flags=[]; if(!buyers.length)flags.push('no_buyers_available'); if(!recommended.length)flags.push('no_qualified_buyers'); if(assignmentPrice===null)flags.push('missing_assignment_price'); if(arv===null)flags.push('missing_arv'); const optimization= recommended.length? (recommended[0].matchScore>=80?'high_confidence_disposition':'targeted_buyer_distribution'):'expand_buyer_pool'; const confidence=Math.round(Math.max(0,Math.min(100,(buyers.length?20:0)+(recommended.length?35:0)+(assignmentPrice!==null?20:0)+(arv!==null?15:0)+(repairs!==null?10:0)))); const idempotencyKey='wf416:'+input.leadId+':'+input.propertyId+':'+input.dealId; return [{json:{...input,buyerMatching:{status:recommended.length?'optimized':'needs_buyer_pool',optimization,recommendedBuyers:recommended.map(b=>({buyerId:b.id??b.buyerId??null,name:b.name??null,matchScore:b.matchScore,tier:b.tier,proofOfFundsVerified:!!b.proofOfFundsVerified,assignmentEligible:!!b.assignmentEligible})),candidateCount:tiers.length,flags,confidenceScore:confidence,distribution:{maxRecipients:10,preferredTiers:['A','B'],excludeInactive:true,excludeSuppressed:true,excludeDNC:true}},idempotencyKey}}];"
+      },
+      "id": "w416e",
+      "name": "Score Buyers & Optimize Disposition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/deals/buyer-matching","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"buyerMatching","value":"={{JSON.stringify($json.buyerMatching)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w416f","name":"Persist Buyer Matching Optimization","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/deals/buyer-matching",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "buyerMatching",
+              "value": "={{JSON.stringify($json.buyerMatching)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w416f",
+      "name": "Persist Buyer Matching Optimization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"buyer_matching_disposition_optimization"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"status","value":"={{$json.buyerMatching.status}}"},{"name":"optimization","value":"={{$json.buyerMatching.optimization}}"},{"name":"recommendedBuyerCount","value":"={{$json.buyerMatching.recommendedBuyers.length}}"},{"name":"confidenceScore","value":"={{$json.buyerMatching.confidenceScore}}"},{"name":"idempotencyKey","value":"={{'wf416:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId}}"}]},"options":{}},
-      "id":"w416g","name":"Record Buyer Matching Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "buyer_matching_disposition_optimization"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.buyerMatching.status}}"
+            },
+            {
+              "name": "optimization",
+              "value": "={{$json.buyerMatching.optimization}}"
+            },
+            {
+              "name": "recommendedBuyerCount",
+              "value": "={{$json.buyerMatching.recommendedBuyers.length}}"
+            },
+            {
+              "name": "confidenceScore",
+              "value": "={{$json.buyerMatching.confidenceScore}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf416:activity:'+$json.leadId+':'+$json.propertyId+':'+$json.dealId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w416g",
+      "name": "Record Buyer Matching Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w416h","name":"Respond Buyer Matching Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w416h",
+      "name": "Respond Buyer Matching Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, propertyId and dealId are required'} }}","options":{}},
-      "id":"w416i","name":"Respond Invalid Buyer Matching Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, propertyId and dealId are required'} }}",
+        "options": {}
+      },
+      "id": "w416i",
+      "name": "Respond Invalid Buyer Matching Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Buyer Matching Webhook":{"main":[[{"node":"Normalize Buyer Matching Request","type":"main","index":0}]]},
-    "Normalize Buyer Matching Request":{"main":[[{"node":"Validate Buyer Matching Identity","type":"main","index":0}]]},
-    "Validate Buyer Matching Identity":{"main":[[{"node":"Fetch Buyer Matching Context","type":"main","index":0}],[{"node":"Respond Invalid Buyer Matching Request","type":"main","index":0}]]},
-    "Fetch Buyer Matching Context":{"main":[[{"node":"Score Buyers & Optimize Disposition","type":"main","index":0}]]},
-    "Score Buyers & Optimize Disposition":{"main":[[{"node":"Persist Buyer Matching Optimization","type":"main","index":0}]]},
-    "Persist Buyer Matching Optimization":{"main":[[{"node":"Record Buyer Matching Activity","type":"main","index":0}]]},
-    "Record Buyer Matching Activity":{"main":[[{"node":"Respond Buyer Matching Result","type":"main","index":0}]]}
+  "connections": {
+    "Buyer Matching Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Buyer Matching Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Buyer Matching Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Buyer Matching Identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Buyer Matching Identity": {
+      "main": [
+        [
+          {
+            "node": "Fetch Buyer Matching Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Buyer Matching Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Buyer Matching Context": {
+      "main": [
+        [
+          {
+            "node": "Score Buyers & Optimize Disposition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Buyers & Optimize Disposition": {
+      "main": [
+        [
+          {
+            "node": "Persist Buyer Matching Optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Buyer Matching Optimization": {
+      "main": [
+        [
+          {
+            "node": "Record Buyer Matching Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Buyer Matching Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Buyer Matching Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-416"},{"name":"buyer-matching"},{"name":"disposition"},{"name":"optimization"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-416","contractStatus":"scaffolded","idempotency":"wf416:{leadId}:{propertyId}:{dealId}","notes":"Buyer matching and disposition optimization is deterministic scaffolding pending verified InsulaCRM buyer schema, live buyer buy-box data, proof-of-funds verification, and production distribution API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-416"
+    },
+    {
+      "name": "buyer-matching"
+    },
+    {
+      "name": "disposition"
+    },
+    {
+      "name": "optimization"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-416",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf416:{leadId}:{propertyId}:{dealId}",
+    "notes": "Buyer matching and disposition optimization is deterministic scaffolding pending verified InsulaCRM buyer schema, live buyer buy-box data, proof-of-funds verification, and production distribution API contracts."
+  },
+  "id": "7c42ad9a-3571-4ae3-a01f-e676b8f47734"
 }

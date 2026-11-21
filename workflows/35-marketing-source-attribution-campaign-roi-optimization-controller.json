@@ -12,7 +12,10 @@
       "name": "Marketing ROI Optimization Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Marketing ROI Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -31,7 +37,10 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Accept", "value": "application/json" }
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
           ]
         },
         "options": {}
@@ -40,7 +49,10 @@
       "name": "Fetch InsulaCRM Marketing Attribution Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -50,7 +62,10 @@
       "name": "Validate Marketing Attribution Dataset",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -60,7 +75,10 @@
       "name": "Rank Sources & Generate ROI Optimization Recommendations",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -69,8 +87,14 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Accept", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -82,7 +106,10 @@
       "name": "Persist Marketing ROI Optimization to InsulaCRM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, 0]
+      "position": [
+        1100,
+        0
+      ]
     },
     {
       "parameters": {
@@ -91,7 +118,10 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -103,7 +133,10 @@
       "name": "Record Marketing ROI Analytics Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, 0]
+      "position": [
+        1320,
+        0
+      ]
     },
     {
       "parameters": {
@@ -114,17 +147,90 @@
       "name": "Respond Marketing ROI Optimization Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, 0]
+      "position": [
+        1540,
+        0
+      ]
     }
   ],
   "connections": {
-    "Marketing ROI Optimization Webhook": { "main": [[{ "node": "Normalize Marketing ROI Request", "type": "main", "index": 0 }]] },
-    "Normalize Marketing ROI Request": { "main": [[{ "node": "Fetch InsulaCRM Marketing Attribution Context", "type": "main", "index": 0 }]] },
-    "Fetch InsulaCRM Marketing Attribution Context": { "main": [[{ "node": "Validate Marketing Attribution Dataset", "type": "main", "index": 0 }]] },
-    "Validate Marketing Attribution Dataset": { "main": [[{ "node": "Rank Sources & Generate ROI Optimization Recommendations", "type": "main", "index": 0 }]] },
-    "Rank Sources & Generate ROI Optimization Recommendations": { "main": [[{ "node": "Persist Marketing ROI Optimization to InsulaCRM", "type": "main", "index": 0 }]] },
-    "Persist Marketing ROI Optimization to InsulaCRM": { "main": [[{ "node": "Record Marketing ROI Analytics Activity", "type": "main", "index": 0 }]] },
-    "Record Marketing ROI Analytics Activity": { "main": [[{ "node": "Respond Marketing ROI Optimization Result", "type": "main", "index": 0 }]] }
+    "Marketing ROI Optimization Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Marketing ROI Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Marketing ROI Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch InsulaCRM Marketing Attribution Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch InsulaCRM Marketing Attribution Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Marketing Attribution Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Marketing Attribution Dataset": {
+      "main": [
+        [
+          {
+            "node": "Rank Sources & Generate ROI Optimization Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rank Sources & Generate ROI Optimization Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Persist Marketing ROI Optimization to InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Marketing ROI Optimization to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Record Marketing ROI Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Marketing ROI Analytics Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Marketing ROI Optimization Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -133,5 +239,6 @@
     "saveManualExecutions": true
   },
   "active": false,
-  "versionId": "wf-397-v1"
+  "versionId": "wf-397-v1",
+  "id": "407add99-0241-4613-a2f2-42fdff126ec1"
 }

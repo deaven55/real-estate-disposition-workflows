@@ -12,7 +12,10 @@
       "name": "Transaction Completion Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Completion Event",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Fetch Transaction Completion Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -58,7 +67,10 @@
       "name": "Validate Completion & Communication Eligibility",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -87,7 +99,10 @@
       "name": "IF Completion Eligible",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -146,7 +161,10 @@
       "name": "Dispatch Buyer Completion Communication",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, -140]
+      "position": [
+        1100,
+        -140
+      ]
     },
     {
       "parameters": {
@@ -201,7 +219,10 @@
       "name": "Dispatch Seller Completion Communication",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, 20]
+      "position": [
+        1100,
+        20
+      ]
     },
     {
       "parameters": {
@@ -256,7 +277,10 @@
       "name": "Persist Transaction Completion",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, -60]
+      "position": [
+        1320,
+        -60
+      ]
     },
     {
       "parameters": {
@@ -311,7 +335,10 @@
       "name": "Persist Completion Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, -60]
+      "position": [
+        1540,
+        -60
+      ]
     },
     {
       "parameters": {
@@ -325,7 +352,10 @@
       "name": "Respond Transaction Completion",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1760, -60]
+      "position": [
+        1760,
+        -60
+      ]
     },
     {
       "parameters": {
@@ -339,44 +369,123 @@
       "name": "Respond Completion Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     }
   ],
   "connections": {
     "Transaction Completion Webhook": {
-      "main": [[{"node": "Normalize Completion Event", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Completion Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Completion Event": {
-      "main": [[{"node": "Fetch Transaction Completion Context", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Fetch Transaction Completion Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Transaction Completion Context": {
-      "main": [[{"node": "Validate Completion & Communication Eligibility", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Validate Completion & Communication Eligibility",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Completion & Communication Eligibility": {
-      "main": [[{"node": "IF Completion Eligible", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "IF Completion Eligible",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF Completion Eligible": {
       "main": [
         [
-          {"node": "Dispatch Buyer Completion Communication", "type": "main", "index": 0},
-          {"node": "Dispatch Seller Completion Communication", "type": "main", "index": 0}
+          {
+            "node": "Dispatch Buyer Completion Communication",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Dispatch Seller Completion Communication",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          {"node": "Respond Completion Blocked", "type": "main", "index": 0}
+          {
+            "node": "Respond Completion Blocked",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Dispatch Buyer Completion Communication": {
-      "main": [[{"node": "Persist Transaction Completion", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Transaction Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Dispatch Seller Completion Communication": {
-      "main": [[{"node": "Persist Transaction Completion", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Transaction Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Transaction Completion": {
-      "main": [[{"node": "Persist Completion Activity", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Completion Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Completion Activity": {
-      "main": [[{"node": "Respond Transaction Completion", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Transaction Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -389,5 +498,15 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["real-estate", "insula-crm", "assignment", "post-closing", "buyer", "seller", "communication", "wf-391"]
+  "tags": [
+    "real-estate",
+    "insula-crm",
+    "assignment",
+    "post-closing",
+    "buyer",
+    "seller",
+    "communication",
+    "wf-391"
+  ],
+  "id": "02a9e07c-e520-43c5-bfaf-39fd1c050f9c"
 }

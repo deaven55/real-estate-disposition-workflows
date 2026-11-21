@@ -2,57 +2,406 @@
   "name": "WF-452 — Forecast Gap → Acquisition Capacity, Lead Volume & Budget Scaling Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"forecast-gap-acquisition-capacity-lead-volume-budget-scaling","responseMode":"lastNode","options":{}},
-      "id":"w452a","name":"Forecast Gap Scaling Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "forecast-gap-acquisition-capacity-lead-volume-budget-scaling",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w452a",
+      "name": "Forecast Gap Scaling Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const period=String(b.period??'').trim(); const asOfDate=String(b.asOfDate??new Date().toISOString().slice(0,10)).trim(); return [{json:{...b,portfolioId,period,asOfDate,receivedAt:new Date().toISOString()}}];"},
-      "id":"w452b","name":"Normalize Forecast Gap Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const period=String(b.period??'').trim(); const asOfDate=String(b.asOfDate??new Date().toISOString().slice(0,10)).trim(); return [{json:{...b,portfolioId,period,asOfDate,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w452b",
+      "name": "Normalize Forecast Gap Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.period}}","operation":"notEmpty"},{"value1":"={{$json.asOfDate}}","operation":"notEmpty"}]}},
-      "id":"w452c","name":"Validate Forecast Gap Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.asOfDate}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w452c",
+      "name": "Validate Forecast Gap Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/forecast-gap-scaling-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"}]},"options":{}},
-      "id":"w452d","name":"Fetch Forecast Gap Scaling Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/forecast-gap-scaling-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w452d",
+      "name": "Fetch Forecast Gap Scaling Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Forecast Gap Request').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const forecast=ctx.forecast??{}; const target=ctx.target??ctx.targets??{}; const capacity=ctx.capacity??{}; const flags=[]; const projectedLeads=n(forecast.projectedLeads??forecast.leads); const projectedQualified=n(forecast.projectedQualifiedLeads??forecast.qualifiedLeads); const projectedContracts=n(forecast.projectedContracts??forecast.contracts); const projectedClosed=n(forecast.projectedClosedDeals??forecast.closedDeals); const projectedProfit=n(forecast.projectedNetProfit??forecast.netProfit); const projectedSpend=n(forecast.projectedAcquisitionSpend??forecast.acquisitionSpend); const targetLeads=n(target.leads??target.targetLeads); const targetQualified=n(target.qualifiedLeads); const targetContracts=n(target.contracts); const targetClosed=n(target.closedDeals); const targetProfit=n(target.netProfit); const targetSpend=n(target.acquisitionBudget??target.acquisitionSpend); const gaps={leads:Math.max(0,targetLeads-projectedLeads),qualifiedLeads:Math.max(0,targetQualified-projectedQualified),contracts:Math.max(0,targetContracts-projectedContracts),closedDeals:Math.max(0,targetClosed-projectedClosed),netProfit:Math.max(0,targetProfit-projectedProfit)}; const rates={qualifiedPerLead:projectedLeads>0?projectedQualified/projectedLeads:0,contractsPerQualified:projectedQualified>0?projectedContracts/projectedQualified:0,closedPerContract:projectedContracts>0?projectedClosed/projectedContracts:0,profitPerClosed:projectedClosed>0?projectedProfit/projectedClosed:0,spendPerLead:projectedLeads>0?projectedSpend/projectedLeads:0}; const neededLeadsForClosed=gaps.closedDeals>0&&rates.closedPerContract>0&&rates.contractsPerQualified>0&&rates.qualifiedPerLead>0?gaps.closedDeals/(rates.closedPerContract*rates.contractsPerQualified*rates.qualifiedPerLead):0; const incrementalLeads=Math.max(gaps.leads,neededLeadsForClosed); const incrementalBudget=incrementalLeads*rates.spendPerLead; const queueCapacity=n(capacity.availableLeadCapacity??capacity.availableCapacity); const capacityUtilization=n(capacity.currentUtilization); const capacityShortfall=Math.max(0,incrementalLeads-queueCapacity); if(capacityShortfall>0)flags.push('lead_handling_capacity_shortfall'); if(projectedSpend>targetSpend&&targetSpend>0)flags.push('acquisition_budget_already_over_target'); let decision='maintain_current_capacity'; const actions=[]; if(incrementalLeads>0){if(capacityShortfall>0){decision='increase_lead_capacity_before_scaling_acquisition';actions.push('add_or_rebalance_follow_up_and_lead_routing_capacity');actions.push('prioritize_hot_and_high_probability_leads');}else if(incrementalBudget>0){decision='scale_acquisition_with_capacity_guardrails';actions.push('increase_acquisition_budget_only_within_approved_limits');actions.push('increase_lead_generation_to_close_forecast_gap');}else{decision='improve_conversion_before_increasing_spend';actions.push('improve_qualification_offer_and_close_rate');}}else if(projectedProfit>=targetProfit&&targetProfit>0){decision='maintain_and_optimize';actions.push('maintain_current_acquisition_capacity');}else{actions.push('monitor_forecast_and_pipeline_capacity');} if(capacityUtilization>=0.9)actions.push('protect_response_sla_by_rebalancing_or_adding_capacity'); if(projectedSpend>targetSpend&&targetSpend>0)actions.push('reallocate_existing_budget_before_adding_spend'); const idempotencyKey='wf452:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,forecastGapScaling:{status:flags.length?'guarded':'ready',decision,projected:{leads:projectedLeads,qualifiedLeads:projectedQualified,contracts:projectedContracts,closedDeals:projectedClosed,netProfit:projectedProfit,acquisitionSpend:projectedSpend},targets:{leads:targetLeads,qualifiedLeads:targetQualified,contracts:targetContracts,closedDeals:targetClosed,netProfit:targetProfit,acquisitionSpend:targetSpend},gaps,rates,incrementalLeadsRequired:Math.ceil(incrementalLeads),incrementalBudgetRequired:Math.round(incrementalBudget*100)/100,availableLeadCapacity:queueCapacity,capacityUtilization,capacityShortfall,actions,flags,requiresHumanReview:flags.length>0,confidenceScore:flags.length?65:85},idempotencyKey}}];"},
-      "id":"w452e","name":"Calculate Forecast Gap Capacity & Scaling Need","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Forecast Gap Request').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const forecast=ctx.forecast??{}; const target=ctx.target??ctx.targets??{}; const capacity=ctx.capacity??{}; const flags=[]; const projectedLeads=n(forecast.projectedLeads??forecast.leads); const projectedQualified=n(forecast.projectedQualifiedLeads??forecast.qualifiedLeads); const projectedContracts=n(forecast.projectedContracts??forecast.contracts); const projectedClosed=n(forecast.projectedClosedDeals??forecast.closedDeals); const projectedProfit=n(forecast.projectedNetProfit??forecast.netProfit); const projectedSpend=n(forecast.projectedAcquisitionSpend??forecast.acquisitionSpend); const targetLeads=n(target.leads??target.targetLeads); const targetQualified=n(target.qualifiedLeads); const targetContracts=n(target.contracts); const targetClosed=n(target.closedDeals); const targetProfit=n(target.netProfit); const targetSpend=n(target.acquisitionBudget??target.acquisitionSpend); const gaps={leads:Math.max(0,targetLeads-projectedLeads),qualifiedLeads:Math.max(0,targetQualified-projectedQualified),contracts:Math.max(0,targetContracts-projectedContracts),closedDeals:Math.max(0,targetClosed-projectedClosed),netProfit:Math.max(0,targetProfit-projectedProfit)}; const rates={qualifiedPerLead:projectedLeads>0?projectedQualified/projectedLeads:0,contractsPerQualified:projectedQualified>0?projectedContracts/projectedQualified:0,closedPerContract:projectedContracts>0?projectedClosed/projectedContracts:0,profitPerClosed:projectedClosed>0?projectedProfit/projectedClosed:0,spendPerLead:projectedLeads>0?projectedSpend/projectedLeads:0}; const neededLeadsForClosed=gaps.closedDeals>0&&rates.closedPerContract>0&&rates.contractsPerQualified>0&&rates.qualifiedPerLead>0?gaps.closedDeals/(rates.closedPerContract*rates.contractsPerQualified*rates.qualifiedPerLead):0; const incrementalLeads=Math.max(gaps.leads,neededLeadsForClosed); const incrementalBudget=incrementalLeads*rates.spendPerLead; const queueCapacity=n(capacity.availableLeadCapacity??capacity.availableCapacity); const capacityUtilization=n(capacity.currentUtilization); const capacityShortfall=Math.max(0,incrementalLeads-queueCapacity); if(capacityShortfall>0)flags.push('lead_handling_capacity_shortfall'); if(projectedSpend>targetSpend&&targetSpend>0)flags.push('acquisition_budget_already_over_target'); let decision='maintain_current_capacity'; const actions=[]; if(incrementalLeads>0){if(capacityShortfall>0){decision='increase_lead_capacity_before_scaling_acquisition';actions.push('add_or_rebalance_follow_up_and_lead_routing_capacity');actions.push('prioritize_hot_and_high_probability_leads');}else if(incrementalBudget>0){decision='scale_acquisition_with_capacity_guardrails';actions.push('increase_acquisition_budget_only_within_approved_limits');actions.push('increase_lead_generation_to_close_forecast_gap');}else{decision='improve_conversion_before_increasing_spend';actions.push('improve_qualification_offer_and_close_rate');}}else if(projectedProfit>=targetProfit&&targetProfit>0){decision='maintain_and_optimize';actions.push('maintain_current_acquisition_capacity');}else{actions.push('monitor_forecast_and_pipeline_capacity');} if(capacityUtilization>=0.9)actions.push('protect_response_sla_by_rebalancing_or_adding_capacity'); if(projectedSpend>targetSpend&&targetSpend>0)actions.push('reallocate_existing_budget_before_adding_spend'); const idempotencyKey='wf452:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,forecastGapScaling:{status:flags.length?'guarded':'ready',decision,projected:{leads:projectedLeads,qualifiedLeads:projectedQualified,contracts:projectedContracts,closedDeals:projectedClosed,netProfit:projectedProfit,acquisitionSpend:projectedSpend},targets:{leads:targetLeads,qualifiedLeads:targetQualified,contracts:targetContracts,closedDeals:targetClosed,netProfit:targetProfit,acquisitionSpend:targetSpend},gaps,rates,incrementalLeadsRequired:Math.ceil(incrementalLeads),incrementalBudgetRequired:Math.round(incrementalBudget*100)/100,availableLeadCapacity:queueCapacity,capacityUtilization,capacityShortfall,actions,flags,requiresHumanReview:flags.length>0,confidenceScore:flags.length?65:85},idempotencyKey}}];"
+      },
+      "id": "w452e",
+      "name": "Calculate Forecast Gap Capacity & Scaling Need",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/forecast-gap-scaling-assessment","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"},{"name":"forecastGapScaling","value":"={{JSON.stringify($json.forecastGapScaling)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w452f","name":"Persist Forecast Gap Scaling Assessment","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/forecast-gap-scaling-assessment",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            },
+            {
+              "name": "forecastGapScaling",
+              "value": "={{JSON.stringify($json.forecastGapScaling)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w452f",
+      "name": "Persist Forecast Gap Scaling Assessment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/acquisition-capacity-scaling-action","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"decision","value":"={{$json.forecastGapScaling.decision}}"},{"name":"incrementalLeadsRequired","value":"={{$json.forecastGapScaling.incrementalLeadsRequired}}"},{"name":"incrementalBudgetRequired","value":"={{$json.forecastGapScaling.incrementalBudgetRequired}}"},{"name":"actions","value":"={{JSON.stringify($json.forecastGapScaling.actions)}}"},{"name":"idempotencyKey","value":"={{'wf452:action:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w452g","name":"Persist Acquisition Capacity Scaling Action","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/acquisition-capacity-scaling-action",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.forecastGapScaling.decision}}"
+            },
+            {
+              "name": "incrementalLeadsRequired",
+              "value": "={{$json.forecastGapScaling.incrementalLeadsRequired}}"
+            },
+            {
+              "name": "incrementalBudgetRequired",
+              "value": "={{$json.forecastGapScaling.incrementalBudgetRequired}}"
+            },
+            {
+              "name": "actions",
+              "value": "={{JSON.stringify($json.forecastGapScaling.actions)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf452:action:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w452g",
+      "name": "Persist Acquisition Capacity Scaling Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"forecast_gap_acquisition_capacity_lead_volume_budget_scaling"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"decision","value":"={{$json.forecastGapScaling.decision}}"},{"name":"incrementalLeadsRequired","value":"={{$json.forecastGapScaling.incrementalLeadsRequired}}"},{"name":"incrementalBudgetRequired","value":"={{$json.forecastGapScaling.incrementalBudgetRequired}}"},{"name":"idempotencyKey","value":"={{'wf452:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w452h","name":"Record Forecast Gap Scaling Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "forecast_gap_acquisition_capacity_lead_volume_budget_scaling"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.forecastGapScaling.decision}}"
+            },
+            {
+              "name": "incrementalLeadsRequired",
+              "value": "={{$json.forecastGapScaling.incrementalLeadsRequired}}"
+            },
+            {
+              "name": "incrementalBudgetRequired",
+              "value": "={{$json.forecastGapScaling.incrementalBudgetRequired}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf452:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w452h",
+      "name": "Record Forecast Gap Scaling Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w452i","name":"Respond Forecast Gap Scaling Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w452i",
+      "name": "Respond Forecast Gap Scaling Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId, period and asOfDate are required'} }}","options":{}},
-      "id":"w452j","name":"Respond Invalid Forecast Gap Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'portfolioId, period and asOfDate are required'} }}",
+        "options": {}
+      },
+      "id": "w452j",
+      "name": "Respond Invalid Forecast Gap Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Forecast Gap Scaling Webhook":{"main":[[{"node":"Normalize Forecast Gap Request","type":"main","index":0}]]},
-    "Normalize Forecast Gap Request":{"main":[[{"node":"Validate Forecast Gap Request","type":"main","index":0}]]},
-    "Validate Forecast Gap Request":{"main":[[{"node":"Fetch Forecast Gap Scaling Context","type":"main","index":0}],[{"node":"Respond Invalid Forecast Gap Request","type":"main","index":0}]]},
-    "Fetch Forecast Gap Scaling Context":{"main":[[{"node":"Calculate Forecast Gap Capacity & Scaling Need","type":"main","index":0}]]},
-    "Calculate Forecast Gap Capacity & Scaling Need":{"main":[[{"node":"Persist Forecast Gap Scaling Assessment","type":"main","index":0}]]},
-    "Persist Forecast Gap Scaling Assessment":{"main":[[{"node":"Persist Acquisition Capacity Scaling Action","type":"main","index":0}]]},
-    "Persist Acquisition Capacity Scaling Action":{"main":[[{"node":"Record Forecast Gap Scaling Activity","type":"main","index":0}]]},
-    "Record Forecast Gap Scaling Activity":{"main":[[{"node":"Respond Forecast Gap Scaling Result","type":"main","index":0}]]}
+  "connections": {
+    "Forecast Gap Scaling Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Forecast Gap Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Forecast Gap Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Forecast Gap Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Forecast Gap Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Forecast Gap Scaling Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Forecast Gap Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Forecast Gap Scaling Context": {
+      "main": [
+        [
+          {
+            "node": "Calculate Forecast Gap Capacity & Scaling Need",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Forecast Gap Capacity & Scaling Need": {
+      "main": [
+        [
+          {
+            "node": "Persist Forecast Gap Scaling Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Forecast Gap Scaling Assessment": {
+      "main": [
+        [
+          {
+            "node": "Persist Acquisition Capacity Scaling Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Acquisition Capacity Scaling Action": {
+      "main": [
+        [
+          {
+            "node": "Record Forecast Gap Scaling Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Forecast Gap Scaling Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Forecast Gap Scaling Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-452"},{"name":"forecast-gap"},{"name":"lead-capacity"},{"name":"acquisition-scaling"},{"name":"budget-scaling"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-452","contractStatus":"scaffolded","idempotency":"wf452:{portfolioId}:{period}:{asOfDate}","notes":"Converts forecast gaps into incremental lead and budget requirements while checking lead-handling capacity and protecting response SLAs. Production use requires calibrated funnel rates, verified queue/assignee capacity, approved budget limits, canonical spend data and production InsulaCRM API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-452"
+    },
+    {
+      "name": "forecast-gap"
+    },
+    {
+      "name": "lead-capacity"
+    },
+    {
+      "name": "acquisition-scaling"
+    },
+    {
+      "name": "budget-scaling"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-452",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf452:{portfolioId}:{period}:{asOfDate}",
+    "notes": "Converts forecast gaps into incremental lead and budget requirements while checking lead-handling capacity and protecting response SLAs. Production use requires calibrated funnel rates, verified queue/assignee capacity, approved budget limits, canonical spend data and production InsulaCRM API contracts."
+  },
+  "id": "33b886aa-6905-49c5-9469-9cdebde6c586"
 }

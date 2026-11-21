@@ -2,57 +2,434 @@
   "name": "WF-453 — Acquisition Scaling Approval → Budget Allocation & Lead Generation Execution Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"acquisition-scaling-approval-budget-allocation-lead-generation-execution","responseMode":"lastNode","options":{}},
-      "id":"w453a","name":"Acquisition Scaling Approval Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "acquisition-scaling-approval-budget-allocation-lead-generation-execution",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w453a",
+      "name": "Acquisition Scaling Approval Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const period=String(b.period??'').trim(); const approvalId=String(b.approvalId??b.requestId??'').trim(); const requestedBudget=Number(b.requestedBudget??b.budget??0); const requestedLeadVolume=Math.max(0,Math.ceil(Number(b.requestedLeadVolume??b.leadVolume??0))); return [{json:{...b,portfolioId,period,approvalId,requestedBudget,requestedLeadVolume,receivedAt:new Date().toISOString()}}];"},
-      "id":"w453b","name":"Normalize Acquisition Scaling Approval","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const period=String(b.period??'').trim(); const approvalId=String(b.approvalId??b.requestId??'').trim(); const requestedBudget=Number(b.requestedBudget??b.budget??0); const requestedLeadVolume=Math.max(0,Math.ceil(Number(b.requestedLeadVolume??b.leadVolume??0))); return [{json:{...b,portfolioId,period,approvalId,requestedBudget,requestedLeadVolume,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w453b",
+      "name": "Normalize Acquisition Scaling Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.period}}","operation":"notEmpty"},{"value1":"={{$json.approvalId}}","operation":"notEmpty"}]}},
-      "id":"w453c","name":"Validate Acquisition Scaling Approval","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.approvalId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w453c",
+      "name": "Validate Acquisition Scaling Approval",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/acquisition-scaling-approval-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"approvalId","value":"={{$json.approvalId}}"}]},"options":{}},
-      "id":"w453d","name":"Fetch Scaling Approval Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/acquisition-scaling-approval-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "approvalId",
+              "value": "={{$json.approvalId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w453d",
+      "name": "Fetch Scaling Approval Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Acquisition Scaling Approval').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const flags=[]; const approval=String(ctx.approvalStatus??ctx.status??'').toLowerCase(); const approved=ctx.approved===true||['approved','authorized'].includes(approval); const requesterAuthorized=ctx.requesterAuthorized!==false; const budgetLimit=n(ctx.maxApprovedBudget??ctx.budgetLimit); const currentBudget=n(ctx.currentBudget); const requestedBudget=n(input.requestedBudget); const availableBudget=n(ctx.availableBudget??ctx.remainingBudget); const leadCapacity=n(ctx.availableLeadCapacity??ctx.availableCapacity); const requestedLeads=input.requestedLeadVolume; if(!approved)flags.push('scaling_not_approved'); if(!requesterAuthorized)flags.push('requester_not_authorized'); if(requestedBudget<0)flags.push('negative_budget'); if(budgetLimit>0&&requestedBudget>budgetLimit)flags.push('budget_exceeds_approved_limit'); if(availableBudget>0&&requestedBudget>availableBudget)flags.push('insufficient_available_budget'); if(leadCapacity>0&&requestedLeads>leadCapacity)flags.push('lead_capacity_exceeded'); const budgetDelta=Math.round((requestedBudget-currentBudget)*100)/100; const executionAllowed=flags.length===0&&approved&&requesterAuthorized; let decision='hold_execution',nextAction='resolve_scaling_approval_or_capacity_exception',executionState='blocked'; if(executionAllowed){decision='execute_acquisition_scaling';nextAction='allocate_approved_budget_and_activate_lead_generation';executionState='approved_for_execution';} else if(!approved&&!flags.includes('requester_not_authorized')){decision='await_approval';nextAction='obtain_explicit_budget_scaling_approval';executionState='pending_approval';} const idempotencyKey='wf453:'+input.portfolioId+':'+input.period+':'+input.approvalId; return [{json:{...input,acquisitionScalingExecution:{executionState,decision,nextAction,approved,requesterAuthorized,currentBudget,requestedBudget,budgetDelta,requestedLeadVolume:requestedLeads,availableBudget,availableLeadCapacity:leadCapacity,flags,executionAllowed,requiresHumanReview:!executionAllowed,confidenceScore:executionAllowed?95:25},idempotencyKey}}];"},
-      "id":"w453e","name":"Validate Scaling Approval Budget & Capacity","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Acquisition Scaling Approval').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const flags=[]; const approval=String(ctx.approvalStatus??ctx.status??'').toLowerCase(); const approved=ctx.approved===true||['approved','authorized'].includes(approval); const requesterAuthorized=ctx.requesterAuthorized!==false; const budgetLimit=n(ctx.maxApprovedBudget??ctx.budgetLimit); const currentBudget=n(ctx.currentBudget); const requestedBudget=n(input.requestedBudget); const availableBudget=n(ctx.availableBudget??ctx.remainingBudget); const leadCapacity=n(ctx.availableLeadCapacity??ctx.availableCapacity); const requestedLeads=input.requestedLeadVolume; if(!approved)flags.push('scaling_not_approved'); if(!requesterAuthorized)flags.push('requester_not_authorized'); if(requestedBudget<0)flags.push('negative_budget'); if(budgetLimit>0&&requestedBudget>budgetLimit)flags.push('budget_exceeds_approved_limit'); if(availableBudget>0&&requestedBudget>availableBudget)flags.push('insufficient_available_budget'); if(leadCapacity>0&&requestedLeads>leadCapacity)flags.push('lead_capacity_exceeded'); const budgetDelta=Math.round((requestedBudget-currentBudget)*100)/100; const executionAllowed=flags.length===0&&approved&&requesterAuthorized; let decision='hold_execution',nextAction='resolve_scaling_approval_or_capacity_exception',executionState='blocked'; if(executionAllowed){decision='execute_acquisition_scaling';nextAction='allocate_approved_budget_and_activate_lead_generation';executionState='approved_for_execution';} else if(!approved&&!flags.includes('requester_not_authorized')){decision='await_approval';nextAction='obtain_explicit_budget_scaling_approval';executionState='pending_approval';} const idempotencyKey='wf453:'+input.portfolioId+':'+input.period+':'+input.approvalId; return [{json:{...input,acquisitionScalingExecution:{executionState,decision,nextAction,approved,requesterAuthorized,currentBudget,requestedBudget,budgetDelta,requestedLeadVolume:requestedLeads,availableBudget,availableLeadCapacity:leadCapacity,flags,executionAllowed,requiresHumanReview:!executionAllowed,confidenceScore:executionAllowed?95:25},idempotencyKey}}];"
+      },
+      "id": "w453e",
+      "name": "Validate Scaling Approval Budget & Capacity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/acquisition-budget-allocation-execution","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"approvalId","value":"={{$json.approvalId}}"},{"name":"executionState","value":"={{$json.acquisitionScalingExecution.executionState}}"},{"name":"decision","value":"={{$json.acquisitionScalingExecution.decision}}"},{"name":"requestedBudget","value":"={{$json.acquisitionScalingExecution.requestedBudget}}"},{"name":"budgetDelta","value":"={{$json.acquisitionScalingExecution.budgetDelta}}"},{"name":"requestedLeadVolume","value":"={{$json.acquisitionScalingExecution.requestedLeadVolume}}"},{"name":"executionAllowed","value":"={{$json.acquisitionScalingExecution.executionAllowed}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w453f","name":"Persist Acquisition Budget Allocation Execution","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/acquisition-budget-allocation-execution",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "approvalId",
+              "value": "={{$json.approvalId}}"
+            },
+            {
+              "name": "executionState",
+              "value": "={{$json.acquisitionScalingExecution.executionState}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.acquisitionScalingExecution.decision}}"
+            },
+            {
+              "name": "requestedBudget",
+              "value": "={{$json.acquisitionScalingExecution.requestedBudget}}"
+            },
+            {
+              "name": "budgetDelta",
+              "value": "={{$json.acquisitionScalingExecution.budgetDelta}}"
+            },
+            {
+              "name": "requestedLeadVolume",
+              "value": "={{$json.acquisitionScalingExecution.requestedLeadVolume}}"
+            },
+            {
+              "name": "executionAllowed",
+              "value": "={{$json.acquisitionScalingExecution.executionAllowed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w453f",
+      "name": "Persist Acquisition Budget Allocation Execution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/lead-generation/execution-request","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"requestedLeadVolume","value":"={{$json.acquisitionScalingExecution.requestedLeadVolume}}"},{"name":"approvedBudget","value":"={{$json.acquisitionScalingExecution.requestedBudget}}"},{"name":"decision","value":"={{$json.acquisitionScalingExecution.decision}}"},{"name":"executionAllowed","value":"={{$json.acquisitionScalingExecution.executionAllowed}}"},{"name":"idempotencyKey","value":"={{'wf453:leadgen:'+$json.portfolioId+':'+$json.period+':'+$json.approvalId}}"}]},"options":{}},
-      "id":"w453g","name":"Create Lead Generation Execution Request","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/lead-generation/execution-request",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "requestedLeadVolume",
+              "value": "={{$json.acquisitionScalingExecution.requestedLeadVolume}}"
+            },
+            {
+              "name": "approvedBudget",
+              "value": "={{$json.acquisitionScalingExecution.requestedBudget}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.acquisitionScalingExecution.decision}}"
+            },
+            {
+              "name": "executionAllowed",
+              "value": "={{$json.acquisitionScalingExecution.executionAllowed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf453:leadgen:'+$json.portfolioId+':'+$json.period+':'+$json.approvalId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w453g",
+      "name": "Create Lead Generation Execution Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"acquisition_scaling_approval_budget_allocation_lead_generation_execution"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"approvalId","value":"={{$json.approvalId}}"},{"name":"decision","value":"={{$json.acquisitionScalingExecution.decision}}"},{"name":"executionState","value":"={{$json.acquisitionScalingExecution.executionState}}"},{"name":"requestedBudget","value":"={{$json.acquisitionScalingExecution.requestedBudget}}"},{"name":"requestedLeadVolume","value":"={{$json.acquisitionScalingExecution.requestedLeadVolume}}"},{"name":"idempotencyKey","value":"={{'wf453:activity:'+$json.portfolioId+':'+$json.period+':'+$json.approvalId}}"}]},"options":{}},
-      "id":"w453h","name":"Record Acquisition Scaling Execution Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "acquisition_scaling_approval_budget_allocation_lead_generation_execution"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "approvalId",
+              "value": "={{$json.approvalId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.acquisitionScalingExecution.decision}}"
+            },
+            {
+              "name": "executionState",
+              "value": "={{$json.acquisitionScalingExecution.executionState}}"
+            },
+            {
+              "name": "requestedBudget",
+              "value": "={{$json.acquisitionScalingExecution.requestedBudget}}"
+            },
+            {
+              "name": "requestedLeadVolume",
+              "value": "={{$json.acquisitionScalingExecution.requestedLeadVolume}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf453:activity:'+$json.portfolioId+':'+$json.period+':'+$json.approvalId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w453h",
+      "name": "Record Acquisition Scaling Execution Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w453i","name":"Respond Acquisition Scaling Execution","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w453i",
+      "name": "Respond Acquisition Scaling Execution",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId, period and approvalId are required'} }}","options":{}},
-      "id":"w453j","name":"Respond Invalid Acquisition Scaling Approval","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'portfolioId, period and approvalId are required'} }}",
+        "options": {}
+      },
+      "id": "w453j",
+      "name": "Respond Invalid Acquisition Scaling Approval",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Acquisition Scaling Approval Webhook":{"main":[[{"node":"Normalize Acquisition Scaling Approval","type":"main","index":0}]]},
-    "Normalize Acquisition Scaling Approval":{"main":[[{"node":"Validate Acquisition Scaling Approval","type":"main","index":0}]]},
-    "Validate Acquisition Scaling Approval":{"main":[[{"node":"Fetch Scaling Approval Context","type":"main","index":0}],[{"node":"Respond Invalid Acquisition Scaling Approval","type":"main","index":0}]]},
-    "Fetch Scaling Approval Context":{"main":[[{"node":"Validate Scaling Approval Budget & Capacity","type":"main","index":0}]]},
-    "Validate Scaling Approval Budget & Capacity":{"main":[[{"node":"Persist Acquisition Budget Allocation Execution","type":"main","index":0}]]},
-    "Persist Acquisition Budget Allocation Execution":{"main":[[{"node":"Create Lead Generation Execution Request","type":"main","index":0}]]},
-    "Create Lead Generation Execution Request":{"main":[[{"node":"Record Acquisition Scaling Execution Activity","type":"main","index":0}]]},
-    "Record Acquisition Scaling Execution Activity":{"main":[[{"node":"Respond Acquisition Scaling Execution","type":"main","index":0}]]}
+  "connections": {
+    "Acquisition Scaling Approval Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Acquisition Scaling Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Acquisition Scaling Approval": {
+      "main": [
+        [
+          {
+            "node": "Validate Acquisition Scaling Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Acquisition Scaling Approval": {
+      "main": [
+        [
+          {
+            "node": "Fetch Scaling Approval Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Acquisition Scaling Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Scaling Approval Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Scaling Approval Budget & Capacity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Scaling Approval Budget & Capacity": {
+      "main": [
+        [
+          {
+            "node": "Persist Acquisition Budget Allocation Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Acquisition Budget Allocation Execution": {
+      "main": [
+        [
+          {
+            "node": "Create Lead Generation Execution Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Lead Generation Execution Request": {
+      "main": [
+        [
+          {
+            "node": "Record Acquisition Scaling Execution Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Acquisition Scaling Execution Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Acquisition Scaling Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-453"},{"name":"acquisition-scaling"},{"name":"budget-allocation"},{"name":"lead-generation"},{"name":"approval-gate"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-453","contractStatus":"scaffolded","idempotency":"wf453:{portfolioId}:{period}:{approvalId}","notes":"Validates explicit approval, requester authorization, budget limits and lead-handling capacity before creating an acquisition budget/lead-generation execution request. This workflow records and dispatches an execution request; actual ad-platform spend changes remain behind verified production integrations and approval controls."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-453"
+    },
+    {
+      "name": "acquisition-scaling"
+    },
+    {
+      "name": "budget-allocation"
+    },
+    {
+      "name": "lead-generation"
+    },
+    {
+      "name": "approval-gate"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-453",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf453:{portfolioId}:{period}:{approvalId}",
+    "notes": "Validates explicit approval, requester authorization, budget limits and lead-handling capacity before creating an acquisition budget/lead-generation execution request. This workflow records and dispatches an execution request; actual ad-platform spend changes remain behind verified production integrations and approval controls."
+  },
+  "id": "5448979c-f20a-481f-86d8-9481fc216aa6"
 }

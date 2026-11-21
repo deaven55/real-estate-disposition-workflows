@@ -2,57 +2,419 @@
   "name": "WF-443 — Executed Contract → Title Search & Closing Order Initiation Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"executed-contract-title-search-closing-order-initiation","responseMode":"lastNode","options":{}},
-      "id":"w443a","name":"Executed Contract Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "executed-contract-title-search-closing-order-initiation",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w443a",
+      "name": "Executed Contract Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const executionId=String(b.executionId??b.contractExecutionId??'').trim(); return [{json:{...b,leadId,dealId,contractId,executionId,receivedAt:new Date().toISOString()}}];"},
-      "id":"w443b","name":"Normalize Executed Contract Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const dealId=String(b.dealId??'').trim(); const contractId=String(b.contractId??'').trim(); const executionId=String(b.executionId??b.contractExecutionId??'').trim(); return [{json:{...b,leadId,dealId,contractId,executionId,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w443b",
+      "name": "Normalize Executed Contract Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.dealId}}","operation":"notEmpty"},{"value1":"={{$json.contractId}}","operation":"notEmpty"},{"value1":"={{$json.executionId}}","operation":"notEmpty"}]}},
-      "id":"w443c","name":"Validate Executed Contract Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.dealId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.contractId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.executionId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w443c",
+      "name": "Validate Executed Contract Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/executed-contract-title-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"executionId","value":"={{$json.executionId}}"}]},"options":{}},
-      "id":"w443d","name":"Fetch Title & Closing Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/executed-contract-title-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{$json.executionId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w443d",
+      "name": "Fetch Title & Closing Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Executed Contract Request').first().json; const ctx=$json.context??$json; const flags=[]; const executionState=String(ctx.executionState??ctx.contractState??'').toLowerCase(); const blocked=['closed','cancelled','disputed','dnc','suppressed']; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); if(blocked.includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); if(!['executed','fully_executed','contract_executed'].includes(executionState))flags.push('contract_not_verified_executed'); const executedDocumentId=String(ctx.executedDocumentId??ctx.documentId??'').trim(); if(!executedDocumentId)flags.push('executed_document_missing'); const titleCompany={id:ctx.titleCompanyId??null,name:ctx.titleCompanyName??null,contact:ctx.titleCompanyContact??null}; const titleCompanyReady=Boolean(titleCompany.id||titleCompany.name); if(!titleCompanyReady)flags.push('title_company_missing'); const propertyId=String(ctx.propertyId??'').trim(); const propertyAddress=String(ctx.propertyAddress??'').trim(); if(!propertyId)flags.push('property_id_missing'); if(!propertyAddress)flags.push('property_address_missing'); const purchasePrice=Number(ctx.purchasePrice??0); if(!(purchasePrice>0))flags.push('purchase_price_missing'); const assignmentId=String(ctx.assignmentId??'').trim(); if(!assignmentId)flags.push('assignment_id_missing'); const ready=flags.length===0; const decision=ready?'initiate_title_and_closing_order':'hold_for_prerequisite_resolution'; const nextAction=ready?'open_title_search_and_closing_order':'resolve_execution_or_closing_prerequisites'; const packagePayload={executionId:input.executionId,contractId:input.contractId,executedDocumentId:executedDocumentId||null,assignmentId:assignmentId||null,property:{propertyId:propertyId||null,address:propertyAddress||null},titleCompany,financials:{purchasePrice:purchasePrice||null},requestedServices:['title_search','lien_and_encumbrance_search','tax_status_review','closing_order_initiation']}; const idempotencyKey='wf443:'+input.leadId+':'+input.dealId+':'+input.contractId+':'+input.executionId; return [{json:{...input,titleClosingInitiationDecision:{status:ready?'ready':'blocked',decision,nextAction,executionState,packagePayload,flags,requiresHumanReview:!ready,confidenceScore:ready?97:20},idempotencyKey}}];"},
-      "id":"w443e","name":"Validate Execution & Build Title Closing Package","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Executed Contract Request').first().json; const ctx=$json.context??$json; const flags=[]; const executionState=String(ctx.executionState??ctx.contractState??'').toLowerCase(); const blocked=['closed','cancelled','disputed','dnc','suppressed']; const dealState=String(ctx.dealState??ctx.status??'').toLowerCase(); if(blocked.includes(dealState)||ctx.dnc===true||ctx.suppressed===true)flags.push('deal_or_contact_blocked'); if(!['executed','fully_executed','contract_executed'].includes(executionState))flags.push('contract_not_verified_executed'); const executedDocumentId=String(ctx.executedDocumentId??ctx.documentId??'').trim(); if(!executedDocumentId)flags.push('executed_document_missing'); const titleCompany={id:ctx.titleCompanyId??null,name:ctx.titleCompanyName??null,contact:ctx.titleCompanyContact??null}; const titleCompanyReady=Boolean(titleCompany.id||titleCompany.name); if(!titleCompanyReady)flags.push('title_company_missing'); const propertyId=String(ctx.propertyId??'').trim(); const propertyAddress=String(ctx.propertyAddress??'').trim(); if(!propertyId)flags.push('property_id_missing'); if(!propertyAddress)flags.push('property_address_missing'); const purchasePrice=Number(ctx.purchasePrice??0); if(!(purchasePrice>0))flags.push('purchase_price_missing'); const assignmentId=String(ctx.assignmentId??'').trim(); if(!assignmentId)flags.push('assignment_id_missing'); const ready=flags.length===0; const decision=ready?'initiate_title_and_closing_order':'hold_for_prerequisite_resolution'; const nextAction=ready?'open_title_search_and_closing_order':'resolve_execution_or_closing_prerequisites'; const packagePayload={executionId:input.executionId,contractId:input.contractId,executedDocumentId:executedDocumentId||null,assignmentId:assignmentId||null,property:{propertyId:propertyId||null,address:propertyAddress||null},titleCompany,financials:{purchasePrice:purchasePrice||null},requestedServices:['title_search','lien_and_encumbrance_search','tax_status_review','closing_order_initiation']}; const idempotencyKey='wf443:'+input.leadId+':'+input.dealId+':'+input.contractId+':'+input.executionId; return [{json:{...input,titleClosingInitiationDecision:{status:ready?'ready':'blocked',decision,nextAction,executionState,packagePayload,flags,requiresHumanReview:!ready,confidenceScore:ready?97:20},idempotencyKey}}];"
+      },
+      "id": "w443e",
+      "name": "Validate Execution & Build Title Closing Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/title-closing-order-reconciliation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"executionId","value":"={{$json.executionId}}"},{"name":"titleClosingInitiationDecision","value":"={{JSON.stringify($json.titleClosingInitiationDecision)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w443f","name":"Persist Title Closing Initiation Decision","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/title-closing-order-reconciliation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{$json.executionId}}"
+            },
+            {
+              "name": "titleClosingInitiationDecision",
+              "value": "={{JSON.stringify($json.titleClosingInitiationDecision)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w443f",
+      "name": "Persist Title Closing Initiation Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/closing/title-search-order-initiate","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"executionId","value":"={{$json.executionId}}"},{"name":"packagePayload","value":"={{JSON.stringify($json.titleClosingInitiationDecision.packagePayload)}}"},{"name":"nextAction","value":"={{$json.titleClosingInitiationDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf443:order:'+$json.leadId+':'+$json.dealId+':'+$json.contractId+':'+$json.executionId}}"}]},"options":{}},
-      "id":"w443g","name":"Initiate Title Search & Closing Order","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/closing/title-search-order-initiate",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{$json.executionId}}"
+            },
+            {
+              "name": "packagePayload",
+              "value": "={{JSON.stringify($json.titleClosingInitiationDecision.packagePayload)}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.titleClosingInitiationDecision.nextAction}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf443:order:'+$json.leadId+':'+$json.dealId+':'+$json.contractId+':'+$json.executionId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w443g",
+      "name": "Initiate Title Search & Closing Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"executed_contract_title_search_closing_order_initiation"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"dealId","value":"={{$json.dealId}}"},{"name":"contractId","value":"={{$json.contractId}}"},{"name":"executionId","value":"={{$json.executionId}}"},{"name":"decision","value":"={{$json.titleClosingInitiationDecision.decision}}"},{"name":"nextAction","value":"={{$json.titleClosingInitiationDecision.nextAction}}"},{"name":"idempotencyKey","value":"={{'wf443:activity:'+$json.leadId+':'+$json.dealId+':'+$json.contractId+':'+$json.executionId}}"}]},"options":{}},
-      "id":"w443h","name":"Record Title Closing Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "executed_contract_title_search_closing_order_initiation"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "dealId",
+              "value": "={{$json.dealId}}"
+            },
+            {
+              "name": "contractId",
+              "value": "={{$json.contractId}}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{$json.executionId}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.titleClosingInitiationDecision.decision}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.titleClosingInitiationDecision.nextAction}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf443:activity:'+$json.leadId+':'+$json.dealId+':'+$json.contractId+':'+$json.executionId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w443h",
+      "name": "Record Title Closing Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w443i","name":"Respond Title Closing Initiation","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w443i",
+      "name": "Respond Title Closing Initiation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, dealId, contractId and executionId are required'} }}","options":{}},
-      "id":"w443j","name":"Respond Invalid Executed Contract Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, dealId, contractId and executionId are required'} }}",
+        "options": {}
+      },
+      "id": "w443j",
+      "name": "Respond Invalid Executed Contract Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Executed Contract Webhook":{"main":[[{"node":"Normalize Executed Contract Request","type":"main","index":0}]]},
-    "Normalize Executed Contract Request":{"main":[[{"node":"Validate Executed Contract Request","type":"main","index":0}]]},
-    "Validate Executed Contract Request":{"main":[[{"node":"Fetch Title & Closing Context","type":"main","index":0}],[{"node":"Respond Invalid Executed Contract Request","type":"main","index":0}]]},
-    "Fetch Title & Closing Context":{"main":[[{"node":"Validate Execution & Build Title Closing Package","type":"main","index":0}]]},
-    "Validate Execution & Build Title Closing Package":{"main":[[{"node":"Persist Title Closing Initiation Decision","type":"main","index":0}]]},
-    "Persist Title Closing Initiation Decision":{"main":[[{"node":"Initiate Title Search & Closing Order","type":"main","index":0}]]},
-    "Initiate Title Search & Closing Order":{"main":[[{"node":"Record Title Closing Activity","type":"main","index":0}]]},
-    "Record Title Closing Activity":{"main":[[{"node":"Respond Title Closing Initiation","type":"main","index":0}]]}
+  "connections": {
+    "Executed Contract Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Executed Contract Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Executed Contract Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Executed Contract Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Executed Contract Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Title & Closing Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Executed Contract Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Title & Closing Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Execution & Build Title Closing Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Execution & Build Title Closing Package": {
+      "main": [
+        [
+          {
+            "node": "Persist Title Closing Initiation Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Title Closing Initiation Decision": {
+      "main": [
+        [
+          {
+            "node": "Initiate Title Search & Closing Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initiate Title Search & Closing Order": {
+      "main": [
+        [
+          {
+            "node": "Record Title Closing Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Title Closing Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Title Closing Initiation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-443"},{"name":"executed-contract"},{"name":"title-search"},{"name":"closing-order"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-443","contractStatus":"scaffolded","idempotency":"wf443:{leadId}:{dealId}:{contractId}:{executionId}","notes":"Initiates title search and closing order only after verified executed-contract evidence. Production use requires verified InsulaCRM closing schema, title/closing provider integration, jurisdiction-specific closing requirements, and production API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-443"
+    },
+    {
+      "name": "executed-contract"
+    },
+    {
+      "name": "title-search"
+    },
+    {
+      "name": "closing-order"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-443",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf443:{leadId}:{dealId}:{contractId}:{executionId}",
+    "notes": "Initiates title search and closing order only after verified executed-contract evidence. Production use requires verified InsulaCRM closing schema, title/closing provider integration, jurisdiction-specific closing requirements, and production API contracts."
+  },
+  "id": "5a55a28f-1b2f-4306-abf1-6134e2c55674"
 }

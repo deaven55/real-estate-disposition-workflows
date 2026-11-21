@@ -212,5 +212,6 @@
   "meta": {
     "purpose": "Maps canonical contract signature requests into the vendor-neutral provider adapter without coupling the contract engine to a provider.",
     "status": "deployment-configurable"
-  }
+  },
+  "id": "3ab43ca1-3c8d-4508-b397-a78e3a8a3875"
 }

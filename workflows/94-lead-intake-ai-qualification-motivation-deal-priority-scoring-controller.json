@@ -2,57 +2,446 @@
   "name": "WF-456 — Lead Intake → AI Qualification, Motivation & Deal Priority Scoring Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"lead-intake-ai-qualification-motivation-deal-priority-scoring","responseMode":"lastNode","options":{}},
-      "id":"w456a","name":"AI Qualification Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-intake-ai-qualification-motivation-deal-priority-scoring",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w456a",
+      "name": "AI Qualification Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const source=String(b.source??'').trim().toLowerCase(); const campaignId=String(b.campaignId??'').trim(); const message=String(b.message??b.sellerMessage??'').trim(); return [{json:{...b,leadId,portfolioId,propertyId,source,campaignId,message,receivedAt:new Date().toISOString()}}];"},
-      "id":"w456b","name":"Normalize Lead Qualification Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const propertyId=String(b.propertyId??'').trim(); const source=String(b.source??'').trim().toLowerCase(); const campaignId=String(b.campaignId??'').trim(); const message=String(b.message??b.sellerMessage??'').trim(); return [{json:{...b,leadId,portfolioId,propertyId,source,campaignId,message,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w456b",
+      "name": "Normalize Lead Qualification Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.portfolioId}}","operation":"notEmpty"}]}},
-      "id":"w456c","name":"Validate Lead Qualification Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w456c",
+      "name": "Validate Lead Qualification Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/ai-qualification-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"source","value":"={{$json.source}}"},{"name":"campaignId","value":"={{$json.campaignId}}"},{"name":"message","value":"={{$json.message}}"}]},"options":{}},
-      "id":"w456d","name":"Fetch Lead Qualification Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/ai-qualification-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.source}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.message}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w456d",
+      "name": "Fetch Lead Qualification Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Lead Qualification Request').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const score=(v,def=50)=>Math.max(0,Math.min(100,n(v)||def)); const distress=score(ctx.distressScore??ctx.propertyDistressScore,50); const equity=score(ctx.equityScore,50); const repairs=score(ctx.repairScore??ctx.repairBurdenScore,50); const motivation=score(ctx.motivationScore,50); const timeline=score(ctx.timelineScore,50); const occupancy=score(ctx.occupancyScore,50); const ownership=score(ctx.ownershipScore,50); const contactability=score(ctx.contactabilityScore,50); const sourceQuality=score(ctx.sourceQualityScore,50); const engagement=score(ctx.engagementScore,50); const weights={distress:.13,equity:.12,repairs:.09,motivation:.18,timeline:.12,occupancy:.06,ownership:.07,contactability:.09,sourceQuality:.06,engagement:.08}; const priority=Math.round(distress*weights.distress+equity*weights.equity+repairs*weights.repairs+motivation*weights.motivation+timeline*weights.timeline+occupancy*weights.occupancy+ownership*weights.ownership+contactability*weights.contactability+sourceQuality*weights.sourceQuality+engagement*weights.engagement); const dnc=ctx.dnc===true||ctx.suppressed===true; const invalid=ctx.invalidLead===true; let tier=priority>=80?'A':priority>=60?'B':priority>=40?'C':'D'; let status=invalid?'invalid':dnc?'blocked':priority>=70?'qualified':priority>=45?'needs_qualification':'nurture'; let nextAction=invalid||dnc?'do_not_contact':priority>=80?'priority_human_conversation':priority>=65?'continue_qualification':priority>=45?'collect_missing_information':'nurture_and_reengage'; const evidence=[]; if(distress>=70)evidence.push('strong_property_distress_signal'); if(equity>=70)evidence.push('strong_equity_signal'); if(motivation>=70)evidence.push('strong_seller_motivation_signal'); if(timeline>=70)evidence.push('urgent_timeline_signal'); if(contactability<40)evidence.push('weak_contactability'); if(ctx.message) evidence.push('seller_message_available'); const confidence=Math.max(35,Math.min(95,Math.round(55+evidence.length*6-(ctx.missingFields?.length??0)*4))); const idempotencyKey='wf456:'+input.leadId+':'+(input.propertyId||'none')+':'+(input.campaignId||'none'); return [{json:{...input,aiQualification:{status,tier,priorityScore:priority,componentScores:{distress,equity,repairs,motivation,timeline,occupancy,ownership,contactability,sourceQuality,engagement},recommendedNextAction:nextAction,evidence,confidenceScore:confidence,flags:[...(dnc?['dnc_or_suppressed']:[]),...(invalid?['invalid_lead']:[]),...(contactability<40?['low_contactability']:[])],requiresHumanReview:priority>=80&&!dnc&&!invalid},idempotencyKey}}];"},
-      "id":"w456e","name":"Calculate AI Qualification Motivation & Priority","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Lead Qualification Request').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const score=(v,def=50)=>Math.max(0,Math.min(100,n(v)||def)); const distress=score(ctx.distressScore??ctx.propertyDistressScore,50); const equity=score(ctx.equityScore,50); const repairs=score(ctx.repairScore??ctx.repairBurdenScore,50); const motivation=score(ctx.motivationScore,50); const timeline=score(ctx.timelineScore,50); const occupancy=score(ctx.occupancyScore,50); const ownership=score(ctx.ownershipScore,50); const contactability=score(ctx.contactabilityScore,50); const sourceQuality=score(ctx.sourceQualityScore,50); const engagement=score(ctx.engagementScore,50); const weights={distress:.13,equity:.12,repairs:.09,motivation:.18,timeline:.12,occupancy:.06,ownership:.07,contactability:.09,sourceQuality:.06,engagement:.08}; const priority=Math.round(distress*weights.distress+equity*weights.equity+repairs*weights.repairs+motivation*weights.motivation+timeline*weights.timeline+occupancy*weights.occupancy+ownership*weights.ownership+contactability*weights.contactability+sourceQuality*weights.sourceQuality+engagement*weights.engagement); const dnc=ctx.dnc===true||ctx.suppressed===true; const invalid=ctx.invalidLead===true; let tier=priority>=80?'A':priority>=60?'B':priority>=40?'C':'D'; let status=invalid?'invalid':dnc?'blocked':priority>=70?'qualified':priority>=45?'needs_qualification':'nurture'; let nextAction=invalid||dnc?'do_not_contact':priority>=80?'priority_human_conversation':priority>=65?'continue_qualification':priority>=45?'collect_missing_information':'nurture_and_reengage'; const evidence=[]; if(distress>=70)evidence.push('strong_property_distress_signal'); if(equity>=70)evidence.push('strong_equity_signal'); if(motivation>=70)evidence.push('strong_seller_motivation_signal'); if(timeline>=70)evidence.push('urgent_timeline_signal'); if(contactability<40)evidence.push('weak_contactability'); if(ctx.message) evidence.push('seller_message_available'); const confidence=Math.max(35,Math.min(95,Math.round(55+evidence.length*6-(ctx.missingFields?.length??0)*4))); const idempotencyKey='wf456:'+input.leadId+':'+(input.propertyId||'none')+':'+(input.campaignId||'none'); return [{json:{...input,aiQualification:{status,tier,priorityScore:priority,componentScores:{distress,equity,repairs,motivation,timeline,occupancy,ownership,contactability,sourceQuality,engagement},recommendedNextAction:nextAction,evidence,confidenceScore:confidence,flags:[...(dnc?['dnc_or_suppressed']:[]),...(invalid?['invalid_lead']:[]),...(contactability<40?['low_contactability']:[])],requiresHumanReview:priority>=80&&!dnc&&!invalid},idempotencyKey}}];"
+      },
+      "id": "w456e",
+      "name": "Calculate AI Qualification Motivation & Priority",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/ai-qualification-result","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"status","value":"={{$json.aiQualification.status}}"},{"name":"tier","value":"={{$json.aiQualification.tier}}"},{"name":"priorityScore","value":"={{$json.aiQualification.priorityScore}}"},{"name":"componentScores","value":"={{JSON.stringify($json.aiQualification.componentScores)}}"},{"name":"recommendedNextAction","value":"={{$json.aiQualification.recommendedNextAction}}"},{"name":"evidence","value":"={{JSON.stringify($json.aiQualification.evidence)}}"},{"name":"confidenceScore","value":"={{$json.aiQualification.confidenceScore}}"},{"name":"flags","value":"={{JSON.stringify($json.aiQualification.flags)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w456f","name":"Persist AI Qualification Result","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/ai-qualification-result",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.aiQualification.status}}"
+            },
+            {
+              "name": "tier",
+              "value": "={{$json.aiQualification.tier}}"
+            },
+            {
+              "name": "priorityScore",
+              "value": "={{$json.aiQualification.priorityScore}}"
+            },
+            {
+              "name": "componentScores",
+              "value": "={{JSON.stringify($json.aiQualification.componentScores)}}"
+            },
+            {
+              "name": "recommendedNextAction",
+              "value": "={{$json.aiQualification.recommendedNextAction}}"
+            },
+            {
+              "name": "evidence",
+              "value": "={{JSON.stringify($json.aiQualification.evidence)}}"
+            },
+            {
+              "name": "confidenceScore",
+              "value": "={{$json.aiQualification.confidenceScore}}"
+            },
+            {
+              "name": "flags",
+              "value": "={{JSON.stringify($json.aiQualification.flags)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w456f",
+      "name": "Persist AI Qualification Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/priority-routing","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"tier","value":"={{$json.aiQualification.tier}}"},{"name":"priorityScore","value":"={{$json.aiQualification.priorityScore}}"},{"name":"recommendedNextAction","value":"={{$json.aiQualification.recommendedNextAction}}"},{"name":"requiresHumanReview","value":"={{$json.aiQualification.requiresHumanReview}}"},{"name":"idempotencyKey","value":"={{'wf456:route:'+$json.leadId+':'+($json.propertyId||'none')}}"}]},"options":{}},
-      "id":"w456g","name":"Route Lead by AI Priority","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/priority-routing",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "tier",
+              "value": "={{$json.aiQualification.tier}}"
+            },
+            {
+              "name": "priorityScore",
+              "value": "={{$json.aiQualification.priorityScore}}"
+            },
+            {
+              "name": "recommendedNextAction",
+              "value": "={{$json.aiQualification.recommendedNextAction}}"
+            },
+            {
+              "name": "requiresHumanReview",
+              "value": "={{$json.aiQualification.requiresHumanReview}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf456:route:'+$json.leadId+':'+($json.propertyId||'none')}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w456g",
+      "name": "Route Lead by AI Priority",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"ai_lead_qualification_motivation_priority_scoring"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"propertyId","value":"={{$json.propertyId}}"},{"name":"tier","value":"={{$json.aiQualification.tier}}"},{"name":"priorityScore","value":"={{$json.aiQualification.priorityScore}}"},{"name":"recommendedNextAction","value":"={{$json.aiQualification.recommendedNextAction}}"},{"name":"idempotencyKey","value":"={{'wf456:activity:'+$json.leadId+':'+($json.propertyId||'none')}}"}]},"options":{}},
-      "id":"w456h","name":"Record AI Qualification Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "ai_lead_qualification_motivation_priority_scoring"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "tier",
+              "value": "={{$json.aiQualification.tier}}"
+            },
+            {
+              "name": "priorityScore",
+              "value": "={{$json.aiQualification.priorityScore}}"
+            },
+            {
+              "name": "recommendedNextAction",
+              "value": "={{$json.aiQualification.recommendedNextAction}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf456:activity:'+$json.leadId+':'+($json.propertyId||'none')}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w456h",
+      "name": "Record AI Qualification Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w456i","name":"Respond AI Qualification Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w456i",
+      "name": "Respond AI Qualification Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId and portfolioId are required'} }}","options":{}},
-      "id":"w456j","name":"Respond Invalid Lead Qualification Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId and portfolioId are required'} }}",
+        "options": {}
+      },
+      "id": "w456j",
+      "name": "Respond Invalid Lead Qualification Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "AI Qualification Webhook":{"main":[[{"node":"Normalize Lead Qualification Request","type":"main","index":0}]]},
-    "Normalize Lead Qualification Request":{"main":[[{"node":"Validate Lead Qualification Request","type":"main","index":0}]]},
-    "Validate Lead Qualification Request":{"main":[[{"node":"Fetch Lead Qualification Context","type":"main","index":0}],[{"node":"Respond Invalid Lead Qualification Request","type":"main","index":0}]]},
-    "Fetch Lead Qualification Context":{"main":[[{"node":"Calculate AI Qualification Motivation & Priority","type":"main","index":0}]]},
-    "Calculate AI Qualification Motivation & Priority":{"main":[[{"node":"Persist AI Qualification Result","type":"main","index":0}]]},
-    "Persist AI Qualification Result":{"main":[[{"node":"Route Lead by AI Priority","type":"main","index":0}]]},
-    "Route Lead by AI Priority":{"main":[[{"node":"Record AI Qualification Activity","type":"main","index":0}]]},
-    "Record AI Qualification Activity":{"main":[[{"node":"Respond AI Qualification Result","type":"main","index":0}]]}
+  "connections": {
+    "AI Qualification Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Qualification Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Qualification Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Lead Qualification Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Lead Qualification Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Lead Qualification Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Lead Qualification Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Lead Qualification Context": {
+      "main": [
+        [
+          {
+            "node": "Calculate AI Qualification Motivation & Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate AI Qualification Motivation & Priority": {
+      "main": [
+        [
+          {
+            "node": "Persist AI Qualification Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist AI Qualification Result": {
+      "main": [
+        [
+          {
+            "node": "Route Lead by AI Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Lead by AI Priority": {
+      "main": [
+        [
+          {
+            "node": "Record AI Qualification Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record AI Qualification Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond AI Qualification Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-456"},{"name":"ai-qualification"},{"name":"motivation-scoring"},{"name":"priority-scoring"},{"name":"lead-routing"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-456","contractStatus":"scaffolded","idempotency":"wf456:{leadId}:{propertyId}:{campaignId}","notes":"Scores lead priority using deterministic component signals for distress, equity, repairs, motivation, timeline, occupancy, ownership, contactability, source quality and engagement. This is an AI-scaffold decision aid, not an autonomous legal/financial decision. Production use requires verified InsulaCRM fields, calibrated scoring/AI evaluation, explainability requirements and human oversight for high-impact decisions."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-456"
+    },
+    {
+      "name": "ai-qualification"
+    },
+    {
+      "name": "motivation-scoring"
+    },
+    {
+      "name": "priority-scoring"
+    },
+    {
+      "name": "lead-routing"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-456",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf456:{leadId}:{propertyId}:{campaignId}",
+    "notes": "Scores lead priority using deterministic component signals for distress, equity, repairs, motivation, timeline, occupancy, ownership, contactability, source quality and engagement. This is an AI-scaffold decision aid, not an autonomous legal/financial decision. Production use requires verified InsulaCRM fields, calibrated scoring/AI evaluation, explainability requirements and human oversight for high-impact decisions."
+  },
+  "id": "7476ba57-c8e2-49cf-a564-dd0684b39cea"
 }

@@ -2,57 +2,446 @@
   "name": "WF-455 — Campaign Execution → Live Lead Intake, Deduplication & Attribution Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"campaign-execution-live-lead-intake-deduplication-attribution","responseMode":"lastNode","options":{}},
-      "id":"w455a","name":"Live Lead Intake Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campaign-execution-live-lead-intake-deduplication-attribution",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w455a",
+      "name": "Live Lead Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const source=String(b.source??'').trim().toLowerCase(); const channel=String(b.channel??'').trim().toLowerCase(); const campaignId=String(b.campaignId??'').trim(); const email=String(b.email??'').trim().toLowerCase(); const phone=String(b.phone??'').replace(/\\D/g,''); const receivedAt=String(b.receivedAt??new Date().toISOString()); return [{json:{...b,leadId,portfolioId,source,channel,campaignId,email,phone,receivedAt}}];"},
-      "id":"w455b","name":"Normalize Live Lead Intake","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const source=String(b.source??'').trim().toLowerCase(); const channel=String(b.channel??'').trim().toLowerCase(); const campaignId=String(b.campaignId??'').trim(); const email=String(b.email??'').trim().toLowerCase(); const phone=String(b.phone??'').replace(/\\D/g,''); const receivedAt=String(b.receivedAt??new Date().toISOString()); return [{json:{...b,leadId,portfolioId,source,channel,campaignId,email,phone,receivedAt}}];"
+      },
+      "id": "w455b",
+      "name": "Normalize Live Lead Intake",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.source}}","operation":"notEmpty"},{"value1":"={{$json.channel}}","operation":"notEmpty"}]}},
-      "id":"w455c","name":"Validate Live Lead Intake","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.source}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.channel}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w455c",
+      "name": "Validate Live Lead Intake",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/live-intake-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"email","value":"={{$json.email}}"},{"name":"phone","value":"={{$json.phone}}"},{"name":"source","value":"={{$json.source}}"},{"name":"channel","value":"={{$json.channel}}"},{"name":"campaignId","value":"={{$json.campaignId}}"}]},"options":{}},
-      "id":"w455d","name":"Fetch Live Lead Intake Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/live-intake-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "email",
+              "value": "={{$json.email}}"
+            },
+            {
+              "name": "phone",
+              "value": "={{$json.phone}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.source}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w455d",
+      "name": "Fetch Live Lead Intake Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Live Lead Intake').first().json; const ctx=$json.context??$json; const existing=ctx.existingLead??ctx.duplicateLead??null; const duplicate=ctx.isDuplicate===true||!!existing; const suppressed=ctx.dnc===true||ctx.suppressed===true||String(ctx.contactStatus??'').toLowerCase()==='dnc'; const consent=String(ctx.consentStatus??'unknown').toLowerCase(); const attributionValid=!!input.source&&!!input.channel; const attribution={source:input.source,channel:input.channel,campaignId:input.campaignId||null,medium:input.medium??null,term:input.term??null,content:input.content??null,landingPage:input.landingPage??null}; const flags=[]; if(duplicate)flags.push('duplicate_or_existing_lead'); if(suppressed)flags.push('dnc_or_suppressed'); if(!attributionValid)flags.push('missing_attribution'); if(['denied','revoked'].includes(consent))flags.push('consent_denied_or_revoked'); let route='new_lead'; if(suppressed)route='blocked_suppressed'; else if(duplicate)route='existing_lead_merge_or_update'; else if(['denied','revoked'].includes(consent))route='consent_blocked'; const intakeAllowed=!suppressed&&!['denied','revoked'].includes(consent); const idempotencyKey='wf455:'+input.portfolioId+':'+input.leadId+':'+input.source+':'+(input.campaignId||'none'); return [{json:{...input,liveLeadIntake:{route,intakeAllowed,duplicate,existingLeadId:existing?.id??existing?.leadId??null,suppressed,consentStatus:consent,attribution,flags,requiresHumanReview:route==='existing_lead_merge_or_update'||flags.includes('missing_attribution'),confidenceScore:flags.length?70:92},idempotencyKey}}];"},
-      "id":"w455e","name":"Deduplicate Validate Consent & Build Attribution","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Live Lead Intake').first().json; const ctx=$json.context??$json; const existing=ctx.existingLead??ctx.duplicateLead??null; const duplicate=ctx.isDuplicate===true||!!existing; const suppressed=ctx.dnc===true||ctx.suppressed===true||String(ctx.contactStatus??'').toLowerCase()==='dnc'; const consent=String(ctx.consentStatus??'unknown').toLowerCase(); const attributionValid=!!input.source&&!!input.channel; const attribution={source:input.source,channel:input.channel,campaignId:input.campaignId||null,medium:input.medium??null,term:input.term??null,content:input.content??null,landingPage:input.landingPage??null}; const flags=[]; if(duplicate)flags.push('duplicate_or_existing_lead'); if(suppressed)flags.push('dnc_or_suppressed'); if(!attributionValid)flags.push('missing_attribution'); if(['denied','revoked'].includes(consent))flags.push('consent_denied_or_revoked'); let route='new_lead'; if(suppressed)route='blocked_suppressed'; else if(duplicate)route='existing_lead_merge_or_update'; else if(['denied','revoked'].includes(consent))route='consent_blocked'; const intakeAllowed=!suppressed&&!['denied','revoked'].includes(consent); const idempotencyKey='wf455:'+input.portfolioId+':'+input.leadId+':'+input.source+':'+(input.campaignId||'none'); return [{json:{...input,liveLeadIntake:{route,intakeAllowed,duplicate,existingLeadId:existing?.id??existing?.leadId??null,suppressed,consentStatus:consent,attribution,flags,requiresHumanReview:route==='existing_lead_merge_or_update'||flags.includes('missing_attribution'),confidenceScore:flags.length?70:92},idempotencyKey}}];"
+      },
+      "id": "w455e",
+      "name": "Deduplicate Validate Consent & Build Attribution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/live-intake","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"route","value":"={{$json.liveLeadIntake.route}}"},{"name":"intakeAllowed","value":"={{$json.liveLeadIntake.intakeAllowed}}"},{"name":"existingLeadId","value":"={{$json.liveLeadIntake.existingLeadId}}"},{"name":"attribution","value":"={{JSON.stringify($json.liveLeadIntake.attribution)}}"},{"name":"consentStatus","value":"={{$json.liveLeadIntake.consentStatus}}"},{"name":"flags","value":"={{JSON.stringify($json.liveLeadIntake.flags)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w455f","name":"Persist Live Lead Intake & Attribution","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/live-intake",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "route",
+              "value": "={{$json.liveLeadIntake.route}}"
+            },
+            {
+              "name": "intakeAllowed",
+              "value": "={{$json.liveLeadIntake.intakeAllowed}}"
+            },
+            {
+              "name": "existingLeadId",
+              "value": "={{$json.liveLeadIntake.existingLeadId}}"
+            },
+            {
+              "name": "attribution",
+              "value": "={{JSON.stringify($json.liveLeadIntake.attribution)}}"
+            },
+            {
+              "name": "consentStatus",
+              "value": "={{$json.liveLeadIntake.consentStatus}}"
+            },
+            {
+              "name": "flags",
+              "value": "={{JSON.stringify($json.liveLeadIntake.flags)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w455f",
+      "name": "Persist Live Lead Intake & Attribution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/route-to-qualification","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"route","value":"={{$json.liveLeadIntake.route}}"},{"name":"intakeAllowed","value":"={{$json.liveLeadIntake.intakeAllowed}}"},{"name":"nextWorkflow","value":"={{$json.liveLeadIntake.route==='new_lead'?'WF-405':$json.liveLeadIntake.route==='existing_lead_merge_or_update'?'WF-405':'none'}}"},{"name":"idempotencyKey","value":"={{'wf455:route:'+$json.portfolioId+':'+$json.leadId}}"}]},"options":{}},
-      "id":"w455g","name":"Route Lead to Qualification","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/route-to-qualification",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "route",
+              "value": "={{$json.liveLeadIntake.route}}"
+            },
+            {
+              "name": "intakeAllowed",
+              "value": "={{$json.liveLeadIntake.intakeAllowed}}"
+            },
+            {
+              "name": "nextWorkflow",
+              "value": "={{$json.liveLeadIntake.route==='new_lead'?'WF-405':$json.liveLeadIntake.route==='existing_lead_merge_or_update'?'WF-405':'none'}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf455:route:'+$json.portfolioId+':'+$json.leadId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w455g",
+      "name": "Route Lead to Qualification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"live_lead_intake_deduplication_attribution"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"source","value":"={{$json.source}}"},{"name":"channel","value":"={{$json.channel}}"},{"name":"campaignId","value":"={{$json.campaignId}}"},{"name":"route","value":"={{$json.liveLeadIntake.route}}"},{"name":"intakeAllowed","value":"={{$json.liveLeadIntake.intakeAllowed}}"},{"name":"idempotencyKey","value":"={{'wf455:activity:'+$json.portfolioId+':'+$json.leadId}}"}]},"options":{}},
-      "id":"w455h","name":"Record Live Lead Intake Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "live_lead_intake_deduplication_attribution"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.source}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            },
+            {
+              "name": "route",
+              "value": "={{$json.liveLeadIntake.route}}"
+            },
+            {
+              "name": "intakeAllowed",
+              "value": "={{$json.liveLeadIntake.intakeAllowed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf455:activity:'+$json.portfolioId+':'+$json.leadId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w455h",
+      "name": "Record Live Lead Intake Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w455i","name":"Respond Live Lead Intake","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w455i",
+      "name": "Respond Live Lead Intake",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, portfolioId, source and channel are required'} }}","options":{}},
-      "id":"w455j","name":"Respond Invalid Live Lead Intake","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, portfolioId, source and channel are required'} }}",
+        "options": {}
+      },
+      "id": "w455j",
+      "name": "Respond Invalid Live Lead Intake",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Live Lead Intake Webhook":{"main":[[{"node":"Normalize Live Lead Intake","type":"main","index":0}]]},
-    "Normalize Live Lead Intake":{"main":[[{"node":"Validate Live Lead Intake","type":"main","index":0}]]},
-    "Validate Live Lead Intake":{"main":[[{"node":"Fetch Live Lead Intake Context","type":"main","index":0}],[{"node":"Respond Invalid Live Lead Intake","type":"main","index":0}]]},
-    "Fetch Live Lead Intake Context":{"main":[[{"node":"Deduplicate Validate Consent & Build Attribution","type":"main","index":0}]]},
-    "Deduplicate Validate Consent & Build Attribution":{"main":[[{"node":"Persist Live Lead Intake & Attribution","type":"main","index":0}]]},
-    "Persist Live Lead Intake & Attribution":{"main":[[{"node":"Route Lead to Qualification","type":"main","index":0}]]},
-    "Route Lead to Qualification":{"main":[[{"node":"Record Live Lead Intake Activity","type":"main","index":0}]]},
-    "Record Live Lead Intake Activity":{"main":[[{"node":"Respond Live Lead Intake","type":"main","index":0}]]}
+  "connections": {
+    "Live Lead Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Live Lead Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Live Lead Intake": {
+      "main": [
+        [
+          {
+            "node": "Validate Live Lead Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Live Lead Intake": {
+      "main": [
+        [
+          {
+            "node": "Fetch Live Lead Intake Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Live Lead Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Live Lead Intake Context": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Validate Consent & Build Attribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Validate Consent & Build Attribution": {
+      "main": [
+        [
+          {
+            "node": "Persist Live Lead Intake & Attribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Live Lead Intake & Attribution": {
+      "main": [
+        [
+          {
+            "node": "Route Lead to Qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Lead to Qualification": {
+      "main": [
+        [
+          {
+            "node": "Record Live Lead Intake Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Live Lead Intake Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Live Lead Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-455"},{"name":"live-lead-intake"},{"name":"deduplication"},{"name":"attribution"},{"name":"consent"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-455","contractStatus":"scaffolded","idempotency":"wf455:{portfolioId}:{leadId}:{source}:{campaignId}","notes":"Receives live campaign leads, checks duplicate/existing records, validates suppression and consent state, preserves source/channel/campaign attribution, persists intake and routes eligible leads into qualification. Production use requires verified identity matching, consent policy, canonical lead schema and production InsulaCRM API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-455"
+    },
+    {
+      "name": "live-lead-intake"
+    },
+    {
+      "name": "deduplication"
+    },
+    {
+      "name": "attribution"
+    },
+    {
+      "name": "consent"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-455",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf455:{portfolioId}:{leadId}:{source}:{campaignId}",
+    "notes": "Receives live campaign leads, checks duplicate/existing records, validates suppression and consent state, preserves source/channel/campaign attribution, persists intake and routes eligible leads into qualification. Production use requires verified identity matching, consent policy, canonical lead schema and production InsulaCRM API contracts."
+  },
+  "id": "a4422d2e-0d01-450b-8718-56219b871659"
 }

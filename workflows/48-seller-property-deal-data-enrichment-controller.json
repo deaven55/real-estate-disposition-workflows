@@ -12,7 +12,10 @@
       "name": "Property Enrichment Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,14 +25,23 @@
       "name": "Normalize Property Enrichment Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "string": [
-            {"value1":"={{$json.leadId}}","operation":"notEmpty"},
-            {"value1":"={{$json.propertyId}}","operation":"notEmpty"}
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.propertyId}}",
+              "operation": "notEmpty"
+            }
           ]
         }
       },
@@ -37,7 +49,10 @@
       "name": "Validate Property Enrichment Identity",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -47,9 +62,18 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"propertyId","value":"={{$json.propertyId}}"},
-            {"name":"address","value":"={{$json.address}}"}
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "address",
+              "value": "={{$json.address}}"
+            }
           ]
         },
         "options": {}
@@ -58,7 +82,10 @@
       "name": "Fetch Property & Deal Enrichment Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [660, -80]
+      "position": [
+        660,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -68,7 +95,10 @@
       "name": "Build Property & Deal Enrichment",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, -80]
+      "position": [
+        880,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -78,10 +108,22 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"propertyId","value":"={{$json.propertyId}}"},
-            {"name":"enrichment","value":"={{JSON.stringify($json.enrichment)}}"},
-            {"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "enrichment",
+              "value": "={{JSON.stringify($json.enrichment)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
           ]
         },
         "options": {}
@@ -90,7 +132,10 @@
       "name": "Persist Property & Deal Enrichment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, -80]
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -100,13 +145,34 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"type","value":"seller_property_deal_enrichment"},
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"propertyId","value":"={{$json.propertyId}}"},
-            {"name":"status","value":"={{$json.enrichment.status}}"},
-            {"name":"flagCount","value":"={{$json.enrichment.flags.length}}"},
-            {"name":"dataCompletenessScore","value":"={{$json.enrichment.enrichment.dataQuality.completenessScore}}"},
-            {"name":"idempotencyKey","value":"={{'wf410:activity:'+$json.leadId+':'+$json.propertyId}}"}
+            {
+              "name": "type",
+              "value": "seller_property_deal_enrichment"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "propertyId",
+              "value": "={{$json.propertyId}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.enrichment.status}}"
+            },
+            {
+              "name": "flagCount",
+              "value": "={{$json.enrichment.flags.length}}"
+            },
+            {
+              "name": "dataCompletenessScore",
+              "value": "={{$json.enrichment.enrichment.dataQuality.completenessScore}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf410:activity:'+$json.leadId+':'+$json.propertyId}}"
+            }
           ]
         },
         "options": {}
@@ -115,7 +181,10 @@
       "name": "Record Property Enrichment Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, -80]
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -127,7 +196,10 @@
       "name": "Respond Property Enrichment",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, -80]
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -139,17 +211,97 @@
       "name": "Respond Invalid Enrichment Request",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [660, 140]
+      "position": [
+        660,
+        140
+      ]
     }
   ],
   "connections": {
-    "Property Enrichment Webhook": {"main":[[{"node":"Normalize Property Enrichment Request","type":"main","index":0}]]},
-    "Normalize Property Enrichment Request": {"main":[[{"node":"Validate Property Enrichment Identity","type":"main","index":0}]]},
-    "Validate Property Enrichment Identity": {"main":[[{"node":"Fetch Property & Deal Enrichment Context","type":"main","index":0}],[{"node":"Respond Invalid Enrichment Request","type":"main","index":0}]]},
-    "Fetch Property & Deal Enrichment Context": {"main":[[{"node":"Build Property & Deal Enrichment","type":"main","index":0}]]},
-    "Build Property & Deal Enrichment": {"main":[[{"node":"Persist Property & Deal Enrichment","type":"main","index":0}]]},
-    "Persist Property & Deal Enrichment": {"main":[[{"node":"Record Property Enrichment Activity","type":"main","index":0}]]},
-    "Record Property Enrichment Activity": {"main":[[{"node":"Respond Property Enrichment","type":"main","index":0}]]}
+    "Property Enrichment Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Property Enrichment Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Property Enrichment Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Property Enrichment Identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Property Enrichment Identity": {
+      "main": [
+        [
+          {
+            "node": "Fetch Property & Deal Enrichment Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Enrichment Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Property & Deal Enrichment Context": {
+      "main": [
+        [
+          {
+            "node": "Build Property & Deal Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Property & Deal Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Persist Property & Deal Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Property & Deal Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Record Property Enrichment Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Property Enrichment Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Property Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -158,16 +310,27 @@
     "saveManualExecutions": true
   },
   "tags": [
-    {"name":"WF-410"},
-    {"name":"property-enrichment"},
-    {"name":"deal-enrichment"},
-    {"name":"seller"},
-    {"name":"InsulaCRM"}
+    {
+      "name": "WF-410"
+    },
+    {
+      "name": "property-enrichment"
+    },
+    {
+      "name": "deal-enrichment"
+    },
+    {
+      "name": "seller"
+    },
+    {
+      "name": "InsulaCRM"
+    }
   ],
   "meta": {
-    "workflowId":"WF-410",
-    "contractStatus":"scaffolded",
-    "idempotency":"wf410:{leadId}:{propertyId}",
-    "notes":"Enrichment is a deterministic scaffold pending production property-data providers, verified InsulaCRM field mappings, and final API contract."
-  }
+    "workflowId": "WF-410",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf410:{leadId}:{propertyId}",
+    "notes": "Enrichment is a deterministic scaffold pending production property-data providers, verified InsulaCRM field mappings, and final API contract."
+  },
+  "id": "3ce1d768-5f24-4844-beda-49abd548bc72"
 }

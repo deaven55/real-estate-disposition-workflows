@@ -323,5 +323,6 @@
     "contractStatus": "scaffolded",
     "idempotency": "wf402:{experimentId}:{period}",
     "notes": "Budget actions are recommendations; final production API and approval controls must be mapped before live spend changes."
-  }
+  },
+  "id": "34dca313-a24d-4f53-866d-afd743d10a6c"
 }

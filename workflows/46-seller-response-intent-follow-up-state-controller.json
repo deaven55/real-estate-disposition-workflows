@@ -12,7 +12,10 @@
       "name": "Seller Response Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,14 +25,23 @@
       "name": "Normalize Seller Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "string": [
-            {"value1":"={{$json.leadId}}","operation":"notEmpty"},
-            {"value1":"={{$json.responseText}}","operation":"notEmpty"}
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.responseText}}",
+              "operation": "notEmpty"
+            }
           ]
         }
       },
@@ -37,7 +49,10 @@
       "name": "Validate Seller Response",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -47,9 +62,18 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"responseId","value":"={{$json.responseId}}"},
-            {"name":"channel","value":"={{$json.channel}}"}
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "responseId",
+              "value": "={{$json.responseId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            }
           ]
         },
         "options": {}
@@ -58,7 +82,10 @@
       "name": "Fetch Seller Response Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [660, -80]
+      "position": [
+        660,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -68,7 +95,10 @@
       "name": "Classify Seller Intent & Follow-Up State",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, -80]
+      "position": [
+        880,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -78,12 +108,30 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"responseId","value":"={{$json.responseId}}"},
-            {"name":"channel","value":"={{$json.channel}}"},
-            {"name":"analysis","value":"={{JSON.stringify($json.responseAnalysis)}}"},
-            {"name":"guardrails","value":"={{JSON.stringify($json.guardrails)}}"},
-            {"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "responseId",
+              "value": "={{$json.responseId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "analysis",
+              "value": "={{JSON.stringify($json.responseAnalysis)}}"
+            },
+            {
+              "name": "guardrails",
+              "value": "={{JSON.stringify($json.guardrails)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
           ]
         },
         "options": {}
@@ -92,7 +140,10 @@
       "name": "Persist Seller Response State",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, -80]
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -102,13 +153,34 @@
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            {"name":"type","value":"seller_response_intent_classification"},
-            {"name":"leadId","value":"={{$json.leadId}}"},
-            {"name":"intent","value":"={{$json.responseAnalysis.intent}}"},
-            {"name":"route","value":"={{$json.responseAnalysis.route}}"},
-            {"name":"nextAction","value":"={{$json.responseAnalysis.nextAction}}"},
-            {"name":"channel","value":"={{$json.channel}}"},
-            {"name":"idempotencyKey","value":"={{'wf408:activity:'+$json.leadId+':'+($json.responseId||'none')}}"}
+            {
+              "name": "type",
+              "value": "seller_response_intent_classification"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "intent",
+              "value": "={{$json.responseAnalysis.intent}}"
+            },
+            {
+              "name": "route",
+              "value": "={{$json.responseAnalysis.route}}"
+            },
+            {
+              "name": "nextAction",
+              "value": "={{$json.responseAnalysis.nextAction}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf408:activity:'+$json.leadId+':'+($json.responseId||'none')}}"
+            }
           ]
         },
         "options": {}
@@ -117,7 +189,10 @@
       "name": "Record Seller Response Analytics Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, -80]
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -129,7 +204,10 @@
       "name": "Respond Seller Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, -80]
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -141,17 +219,97 @@
       "name": "Respond Invalid Seller Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [660, 140]
+      "position": [
+        660,
+        140
+      ]
     }
   ],
   "connections": {
-    "Seller Response Webhook": {"main":[[{"node":"Normalize Seller Response","type":"main","index":0}]]},
-    "Normalize Seller Response": {"main":[[{"node":"Validate Seller Response","type":"main","index":0}]]},
-    "Validate Seller Response": {"main":[[{"node":"Fetch Seller Response Context","type":"main","index":0}],[{"node":"Respond Invalid Seller Response","type":"main","index":0}]]},
-    "Fetch Seller Response Context": {"main":[[{"node":"Classify Seller Intent & Follow-Up State","type":"main","index":0}]]},
-    "Classify Seller Intent & Follow-Up State": {"main":[[{"node":"Persist Seller Response State","type":"main","index":0}]]},
-    "Persist Seller Response State": {"main":[[{"node":"Record Seller Response Analytics Activity","type":"main","index":0}]]},
-    "Record Seller Response Analytics Activity": {"main":[[{"node":"Respond Seller Response","type":"main","index":0}]]}
+    "Seller Response Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Seller Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Seller Response": {
+      "main": [
+        [
+          {
+            "node": "Validate Seller Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Seller Response": {
+      "main": [
+        [
+          {
+            "node": "Fetch Seller Response Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Seller Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Seller Response Context": {
+      "main": [
+        [
+          {
+            "node": "Classify Seller Intent & Follow-Up State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Seller Intent & Follow-Up State": {
+      "main": [
+        [
+          {
+            "node": "Persist Seller Response State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Seller Response State": {
+      "main": [
+        [
+          {
+            "node": "Record Seller Response Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Seller Response Analytics Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Seller Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -160,16 +318,27 @@
     "saveManualExecutions": true
   },
   "tags": [
-    {"name":"WF-408"},
-    {"name":"seller-response"},
-    {"name":"intent-classification"},
-    {"name":"follow-up"},
-    {"name":"InsulaCRM"}
+    {
+      "name": "WF-408"
+    },
+    {
+      "name": "seller-response"
+    },
+    {
+      "name": "intent-classification"
+    },
+    {
+      "name": "follow-up"
+    },
+    {
+      "name": "InsulaCRM"
+    }
   ],
   "meta": {
-    "workflowId":"WF-408",
-    "contractStatus":"scaffolded",
-    "idempotency":"wf408:{leadId}:{responseId|receivedAt}",
-    "notes":"Intent classification is deterministic scaffold logic pending production AI/NLP contract, response event schema, consent policy, and verified InsulaCRM API mapping."
-  }
+    "workflowId": "WF-408",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf408:{leadId}:{responseId|receivedAt}",
+    "notes": "Intent classification is deterministic scaffold logic pending production AI/NLP contract, response event schema, consent policy, and verified InsulaCRM API mapping."
+  },
+  "id": "05741de8-49fc-4e16-af2c-41847f03dbe0"
 }

@@ -12,7 +12,10 @@
       "name": "Assignment Closing Coordination Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Closing Coordination Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Fetch InsulaCRM Closing Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -58,7 +67,10 @@
       "name": "Validate Approval Contract Signatures & Economics",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -87,7 +99,10 @@
       "name": "IF Closing Ready",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -144,7 +159,10 @@
       "name": "Persist Buyer Final Handoff",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, -140]
+      "position": [
+        1100,
+        -140
+      ]
     },
     {
       "parameters": {
@@ -193,7 +211,10 @@
       "name": "Persist Seller Final Handoff",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, 20]
+      "position": [
+        1100,
+        20
+      ]
     },
     {
       "parameters": {
@@ -254,7 +275,10 @@
       "name": "Persist Closing Coordination",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, -60]
+      "position": [
+        1320,
+        -60
+      ]
     },
     {
       "parameters": {
@@ -268,7 +292,10 @@
       "name": "Respond Closing Coordination Active",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1540, -60]
+      "position": [
+        1540,
+        -60
+      ]
     },
     {
       "parameters": {
@@ -282,41 +309,112 @@
       "name": "Respond Closing Coordination Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     }
   ],
   "connections": {
     "Assignment Closing Coordination Webhook": {
-      "main": [[{"node": "Normalize Closing Coordination Request", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Closing Coordination Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Closing Coordination Request": {
-      "main": [[{"node": "Fetch InsulaCRM Closing Context", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Fetch InsulaCRM Closing Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch InsulaCRM Closing Context": {
-      "main": [[{"node": "Validate Approval Contract Signatures & Economics", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Validate Approval Contract Signatures & Economics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Approval Contract Signatures & Economics": {
-      "main": [[{"node": "IF Closing Ready", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "IF Closing Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF Closing Ready": {
       "main": [
         [
-          {"node": "Persist Buyer Final Handoff", "type": "main", "index": 0},
-          {"node": "Persist Seller Final Handoff", "type": "main", "index": 0}
+          {
+            "node": "Persist Buyer Final Handoff",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Persist Seller Final Handoff",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          {"node": "Respond Closing Coordination Blocked", "type": "main", "index": 0}
+          {
+            "node": "Respond Closing Coordination Blocked",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Persist Buyer Final Handoff": {
-      "main": [[{"node": "Persist Closing Coordination", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Closing Coordination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Seller Final Handoff": {
-      "main": [[{"node": "Persist Closing Coordination", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Closing Coordination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Closing Coordination": {
-      "main": [[{"node": "Respond Closing Coordination Active", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Closing Coordination Active",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -329,5 +427,13 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["real-estate", "insula-crm", "assignment", "closing", "handoff", "wf-387"]
+  "tags": [
+    "real-estate",
+    "insula-crm",
+    "assignment",
+    "closing",
+    "handoff",
+    "wf-387"
+  ],
+  "id": "b1f882ce-6a6b-4649-ab44-799d5d6b9d35"
 }

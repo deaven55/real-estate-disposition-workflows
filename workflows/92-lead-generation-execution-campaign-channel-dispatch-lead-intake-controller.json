@@ -2,57 +2,450 @@
   "name": "WF-454 — Lead Generation Execution → Campaign/Channel Dispatch & Lead Intake Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"lead-generation-execution-campaign-channel-dispatch-lead-intake","responseMode":"lastNode","options":{}},
-      "id":"w454a","name":"Lead Generation Execution Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-generation-execution-campaign-channel-dispatch-lead-intake",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w454a",
+      "name": "Lead Generation Execution Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const period=String(b.period??'').trim(); const executionId=String(b.executionId??b.requestId??'').trim(); const campaignId=String(b.campaignId??'').trim(); const channel=String(b.channel??'').trim().toLowerCase(); const requestedLeadVolume=Math.max(0,Math.ceil(Number(b.requestedLeadVolume??b.leadVolume??0))); const approvedBudget=Math.max(0,Number(b.approvedBudget??b.budget??0)); return [{json:{...b,portfolioId,period,executionId,campaignId,channel,requestedLeadVolume,approvedBudget,receivedAt:new Date().toISOString()}}];"},
-      "id":"w454b","name":"Normalize Lead Generation Execution","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const period=String(b.period??'').trim(); const executionId=String(b.executionId??b.requestId??'').trim(); const campaignId=String(b.campaignId??'').trim(); const channel=String(b.channel??'').trim().toLowerCase(); const requestedLeadVolume=Math.max(0,Math.ceil(Number(b.requestedLeadVolume??b.leadVolume??0))); const approvedBudget=Math.max(0,Number(b.approvedBudget??b.budget??0)); return [{json:{...b,portfolioId,period,executionId,campaignId,channel,requestedLeadVolume,approvedBudget,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w454b",
+      "name": "Normalize Lead Generation Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.period}}","operation":"notEmpty"},{"value1":"={{$json.executionId}}","operation":"notEmpty"},{"value1":"={{$json.campaignId}}","operation":"notEmpty"},{"value1":"={{$json.channel}}","operation":"notEmpty"}]}},
-      "id":"w454c","name":"Validate Lead Generation Execution","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.executionId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.campaignId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.channel}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w454c",
+      "name": "Validate Lead Generation Execution",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/lead-generation/execution-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"executionId","value":"={{$json.executionId}}"},{"name":"campaignId","value":"={{$json.campaignId}}"},{"name":"channel","value":"={{$json.channel}}"}]},"options":{}},
-      "id":"w454d","name":"Fetch Lead Generation Execution Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/lead-generation/execution-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{$json.executionId}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w454d",
+      "name": "Fetch Lead Generation Execution Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Lead Generation Execution').first().json; const ctx=$json.context??$json; const flags=[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const executionApproved=ctx.executionApproved===true||['approved','authorized','approved_for_execution'].includes(String(ctx.executionState??ctx.status??'').toLowerCase()); const campaignActive=ctx.campaignActive!==false; const channelAllowed=ctx.channelAllowed!==false; const budgetAvailable=n(ctx.availableBudget??ctx.remainingBudget); const leadCapacity=n(ctx.availableLeadCapacity??ctx.availableCapacity); const consentPolicyOk=ctx.consentPolicyOk!==false; const requestedBudget=input.approvedBudget; const requestedLeads=input.requestedLeadVolume; if(!executionApproved)flags.push('execution_not_approved'); if(!campaignActive)flags.push('campaign_inactive'); if(!channelAllowed)flags.push('channel_not_allowed'); if(!consentPolicyOk)flags.push('consent_policy_block'); if(budgetAvailable>0&&requestedBudget>budgetAvailable)flags.push('insufficient_budget'); if(leadCapacity>0&&requestedLeads>leadCapacity)flags.push('lead_capacity_exceeded'); const allowed=flags.length===0&&executionApproved&&campaignActive&&channelAllowed&&consentPolicyOk; const expectedCPL=n(ctx.expectedCostPerLead??ctx.cpl); const projectedLeadSpend=expectedCPL>0?Math.round(requestedLeads*expectedCPL*100)/100:requestedBudget; const utilization=requestedBudget>0?Math.round(projectedLeadSpend/requestedBudget*10000)/100:0; let decision='hold_lead_generation_dispatch',nextAction='resolve_execution_campaign_channel_or_capacity_block'; if(allowed){decision='dispatch_campaign_and_activate_lead_intake';nextAction='activate_campaign_dispatch_and_route_incoming_leads_to_insula_crm';} const idempotencyKey='wf454:'+input.portfolioId+':'+input.period+':'+input.executionId; return [{json:{...input,leadGenerationDispatch:{status:allowed?'ready':'blocked',decision,nextAction,executionApproved,campaignActive,channelAllowed,consentPolicyOk,requestedLeadVolume:requestedLeads,approvedBudget:requestedBudget,projectedLeadSpend,expectedCostPerLead:expectedCPL,budgetUtilizationPercent:utilization,availableBudget,availableLeadCapacity,flags,dispatchAllowed:allowed,requiresHumanReview:!allowed,confidenceScore:allowed?90:30},idempotencyKey}}];"},
-      "id":"w454e","name":"Validate Campaign Channel & Lead Intake Dispatch","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Lead Generation Execution').first().json; const ctx=$json.context??$json; const flags=[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const executionApproved=ctx.executionApproved===true||['approved','authorized','approved_for_execution'].includes(String(ctx.executionState??ctx.status??'').toLowerCase()); const campaignActive=ctx.campaignActive!==false; const channelAllowed=ctx.channelAllowed!==false; const budgetAvailable=n(ctx.availableBudget??ctx.remainingBudget); const leadCapacity=n(ctx.availableLeadCapacity??ctx.availableCapacity); const consentPolicyOk=ctx.consentPolicyOk!==false; const requestedBudget=input.approvedBudget; const requestedLeads=input.requestedLeadVolume; if(!executionApproved)flags.push('execution_not_approved'); if(!campaignActive)flags.push('campaign_inactive'); if(!channelAllowed)flags.push('channel_not_allowed'); if(!consentPolicyOk)flags.push('consent_policy_block'); if(budgetAvailable>0&&requestedBudget>budgetAvailable)flags.push('insufficient_budget'); if(leadCapacity>0&&requestedLeads>leadCapacity)flags.push('lead_capacity_exceeded'); const allowed=flags.length===0&&executionApproved&&campaignActive&&channelAllowed&&consentPolicyOk; const expectedCPL=n(ctx.expectedCostPerLead??ctx.cpl); const projectedLeadSpend=expectedCPL>0?Math.round(requestedLeads*expectedCPL*100)/100:requestedBudget; const utilization=requestedBudget>0?Math.round(projectedLeadSpend/requestedBudget*10000)/100:0; let decision='hold_lead_generation_dispatch',nextAction='resolve_execution_campaign_channel_or_capacity_block'; if(allowed){decision='dispatch_campaign_and_activate_lead_intake';nextAction='activate_campaign_dispatch_and_route_incoming_leads_to_insula_crm';} const idempotencyKey='wf454:'+input.portfolioId+':'+input.period+':'+input.executionId; return [{json:{...input,leadGenerationDispatch:{status:allowed?'ready':'blocked',decision,nextAction,executionApproved,campaignActive,channelAllowed,consentPolicyOk,requestedLeadVolume:requestedLeads,approvedBudget:requestedBudget,projectedLeadSpend,expectedCostPerLead:expectedCPL,budgetUtilizationPercent:utilization,availableBudget,availableLeadCapacity,flags,dispatchAllowed:allowed,requiresHumanReview:!allowed,confidenceScore:allowed?90:30},idempotencyKey}}];"
+      },
+      "id": "w454e",
+      "name": "Validate Campaign Channel & Lead Intake Dispatch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/lead-generation/campaign-dispatch","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"executionId","value":"={{$json.executionId}}"},{"name":"campaignId","value":"={{$json.campaignId}}"},{"name":"channel","value":"={{$json.channel}}"},{"name":"requestedLeadVolume","value":"={{$json.leadGenerationDispatch.requestedLeadVolume}}"},{"name":"approvedBudget","value":"={{$json.leadGenerationDispatch.approvedBudget}}"},{"name":"dispatchAllowed","value":"={{$json.leadGenerationDispatch.dispatchAllowed}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w454f","name":"Dispatch Campaign Channel Lead Generation","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/lead-generation/campaign-dispatch",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{$json.executionId}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "requestedLeadVolume",
+              "value": "={{$json.leadGenerationDispatch.requestedLeadVolume}}"
+            },
+            {
+              "name": "approvedBudget",
+              "value": "={{$json.leadGenerationDispatch.approvedBudget}}"
+            },
+            {
+              "name": "dispatchAllowed",
+              "value": "={{$json.leadGenerationDispatch.dispatchAllowed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w454f",
+      "name": "Dispatch Campaign Channel Lead Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/lead-generation/lead-intake-routing","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"campaignId","value":"={{$json.campaignId}}"},{"name":"channel","value":"={{$json.channel}}"},{"name":"intakeStatus","value":"={{$json.leadGenerationDispatch.dispatchAllowed?'active':'blocked'}}"},{"name":"routingPolicy","value":"={{$json.leadGenerationDispatch.dispatchAllowed?'route_new_leads_to_wf404_and_wf405':'hold_new_leads_until_execution_is_cleared'}}"},{"name":"idempotencyKey","value":"={{'wf454:intake:'+$json.portfolioId+':'+$json.campaignId+':'+$json.executionId}}"}]},"options":{}},
-      "id":"w454g","name":"Activate Lead Intake Routing","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/lead-generation/lead-intake-routing",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "intakeStatus",
+              "value": "={{$json.leadGenerationDispatch.dispatchAllowed?'active':'blocked'}}"
+            },
+            {
+              "name": "routingPolicy",
+              "value": "={{$json.leadGenerationDispatch.dispatchAllowed?'route_new_leads_to_wf404_and_wf405':'hold_new_leads_until_execution_is_cleared'}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf454:intake:'+$json.portfolioId+':'+$json.campaignId+':'+$json.executionId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w454g",
+      "name": "Activate Lead Intake Routing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"lead_generation_execution_campaign_channel_dispatch_lead_intake"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"executionId","value":"={{$json.executionId}}"},{"name":"campaignId","value":"={{$json.campaignId}}"},{"name":"channel","value":"={{$json.channel}}"},{"name":"decision","value":"={{$json.leadGenerationDispatch.decision}}"},{"name":"dispatchAllowed","value":"={{$json.leadGenerationDispatch.dispatchAllowed}}"},{"name":"requestedLeadVolume","value":"={{$json.leadGenerationDispatch.requestedLeadVolume}}"},{"name":"approvedBudget","value":"={{$json.leadGenerationDispatch.approvedBudget}}"},{"name":"idempotencyKey","value":"={{'wf454:activity:'+$json.portfolioId+':'+$json.executionId}}"}]},"options":{}},
-      "id":"w454h","name":"Record Lead Generation Dispatch Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "lead_generation_execution_campaign_channel_dispatch_lead_intake"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{$json.executionId}}"
+            },
+            {
+              "name": "campaignId",
+              "value": "={{$json.campaignId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.leadGenerationDispatch.decision}}"
+            },
+            {
+              "name": "dispatchAllowed",
+              "value": "={{$json.leadGenerationDispatch.dispatchAllowed}}"
+            },
+            {
+              "name": "requestedLeadVolume",
+              "value": "={{$json.leadGenerationDispatch.requestedLeadVolume}}"
+            },
+            {
+              "name": "approvedBudget",
+              "value": "={{$json.leadGenerationDispatch.approvedBudget}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf454:activity:'+$json.portfolioId+':'+$json.executionId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w454h",
+      "name": "Record Lead Generation Dispatch Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w454i","name":"Respond Lead Generation Dispatch","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w454i",
+      "name": "Respond Lead Generation Dispatch",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId, period, executionId, campaignId and channel are required'} }}","options":{}},
-      "id":"w454j","name":"Respond Invalid Lead Generation Execution","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'portfolioId, period, executionId, campaignId and channel are required'} }}",
+        "options": {}
+      },
+      "id": "w454j",
+      "name": "Respond Invalid Lead Generation Execution",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Lead Generation Execution Webhook":{"main":[[{"node":"Normalize Lead Generation Execution","type":"main","index":0}]]},
-    "Normalize Lead Generation Execution":{"main":[[{"node":"Validate Lead Generation Execution","type":"main","index":0}]]},
-    "Validate Lead Generation Execution":{"main":[[{"node":"Fetch Lead Generation Execution Context","type":"main","index":0}],[{"node":"Respond Invalid Lead Generation Execution","type":"main","index":0}]]},
-    "Fetch Lead Generation Execution Context":{"main":[[{"node":"Validate Campaign Channel & Lead Intake Dispatch","type":"main","index":0}]]},
-    "Validate Campaign Channel & Lead Intake Dispatch":{"main":[[{"node":"Dispatch Campaign Channel Lead Generation","type":"main","index":0}]]},
-    "Dispatch Campaign Channel Lead Generation":{"main":[[{"node":"Activate Lead Intake Routing","type":"main","index":0}]]},
-    "Activate Lead Intake Routing":{"main":[[{"node":"Record Lead Generation Dispatch Activity","type":"main","index":0}]]},
-    "Record Lead Generation Dispatch Activity":{"main":[[{"node":"Respond Lead Generation Dispatch","type":"main","index":0}]]}
+  "connections": {
+    "Lead Generation Execution Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Generation Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Generation Execution": {
+      "main": [
+        [
+          {
+            "node": "Validate Lead Generation Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Lead Generation Execution": {
+      "main": [
+        [
+          {
+            "node": "Fetch Lead Generation Execution Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Lead Generation Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Lead Generation Execution Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Campaign Channel & Lead Intake Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Campaign Channel & Lead Intake Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Campaign Channel Lead Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Campaign Channel Lead Generation": {
+      "main": [
+        [
+          {
+            "node": "Activate Lead Intake Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Activate Lead Intake Routing": {
+      "main": [
+        [
+          {
+            "node": "Record Lead Generation Dispatch Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Lead Generation Dispatch Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Lead Generation Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-454"},{"name":"lead-generation"},{"name":"campaign-dispatch"},{"name":"channel-dispatch"},{"name":"lead-intake"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-454","contractStatus":"scaffolded","idempotency":"wf454:{portfolioId}:{period}:{executionId}","notes":"Dispatches an approved acquisition execution into a campaign/channel and activates lead-intake routing only after execution approval, campaign/channel eligibility, consent policy and capacity checks pass. Production use requires verified campaign-platform integrations, consent/compliance rules, lead-intake schema and production InsulaCRM API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-454"
+    },
+    {
+      "name": "lead-generation"
+    },
+    {
+      "name": "campaign-dispatch"
+    },
+    {
+      "name": "channel-dispatch"
+    },
+    {
+      "name": "lead-intake"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-454",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf454:{portfolioId}:{period}:{executionId}",
+    "notes": "Dispatches an approved acquisition execution into a campaign/channel and activates lead-intake routing only after execution approval, campaign/channel eligibility, consent policy and capacity checks pass. Production use requires verified campaign-platform integrations, consent/compliance rules, lead-intake schema and production InsulaCRM API contracts."
+  },
+  "id": "590cd92a-ebce-4957-82c9-cc241d361042"
 }

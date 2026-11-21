@@ -2,62 +2,486 @@
   "name": "WF-457 — AI Lead Priority → Seller Outreach, Follow-Up & Appointment Booking Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"ai-lead-priority-seller-outreach-follow-up-appointment-booking","responseMode":"lastNode","options":{}},
-      "id":"w457a","name":"Priority Outreach Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-lead-priority-seller-outreach-follow-up-appointment-booking",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w457a",
+      "name": "Priority Outreach Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const priorityScore=Number(b.priorityScore??0); const tier=String(b.tier??'').trim().toUpperCase(); const nextAction=String(b.recommendedNextAction??'').trim(); const channel=String(b.channel??'sms').trim().toLowerCase(); const sequenceId=String(b.sequenceId??('priority-'+tier)).trim(); const appointmentRequested=b.appointmentRequested===true||String(b.appointmentRequested??'').toLowerCase()==='true'; return [{json:{...b,leadId,portfolioId,priorityScore,tier,nextAction,channel,sequenceId,appointmentRequested,receivedAt:new Date().toISOString()}}];"},
-      "id":"w457b","name":"Normalize Priority Outreach Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const leadId=String(b.leadId??'').trim(); const portfolioId=String(b.portfolioId??'').trim(); const priorityScore=Number(b.priorityScore??0); const tier=String(b.tier??'').trim().toUpperCase(); const nextAction=String(b.recommendedNextAction??'').trim(); const channel=String(b.channel??'sms').trim().toLowerCase(); const sequenceId=String(b.sequenceId??('priority-'+tier)).trim(); const appointmentRequested=b.appointmentRequested===true||String(b.appointmentRequested??'').toLowerCase()==='true'; return [{json:{...b,leadId,portfolioId,priorityScore,tier,nextAction,channel,sequenceId,appointmentRequested,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w457b",
+      "name": "Normalize Priority Outreach Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.leadId}}","operation":"notEmpty"},{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.tier}}","operation":"notEmpty"}]}},
-      "id":"w457c","name":"Validate Priority Outreach Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.leadId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.tier}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w457c",
+      "name": "Validate Priority Outreach Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/priority-outreach-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"priorityScore","value":"={{$json.priorityScore}}"},{"name":"tier","value":"={{$json.tier}}"},{"name":"sequenceId","value":"={{$json.sequenceId}}"}]},"options":{}},
-      "id":"w457d","name":"Fetch Priority Outreach Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/priority-outreach-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "priorityScore",
+              "value": "={{$json.priorityScore}}"
+            },
+            {
+              "name": "tier",
+              "value": "={{$json.tier}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.sequenceId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w457d",
+      "name": "Fetch Priority Outreach Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Priority Outreach Request').first().json; const ctx=$json.context??$json; const score=Math.max(0,Math.min(100,Number(input.priorityScore)||0)); const dnc=ctx.dnc===true||ctx.suppressed===true; const closed=ctx.closed===true||['closed','cancelled','lost'].includes(String(ctx.leadStatus??'').toLowerCase()); const consent=String(ctx.consentStatus??'unknown').toLowerCase(); const contactable=ctx.contactable!==false; const appointmentAvailable=ctx.appointmentSlotsAvailable!==false; const replyPending=ctx.replyPending===true; const flags=[]; if(dnc)flags.push('dnc_or_suppressed'); if(closed)flags.push('closed_or_cancelled'); if(['denied','revoked'].includes(consent))flags.push('consent_denied_or_revoked'); if(!contactable)flags.push('not_contactable'); if(replyPending)flags.push('seller_reply_pending'); const allowed=!dnc&&!closed&&!['denied','revoked'].includes(consent)&&contactable&&!replyPending; let action='hold_outreach'; let outreachPriority='standard'; let followUpMinutes=1440; if(score>=80||input.tier==='A'){outreachPriority='hot';followUpMinutes=60;} else if(score>=60||input.tier==='B'){outreachPriority='warm';followUpMinutes=240;} else if(score>=40||input.tier==='C'){outreachPriority='standard';followUpMinutes=1440;} else {outreachPriority='nurture';followUpMinutes=4320;} if(allowed){action=input.appointmentRequested||input.nextAction.includes('conversation')?'outreach_and_offer_appointment':'outreach_and_schedule_follow_up';} const template=outreachPriority==='hot'?'hot_seller_priority':outreachPriority==='warm'?'warm_seller_follow_up':outreachPriority==='standard'?'standard_seller_follow_up':'nurture_seller_reengagement'; const idempotencyKey='wf457:'+input.leadId+':'+input.sequenceId+':'+outreachPriority; return [{json:{...input,priorityOutreach:{status:allowed?'ready':'blocked',action,outreachPriority,template,followUpMinutes,appointmentOffer:allowed&&appointmentAvailable,appointmentAvailable,flags,dispatchAllowed:allowed,requiresHumanReview:!allowed||outreachPriority==='hot',confidenceScore:allowed?90:25},idempotencyKey}}];"},
-      "id":"w457e","name":"Build Priority Outreach & Follow-Up Strategy","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Priority Outreach Request').first().json; const ctx=$json.context??$json; const score=Math.max(0,Math.min(100,Number(input.priorityScore)||0)); const dnc=ctx.dnc===true||ctx.suppressed===true; const closed=ctx.closed===true||['closed','cancelled','lost'].includes(String(ctx.leadStatus??'').toLowerCase()); const consent=String(ctx.consentStatus??'unknown').toLowerCase(); const contactable=ctx.contactable!==false; const appointmentAvailable=ctx.appointmentSlotsAvailable!==false; const replyPending=ctx.replyPending===true; const flags=[]; if(dnc)flags.push('dnc_or_suppressed'); if(closed)flags.push('closed_or_cancelled'); if(['denied','revoked'].includes(consent))flags.push('consent_denied_or_revoked'); if(!contactable)flags.push('not_contactable'); if(replyPending)flags.push('seller_reply_pending'); const allowed=!dnc&&!closed&&!['denied','revoked'].includes(consent)&&contactable&&!replyPending; let action='hold_outreach'; let outreachPriority='standard'; let followUpMinutes=1440; if(score>=80||input.tier==='A'){outreachPriority='hot';followUpMinutes=60;} else if(score>=60||input.tier==='B'){outreachPriority='warm';followUpMinutes=240;} else if(score>=40||input.tier==='C'){outreachPriority='standard';followUpMinutes=1440;} else {outreachPriority='nurture';followUpMinutes=4320;} if(allowed){action=input.appointmentRequested||input.nextAction.includes('conversation')?'outreach_and_offer_appointment':'outreach_and_schedule_follow_up';} const template=outreachPriority==='hot'?'hot_seller_priority':outreachPriority==='warm'?'warm_seller_follow_up':outreachPriority==='standard'?'standard_seller_follow_up':'nurture_seller_reengagement'; const idempotencyKey='wf457:'+input.leadId+':'+input.sequenceId+':'+outreachPriority; return [{json:{...input,priorityOutreach:{status:allowed?'ready':'blocked',action,outreachPriority,template,followUpMinutes,appointmentOffer:allowed&&appointmentAvailable,appointmentAvailable,flags,dispatchAllowed:allowed,requiresHumanReview:!allowed||outreachPriority==='hot',confidenceScore:allowed?90:25},idempotencyKey}}];"
+      },
+      "id": "w457e",
+      "name": "Build Priority Outreach & Follow-Up Strategy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/communications/seller-outreach-dispatch","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"channel","value":"={{$json.channel}}"},{"name":"template","value":"={{$json.priorityOutreach.template}}"},{"name":"outreachPriority","value":"={{$json.priorityOutreach.outreachPriority}}"},{"name":"dispatchAllowed","value":"={{$json.priorityOutreach.dispatchAllowed}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w457f","name":"Dispatch Seller Outreach","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/communications/seller-outreach-dispatch",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "template",
+              "value": "={{$json.priorityOutreach.template}}"
+            },
+            {
+              "name": "outreachPriority",
+              "value": "={{$json.priorityOutreach.outreachPriority}}"
+            },
+            {
+              "name": "dispatchAllowed",
+              "value": "={{$json.priorityOutreach.dispatchAllowed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w457f",
+      "name": "Dispatch Seller Outreach",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/leads/follow-up-sequence","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"sequenceId","value":"={{$json.sequenceId}}"},{"name":"followUpMinutes","value":"={{$json.priorityOutreach.followUpMinutes}}"},{"name":"appointmentOffer","value":"={{$json.priorityOutreach.appointmentOffer}}"},{"name":"dispatchAllowed","value":"={{$json.priorityOutreach.dispatchAllowed}}"},{"name":"idempotencyKey","value":"={{'wf457:followup:'+$json.leadId+':'+$json.sequenceId}}"}]},"options":{}},
-      "id":"w457g","name":"Schedule Seller Follow-Up","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/leads/follow-up-sequence",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "sequenceId",
+              "value": "={{$json.sequenceId}}"
+            },
+            {
+              "name": "followUpMinutes",
+              "value": "={{$json.priorityOutreach.followUpMinutes}}"
+            },
+            {
+              "name": "appointmentOffer",
+              "value": "={{$json.priorityOutreach.appointmentOffer}}"
+            },
+            {
+              "name": "dispatchAllowed",
+              "value": "={{$json.priorityOutreach.dispatchAllowed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf457:followup:'+$json.leadId+':'+$json.sequenceId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w457g",
+      "name": "Schedule Seller Follow-Up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/appointments/offer-slots","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"appointmentOffer","value":"={{$json.priorityOutreach.appointmentOffer}}"},{"name":"appointmentAvailable","value":"={{$json.priorityOutreach.appointmentAvailable}}"},{"name":"priority","value":"={{$json.priorityOutreach.outreachPriority}}"},{"name":"idempotencyKey","value":"={{'wf457:appointment:'+$json.leadId+':'+$json.sequenceId}}"}]},"options":{}},
-      "id":"w457h","name":"Offer Appointment Slots","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/appointments/offer-slots",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "appointmentOffer",
+              "value": "={{$json.priorityOutreach.appointmentOffer}}"
+            },
+            {
+              "name": "appointmentAvailable",
+              "value": "={{$json.priorityOutreach.appointmentAvailable}}"
+            },
+            {
+              "name": "priority",
+              "value": "={{$json.priorityOutreach.outreachPriority}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf457:appointment:'+$json.leadId+':'+$json.sequenceId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w457h",
+      "name": "Offer Appointment Slots",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"ai_priority_seller_outreach_follow_up_appointment_booking"},{"name":"leadId","value":"={{$json.leadId}}"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"priorityScore","value":"={{$json.priorityScore}}"},{"name":"tier","value":"={{$json.tier}}"},{"name":"outreachPriority","value":"={{$json.priorityOutreach.outreachPriority}}"},{"name":"action","value":"={{$json.priorityOutreach.action}}"},{"name":"dispatchAllowed","value":"={{$json.priorityOutreach.dispatchAllowed}}"},{"name":"idempotencyKey","value":"={{'wf457:activity:'+$json.leadId+':'+$json.sequenceId}}"}]},"options":{}},
-      "id":"w457i","name":"Record Priority Outreach Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1760,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "ai_priority_seller_outreach_follow_up_appointment_booking"
+            },
+            {
+              "name": "leadId",
+              "value": "={{$json.leadId}}"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "priorityScore",
+              "value": "={{$json.priorityScore}}"
+            },
+            {
+              "name": "tier",
+              "value": "={{$json.tier}}"
+            },
+            {
+              "name": "outreachPriority",
+              "value": "={{$json.priorityOutreach.outreachPriority}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.priorityOutreach.action}}"
+            },
+            {
+              "name": "dispatchAllowed",
+              "value": "={{$json.priorityOutreach.dispatchAllowed}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf457:activity:'+$json.leadId+':'+$json.sequenceId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w457i",
+      "name": "Record Priority Outreach Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w457j","name":"Respond Priority Outreach Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1980,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w457j",
+      "name": "Respond Priority Outreach Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'leadId, portfolioId and tier are required'} }}","options":{}},
-      "id":"w457k","name":"Respond Invalid Priority Outreach Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'leadId, portfolioId and tier are required'} }}",
+        "options": {}
+      },
+      "id": "w457k",
+      "name": "Respond Invalid Priority Outreach Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Priority Outreach Webhook":{"main":[[{"node":"Normalize Priority Outreach Request","type":"main","index":0}]]},
-    "Normalize Priority Outreach Request":{"main":[[{"node":"Validate Priority Outreach Request","type":"main","index":0}]]},
-    "Validate Priority Outreach Request":{"main":[[{"node":"Fetch Priority Outreach Context","type":"main","index":0}],[{"node":"Respond Invalid Priority Outreach Request","type":"main","index":0}]]},
-    "Fetch Priority Outreach Context":{"main":[[{"node":"Build Priority Outreach & Follow-Up Strategy","type":"main","index":0}]]},
-    "Build Priority Outreach & Follow-Up Strategy":{"main":[[{"node":"Dispatch Seller Outreach","type":"main","index":0}]]},
-    "Dispatch Seller Outreach":{"main":[[{"node":"Schedule Seller Follow-Up","type":"main","index":0}]]},
-    "Schedule Seller Follow-Up":{"main":[[{"node":"Offer Appointment Slots","type":"main","index":0}]]},
-    "Offer Appointment Slots":{"main":[[{"node":"Record Priority Outreach Activity","type":"main","index":0}]]},
-    "Record Priority Outreach Activity":{"main":[[{"node":"Respond Priority Outreach Result","type":"main","index":0}]]}
+  "connections": {
+    "Priority Outreach Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Priority Outreach Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Priority Outreach Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Priority Outreach Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Priority Outreach Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Priority Outreach Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Priority Outreach Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Priority Outreach Context": {
+      "main": [
+        [
+          {
+            "node": "Build Priority Outreach & Follow-Up Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Priority Outreach & Follow-Up Strategy": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Seller Outreach",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Seller Outreach": {
+      "main": [
+        [
+          {
+            "node": "Schedule Seller Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Seller Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Offer Appointment Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Appointment Slots": {
+      "main": [
+        [
+          {
+            "node": "Record Priority Outreach Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Priority Outreach Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Priority Outreach Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-457"},{"name":"seller-outreach"},{"name":"follow-up"},{"name":"appointment-booking"},{"name":"priority-routing"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-457","contractStatus":"scaffolded","idempotency":"wf457:{leadId}:{sequenceId}:{outreachPriority}","notes":"Turns AI lead-priority results into consent-aware seller outreach, follow-up timing and appointment-slot offers. Hot leads receive a tighter SLA and human-review flag. Production use requires verified communication provider, appointment/calendar integration, consent policy and InsulaCRM API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-457"
+    },
+    {
+      "name": "seller-outreach"
+    },
+    {
+      "name": "follow-up"
+    },
+    {
+      "name": "appointment-booking"
+    },
+    {
+      "name": "priority-routing"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-457",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf457:{leadId}:{sequenceId}:{outreachPriority}",
+    "notes": "Turns AI lead-priority results into consent-aware seller outreach, follow-up timing and appointment-slot offers. Hot leads receive a tighter SLA and human-review flag. Production use requires verified communication provider, appointment/calendar integration, consent policy and InsulaCRM API contracts."
+  },
+  "id": "f7a269d4-0b1e-4a7e-9721-7fdffc0ccef9"
 }

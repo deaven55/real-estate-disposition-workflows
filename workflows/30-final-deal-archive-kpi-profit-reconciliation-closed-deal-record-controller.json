@@ -12,7 +12,10 @@
       "name": "Final Deal Archive Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Final Archive Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Fetch Final Deal Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -58,7 +67,10 @@
       "name": "Validate Closed Deal & Reconcile Financials",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -87,7 +99,10 @@
       "name": "IF Archive Eligible",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -154,7 +169,10 @@
       "name": "Persist Closed Deal Record",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, -100]
+      "position": [
+        1100,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -217,7 +235,10 @@
       "name": "Reconcile Closed Deal KPIs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, -100]
+      "position": [
+        1320,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -264,7 +285,10 @@
       "name": "Persist Closed Deal Archive Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, -100]
+      "position": [
+        1540,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -278,7 +302,10 @@
       "name": "Respond Closed Deal Archived",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1760, -100]
+      "position": [
+        1760,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -292,36 +319,107 @@
       "name": "Respond Archive Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     }
   ],
   "connections": {
     "Final Deal Archive Webhook": {
-      "main": [[{"node": "Normalize Final Archive Request", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Final Archive Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Final Archive Request": {
-      "main": [[{"node": "Fetch Final Deal Context", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Fetch Final Deal Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Final Deal Context": {
-      "main": [[{"node": "Validate Closed Deal & Reconcile Financials", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Validate Closed Deal & Reconcile Financials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Closed Deal & Reconcile Financials": {
-      "main": [[{"node": "IF Archive Eligible", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "IF Archive Eligible",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF Archive Eligible": {
       "main": [
-        [{"node": "Persist Closed Deal Record", "type": "main", "index": 0}],
-        [{"node": "Respond Archive Blocked", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Persist Closed Deal Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Archive Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Persist Closed Deal Record": {
-      "main": [[{"node": "Reconcile Closed Deal KPIs", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Reconcile Closed Deal KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Reconcile Closed Deal KPIs": {
-      "main": [[{"node": "Persist Closed Deal Archive Activity", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Closed Deal Archive Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Closed Deal Archive Activity": {
-      "main": [[{"node": "Respond Closed Deal Archived", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Closed Deal Archived",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -334,5 +432,14 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["real-estate", "insula-crm", "deal", "archive", "kpi", "profit", "wf-392"]
+  "tags": [
+    "real-estate",
+    "insula-crm",
+    "deal",
+    "archive",
+    "kpi",
+    "profit",
+    "wf-392"
+  ],
+  "id": "3cacc988-475b-4792-89dd-981dfc368a92"
 }

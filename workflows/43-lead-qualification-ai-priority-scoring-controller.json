@@ -12,7 +12,10 @@
       "name": "Lead Qualification Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Lead Qualification Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -39,7 +45,10 @@
       "name": "Validate Lead Identity",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -73,7 +82,10 @@
       "name": "Fetch Lead Property Qualification Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [660, -80]
+      "position": [
+        660,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -83,7 +95,10 @@
       "name": "Calculate AI Qualification & Priority Score",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, -80]
+      "position": [
+        880,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -129,7 +144,10 @@
       "name": "Persist Lead Qualification & Priority",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, -80]
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -187,7 +205,10 @@
       "name": "Record Qualification Analytics Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, -80]
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -199,7 +220,10 @@
       "name": "Respond Qualification Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, -80]
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -211,33 +235,96 @@
       "name": "Respond Invalid Lead",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [660, 140]
+      "position": [
+        660,
+        140
+      ]
     }
   ],
   "connections": {
     "Lead Qualification Webhook": {
-      "main": [[{"node":"Normalize Lead Qualification Input","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Qualification Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Lead Qualification Input": {
-      "main": [[{"node":"Validate Lead Identity","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Validate Lead Identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Lead Identity": {
       "main": [
-        [{"node":"Fetch Lead Property Qualification Context","type":"main","index":0}],
-        [{"node":"Respond Invalid Lead","type":"main","index":0}]
+        [
+          {
+            "node": "Fetch Lead Property Qualification Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Fetch Lead Property Qualification Context": {
-      "main": [[{"node":"Calculate AI Qualification & Priority Score","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Calculate AI Qualification & Priority Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Calculate AI Qualification & Priority Score": {
-      "main": [[{"node":"Persist Lead Qualification & Priority","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Persist Lead Qualification & Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Persist Lead Qualification & Priority": {
-      "main": [[{"node":"Record Qualification Analytics Activity","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Record Qualification Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Record Qualification Analytics Activity": {
-      "main": [[{"node":"Respond Qualification Result","type":"main","index":0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Qualification Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -247,16 +334,27 @@
     "saveManualExecutions": true
   },
   "tags": [
-    {"name":"WF-405"},
-    {"name":"lead-generation"},
-    {"name":"lead-qualification"},
-    {"name":"ai-scoring"},
-    {"name":"InsulaCRM"}
+    {
+      "name": "WF-405"
+    },
+    {
+      "name": "lead-generation"
+    },
+    {
+      "name": "lead-qualification"
+    },
+    {
+      "name": "ai-scoring"
+    },
+    {
+      "name": "InsulaCRM"
+    }
   ],
   "meta": {
-    "workflowId":"WF-405",
-    "contractStatus":"scaffolded",
-    "idempotency":"wf405:{leadId}:{source}:{campaignId}",
-    "notes":"Priority scoring is deterministic scaffold logic pending production InsulaCRM schema, AI scoring contract, and verified lead/property field mappings."
-  }
+    "workflowId": "WF-405",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf405:{leadId}:{source}:{campaignId}",
+    "notes": "Priority scoring is deterministic scaffold logic pending production InsulaCRM schema, AI scoring contract, and verified lead/property field mappings."
+  },
+  "id": "759f2392-19a1-46e3-9c56-860a54dcd4f5"
 }

@@ -2,57 +2,406 @@
   "name": "WF-451 — Portfolio Forecast → Deal Volume, Revenue, Profit & Acquisition Budget Planning Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"portfolio-forecast-deal-volume-revenue-profit-budget-planning","responseMode":"lastNode","options":{}},
-      "id":"w451a","name":"Portfolio Forecast Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "portfolio-forecast-deal-volume-revenue-profit-budget-planning",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w451a",
+      "name": "Portfolio Forecast Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const forecastPeriods=Math.max(1,Math.min(12,Number(b.forecastPeriods??6))); const asOfDate=String(b.asOfDate??new Date().toISOString().slice(0,10)).trim(); return [{json:{...b,portfolioId,forecastPeriods,asOfDate,receivedAt:new Date().toISOString()}}];"},
-      "id":"w451b","name":"Normalize Portfolio Forecast Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const portfolioId=String(b.portfolioId??'').trim(); const forecastPeriods=Math.max(1,Math.min(12,Number(b.forecastPeriods??6))); const asOfDate=String(b.asOfDate??new Date().toISOString().slice(0,10)).trim(); return [{json:{...b,portfolioId,forecastPeriods,asOfDate,receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w451b",
+      "name": "Normalize Portfolio Forecast Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.asOfDate}}","operation":"notEmpty"}]}},
-      "id":"w451c","name":"Validate Portfolio Forecast Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.asOfDate}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w451c",
+      "name": "Validate Portfolio Forecast Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-forecast-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"forecastPeriods","value":"={{$json.forecastPeriods}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"}]},"options":{}},
-      "id":"w451d","name":"Fetch Portfolio Forecast Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/portfolio-forecast-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "forecastPeriods",
+              "value": "={{$json.forecastPeriods}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w451d",
+      "name": "Fetch Portfolio Forecast Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Portfolio Forecast Request').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const hist=Array.isArray(ctx.historicalPeriods)?ctx.historicalPeriods:[]; const flags=[]; if(hist.length===0)flags.push('no_historical_periods'); const avg=(field)=>hist.length?hist.reduce((s,p)=>s+n(p[field]),0)/hist.length:0; const avgLeads=avg('leads'); const avgQualified=avg('qualifiedLeads'); const avgContracts=avg('contracts'); const avgClosed=avg('closedDeals'); const avgRevenue=avg('grossRevenue'); const avgNetProfit=avg('netProfit'); const avgSpend=avg('acquisitionSpend'); const avgLeadToClose=avgLeads>0?avgClosed/avgLeads:0; const avgQualifiedRate=avgLeads>0?avgQualified/avgLeads:0; const avgContractRate=avgQualified>0?avgContracts/avgQualified:0; const avgCloseRate=avgContracts>0?avgClosed/avgContracts:0; const avgProfitPerClosed=avgClosed>0?avgNetProfit/avgClosed:0; const avgSpendPerLead=avgLeads>0?avgSpend/avgLeads:0; const target=ctx.targets??{}; const targetClosed=n(target.closedDealsPerPeriod??target.closedDeals); const targetNetProfit=n(target.netProfitPerPeriod??target.netProfit); const targetRevenue=n(target.grossRevenuePerPeriod??target.grossRevenue); const targetBudget=n(target.acquisitionBudgetPerPeriod??target.acquisitionBudget); const trend=(field)=>{if(hist.length<2)return 0; const first=n(hist[0][field]); const last=n(hist[hist.length-1][field]); return first>0?Math.max(-0.25,Math.min(0.25,(last-first)/first/(hist.length-1))):0;}; const trends={leads:trend('leads'),qualifiedLeads:trend('qualifiedLeads'),contracts:trend('contracts'),closedDeals:trend('closedDeals'),grossRevenue:trend('grossRevenue'),netProfit:trend('netProfit'),acquisitionSpend:trend('acquisitionSpend')}; const periods=[]; for(let i=1;i<=input.forecastPeriods;i++){const leadBase=Math.max(0,avgLeads*(1+trends.leads*i)); const qualified=leadBase*avgQualifiedRate; const contracts=qualified*avgContractRate; const closed=contracts*avgCloseRate; const revenue=closed* (avgClosed>0?avgRevenue/avgClosed:0); const netProfit=closed*avgProfitPerClosed; const spend=leadBase*avgSpendPerLead; periods.push({period:i,projectedLeads:Math.round(leadBase*100)/100,projectedQualifiedLeads:Math.round(qualified*100)/100,projectedContracts:Math.round(contracts*100)/100,projectedClosedDeals:Math.round(closed*100)/100,projectedGrossRevenue:Math.round(revenue*100)/100,projectedNetProfit:Math.round(netProfit*100)/100,projectedAcquisitionSpend:Math.round(spend*100)/100});} const totals=periods.reduce((a,p)=>({leads:a.leads+p.projectedLeads,qualifiedLeads:a.qualifiedLeads+p.projectedQualifiedLeads,contracts:a.contracts+p.projectedContracts,closedDeals:a.closedDeals+p.projectedClosedDeals,grossRevenue:a.grossRevenue+p.projectedGrossRevenue,netProfit:a.netProfit+p.projectedNetProfit,acquisitionSpend:a.acquisitionSpend+p.projectedAcquisitionSpend}),{leads:0,qualifiedLeads:0,contracts:0,closedDeals:0,grossRevenue:0,netProfit:0,acquisitionSpend:0}); const avgPerPeriod=Object.fromEntries(Object.entries(totals).map(([k,v])=>[k,input.forecastPeriods?Math.round(v/input.forecastPeriods*100)/100:0])); const closedGap=targetClosed>0?Math.round((targetClosed-avgPerPeriod.closedDeals)*100)/100:0; const profitGap=targetNetProfit>0?Math.round((targetNetProfit-avgPerPeriod.netProfit)*100)/100:0; const revenueGap=targetRevenue>0?Math.round((targetRevenue-avgPerPeriod.grossRevenue)*100)/100:0; const budgetGap=targetBudget>0?Math.round((targetBudget-avgPerPeriod.acquisitionSpend)*100)/100:0; let decision='maintain_current_acquisition_plan'; const actions=[]; if(closedGap>0||profitGap>0){if(avgLeadToClose>=0.03)decision='increase_acquisition_budget_and_pipeline_capacity';else decision='improve_funnel_conversion_before_scaling';} if(budgetGap<0&&avgPerPeriod.acquisitionSpend>targetBudget)actions.push('reduce_or_reallocate_acquisition_spend'); if(closedGap>0)actions.push('increase_qualified_lead_volume_or_improve_close_rate'); if(profitGap>0)actions.push('protect_underwriting_margin_and_improve_deal_profitability'); if(revenueGap>0)actions.push('increase_contract_and_closing_volume'); if(!actions.length)actions.push('maintain_current_acquisition_capacity_and_monitor_forecast'); const confidence=hist.length>=12?90:hist.length>=6?80:hist.length>=3?65:40; const idempotencyKey='wf451:'+input.portfolioId+':'+input.forecastPeriods+':'+input.asOfDate; return [{json:{...input,portfolioForecast:{status:hist.length?'forecast_ready':'insufficient_data',decision,historicalPeriodCount:hist.length,baseline:{avgLeads,avgQualifiedLeads:avgQualified,avgContracts,avgClosedDeals:avgClosed,avgGrossRevenue:avgRevenue,avgNetProfit:avgNetProfit,avgAcquisitionSpend:avgSpend,avgLeadToCloseRate:avgLeadToClose,avgProfitPerClosed:avgProfitPerClosed,avgSpendPerLead:avgSpendPerLead},trends,forecastPeriods:periods,totals,avgPerPeriod,targetGaps:{closedDealsGap:closedGap,netProfitGap:profitGap,grossRevenueGap:revenueGap,acquisitionBudgetGap:budgetGap},recommendedActions:actions,flags,confidenceScore:confidence},idempotencyKey}}];"},
-      "id":"w451e","name":"Calculate Forecast Volume Revenue Profit & Budget Demand","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Portfolio Forecast Request').first().json; const ctx=$json.context??$json; const n=v=>Number.isFinite(Number(v))?Number(v):0; const hist=Array.isArray(ctx.historicalPeriods)?ctx.historicalPeriods:[]; const flags=[]; if(hist.length===0)flags.push('no_historical_periods'); const avg=(field)=>hist.length?hist.reduce((s,p)=>s+n(p[field]),0)/hist.length:0; const avgLeads=avg('leads'); const avgQualified=avg('qualifiedLeads'); const avgContracts=avg('contracts'); const avgClosed=avg('closedDeals'); const avgRevenue=avg('grossRevenue'); const avgNetProfit=avg('netProfit'); const avgSpend=avg('acquisitionSpend'); const avgLeadToClose=avgLeads>0?avgClosed/avgLeads:0; const avgQualifiedRate=avgLeads>0?avgQualified/avgLeads:0; const avgContractRate=avgQualified>0?avgContracts/avgQualified:0; const avgCloseRate=avgContracts>0?avgClosed/avgContracts:0; const avgProfitPerClosed=avgClosed>0?avgNetProfit/avgClosed:0; const avgSpendPerLead=avgLeads>0?avgSpend/avgLeads:0; const target=ctx.targets??{}; const targetClosed=n(target.closedDealsPerPeriod??target.closedDeals); const targetNetProfit=n(target.netProfitPerPeriod??target.netProfit); const targetRevenue=n(target.grossRevenuePerPeriod??target.grossRevenue); const targetBudget=n(target.acquisitionBudgetPerPeriod??target.acquisitionBudget); const trend=(field)=>{if(hist.length<2)return 0; const first=n(hist[0][field]); const last=n(hist[hist.length-1][field]); return first>0?Math.max(-0.25,Math.min(0.25,(last-first)/first/(hist.length-1))):0;}; const trends={leads:trend('leads'),qualifiedLeads:trend('qualifiedLeads'),contracts:trend('contracts'),closedDeals:trend('closedDeals'),grossRevenue:trend('grossRevenue'),netProfit:trend('netProfit'),acquisitionSpend:trend('acquisitionSpend')}; const periods=[]; for(let i=1;i<=input.forecastPeriods;i++){const leadBase=Math.max(0,avgLeads*(1+trends.leads*i)); const qualified=leadBase*avgQualifiedRate; const contracts=qualified*avgContractRate; const closed=contracts*avgCloseRate; const revenue=closed* (avgClosed>0?avgRevenue/avgClosed:0); const netProfit=closed*avgProfitPerClosed; const spend=leadBase*avgSpendPerLead; periods.push({period:i,projectedLeads:Math.round(leadBase*100)/100,projectedQualifiedLeads:Math.round(qualified*100)/100,projectedContracts:Math.round(contracts*100)/100,projectedClosedDeals:Math.round(closed*100)/100,projectedGrossRevenue:Math.round(revenue*100)/100,projectedNetProfit:Math.round(netProfit*100)/100,projectedAcquisitionSpend:Math.round(spend*100)/100});} const totals=periods.reduce((a,p)=>({leads:a.leads+p.projectedLeads,qualifiedLeads:a.qualifiedLeads+p.projectedQualifiedLeads,contracts:a.contracts+p.projectedContracts,closedDeals:a.closedDeals+p.projectedClosedDeals,grossRevenue:a.grossRevenue+p.projectedGrossRevenue,netProfit:a.netProfit+p.projectedNetProfit,acquisitionSpend:a.acquisitionSpend+p.projectedAcquisitionSpend}),{leads:0,qualifiedLeads:0,contracts:0,closedDeals:0,grossRevenue:0,netProfit:0,acquisitionSpend:0}); const avgPerPeriod=Object.fromEntries(Object.entries(totals).map(([k,v])=>[k,input.forecastPeriods?Math.round(v/input.forecastPeriods*100)/100:0])); const closedGap=targetClosed>0?Math.round((targetClosed-avgPerPeriod.closedDeals)*100)/100:0; const profitGap=targetNetProfit>0?Math.round((targetNetProfit-avgPerPeriod.netProfit)*100)/100:0; const revenueGap=targetRevenue>0?Math.round((targetRevenue-avgPerPeriod.grossRevenue)*100)/100:0; const budgetGap=targetBudget>0?Math.round((targetBudget-avgPerPeriod.acquisitionSpend)*100)/100:0; let decision='maintain_current_acquisition_plan'; const actions=[]; if(closedGap>0||profitGap>0){if(avgLeadToClose>=0.03)decision='increase_acquisition_budget_and_pipeline_capacity';else decision='improve_funnel_conversion_before_scaling';} if(budgetGap<0&&avgPerPeriod.acquisitionSpend>targetBudget)actions.push('reduce_or_reallocate_acquisition_spend'); if(closedGap>0)actions.push('increase_qualified_lead_volume_or_improve_close_rate'); if(profitGap>0)actions.push('protect_underwriting_margin_and_improve_deal_profitability'); if(revenueGap>0)actions.push('increase_contract_and_closing_volume'); if(!actions.length)actions.push('maintain_current_acquisition_capacity_and_monitor_forecast'); const confidence=hist.length>=12?90:hist.length>=6?80:hist.length>=3?65:40; const idempotencyKey='wf451:'+input.portfolioId+':'+input.forecastPeriods+':'+input.asOfDate; return [{json:{...input,portfolioForecast:{status:hist.length?'forecast_ready':'insufficient_data',decision,historicalPeriodCount:hist.length,baseline:{avgLeads,avgQualifiedLeads:avgQualified,avgContracts,avgClosedDeals:avgClosed,avgGrossRevenue:avgRevenue,avgNetProfit:avgNetProfit,avgAcquisitionSpend:avgSpend,avgLeadToCloseRate:avgLeadToClose,avgProfitPerClosed:avgProfitPerClosed,avgSpendPerLead:avgSpendPerLead},trends,forecastPeriods:periods,totals,avgPerPeriod,targetGaps:{closedDealsGap:closedGap,netProfitGap:profitGap,grossRevenueGap:revenueGap,acquisitionBudgetGap:budgetGap},recommendedActions:actions,flags,confidenceScore:confidence},idempotencyKey}}];"
+      },
+      "id": "w451e",
+      "name": "Calculate Forecast Volume Revenue Profit & Budget Demand",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/portfolio-forecast","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"forecastPeriods","value":"={{$json.forecastPeriods}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"},{"name":"portfolioForecast","value":"={{JSON.stringify($json.portfolioForecast)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w451f","name":"Persist Portfolio Forecast","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/portfolio-forecast",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "forecastPeriods",
+              "value": "={{$json.forecastPeriods}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            },
+            {
+              "name": "portfolioForecast",
+              "value": "={{JSON.stringify($json.portfolioForecast)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w451f",
+      "name": "Persist Portfolio Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/acquisition-budget-plan","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"forecastPeriods","value":"={{$json.forecastPeriods}}"},{"name":"decision","value":"={{$json.portfolioForecast.decision}}"},{"name":"recommendedActions","value":"={{JSON.stringify($json.portfolioForecast.recommendedActions)}}"},{"name":"projectedAcquisitionSpend","value":"={{$json.portfolioForecast.avgPerPeriod.acquisitionSpend}}"},{"name":"targetAcquisitionBudget","value":"={{$json.portfolioForecast.avgPerPeriod.acquisitionBudget??0}}"},{"name":"idempotencyKey","value":"={{'wf451:budget:'+$json.portfolioId+':'+$json.forecastPeriods+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w451g","name":"Persist Acquisition Budget Planning","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/acquisition-budget-plan",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "forecastPeriods",
+              "value": "={{$json.forecastPeriods}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.portfolioForecast.decision}}"
+            },
+            {
+              "name": "recommendedActions",
+              "value": "={{JSON.stringify($json.portfolioForecast.recommendedActions)}}"
+            },
+            {
+              "name": "projectedAcquisitionSpend",
+              "value": "={{$json.portfolioForecast.avgPerPeriod.acquisitionSpend}}"
+            },
+            {
+              "name": "targetAcquisitionBudget",
+              "value": "={{$json.portfolioForecast.avgPerPeriod.acquisitionBudget??0}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf451:budget:'+$json.portfolioId+':'+$json.forecastPeriods+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w451g",
+      "name": "Persist Acquisition Budget Planning",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"portfolio_forecast_volume_revenue_profit_acquisition_budget_planning"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"forecastPeriods","value":"={{$json.forecastPeriods}}"},{"name":"decision","value":"={{$json.portfolioForecast.decision}}"},{"name":"projectedClosedDeals","value":"={{$json.portfolioForecast.avgPerPeriod.closedDeals}}"},{"name":"projectedNetProfit","value":"={{$json.portfolioForecast.avgPerPeriod.netProfit}}"},{"name":"projectedAcquisitionSpend","value":"={{$json.portfolioForecast.avgPerPeriod.acquisitionSpend}}"},{"name":"idempotencyKey","value":"={{'wf451:activity:'+$json.portfolioId+':'+$json.forecastPeriods+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w451h","name":"Record Portfolio Forecast Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1540,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "portfolio_forecast_volume_revenue_profit_acquisition_budget_planning"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "forecastPeriods",
+              "value": "={{$json.forecastPeriods}}"
+            },
+            {
+              "name": "decision",
+              "value": "={{$json.portfolioForecast.decision}}"
+            },
+            {
+              "name": "projectedClosedDeals",
+              "value": "={{$json.portfolioForecast.avgPerPeriod.closedDeals}}"
+            },
+            {
+              "name": "projectedNetProfit",
+              "value": "={{$json.portfolioForecast.avgPerPeriod.netProfit}}"
+            },
+            {
+              "name": "projectedAcquisitionSpend",
+              "value": "={{$json.portfolioForecast.avgPerPeriod.acquisitionSpend}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf451:activity:'+$json.portfolioId+':'+$json.forecastPeriods+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w451h",
+      "name": "Record Portfolio Forecast Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w451i","name":"Respond Portfolio Forecast Result","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1760,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w451i",
+      "name": "Respond Portfolio Forecast Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId and asOfDate are required'} }}","options":{}},
-      "id":"w451j","name":"Respond Invalid Portfolio Forecast Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'portfolioId and asOfDate are required'} }}",
+        "options": {}
+      },
+      "id": "w451j",
+      "name": "Respond Invalid Portfolio Forecast Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Portfolio Forecast Webhook":{"main":[[{"node":"Normalize Portfolio Forecast Request","type":"main","index":0}]]},
-    "Normalize Portfolio Forecast Request":{"main":[[{"node":"Validate Portfolio Forecast Request","type":"main","index":0}]]},
-    "Validate Portfolio Forecast Request":{"main":[[{"node":"Fetch Portfolio Forecast Context","type":"main","index":0}],[{"node":"Respond Invalid Portfolio Forecast Request","type":"main","index":0}]]},
-    "Fetch Portfolio Forecast Context":{"main":[[{"node":"Calculate Forecast Volume Revenue Profit & Budget Demand","type":"main","index":0}]]},
-    "Calculate Forecast Volume Revenue Profit & Budget Demand":{"main":[[{"node":"Persist Portfolio Forecast","type":"main","index":0}]]},
-    "Persist Portfolio Forecast":{"main":[[{"node":"Persist Acquisition Budget Planning","type":"main","index":0}]]},
-    "Persist Acquisition Budget Planning":{"main":[[{"node":"Record Portfolio Forecast Activity","type":"main","index":0}]]},
-    "Record Portfolio Forecast Activity":{"main":[[{"node":"Respond Portfolio Forecast Result","type":"main","index":0}]]}
+  "connections": {
+    "Portfolio Forecast Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Portfolio Forecast Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Portfolio Forecast Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Portfolio Forecast Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Portfolio Forecast Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Portfolio Forecast Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Portfolio Forecast Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Portfolio Forecast Context": {
+      "main": [
+        [
+          {
+            "node": "Calculate Forecast Volume Revenue Profit & Budget Demand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Forecast Volume Revenue Profit & Budget Demand": {
+      "main": [
+        [
+          {
+            "node": "Persist Portfolio Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Portfolio Forecast": {
+      "main": [
+        [
+          {
+            "node": "Persist Acquisition Budget Planning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Acquisition Budget Planning": {
+      "main": [
+        [
+          {
+            "node": "Record Portfolio Forecast Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Portfolio Forecast Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Portfolio Forecast Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-451"},{"name":"portfolio-forecast"},{"name":"revenue-forecast"},{"name":"profit-forecast"},{"name":"acquisition-budget"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-451","contractStatus":"scaffolded","idempotency":"wf451:{portfolioId}:{forecastPeriods}:{asOfDate}","notes":"Forecasts deal volume, revenue, profit and acquisition-spend demand from historical portfolio periods and produces budget/capacity actions. Production use requires calibrated forecasting models, canonical accounting definitions, validated acquisition-spend data, target schema and production InsulaCRM API contracts."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-451"
+    },
+    {
+      "name": "portfolio-forecast"
+    },
+    {
+      "name": "revenue-forecast"
+    },
+    {
+      "name": "profit-forecast"
+    },
+    {
+      "name": "acquisition-budget"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-451",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf451:{portfolioId}:{forecastPeriods}:{asOfDate}",
+    "notes": "Forecasts deal volume, revenue, profit and acquisition-spend demand from historical portfolio periods and produces budget/capacity actions. Production use requires calibrated forecasting models, canonical accounting definitions, validated acquisition-spend data, target schema and production InsulaCRM API contracts."
+  },
+  "id": "1f7a0d27-1546-4e70-aac3-42f192016aee"
 }

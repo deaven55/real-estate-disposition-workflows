@@ -12,7 +12,10 @@
       "name": "Lead Source Forecasting Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Forecast Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -31,7 +37,10 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Accept", "value": "application/json" }
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
           ]
         },
         "options": {}
@@ -40,7 +49,10 @@
       "name": "Fetch InsulaCRM Forecast Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -49,7 +61,10 @@
       "id": "wf399-validate",
       "name": "Validate Historical Source Data",
       "type": "n8n-nodes-base.code",
-      "position": [660, 0],
+      "position": [
+        660,
+        0
+      ],
       "typeVersion": 2
     },
     {
@@ -60,7 +75,10 @@
       "name": "Project Lead Source Pipeline Volume",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -69,8 +87,14 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Accept", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -82,7 +106,10 @@
       "name": "Persist Lead Source Forecast to InsulaCRM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1100, 0]
+      "position": [
+        1100,
+        0
+      ]
     },
     {
       "parameters": {
@@ -91,7 +118,10 @@
         "sendHeaders": true,
         "headerParametersUi": {
           "parameter": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -103,7 +133,10 @@
       "name": "Record Forecast Analytics Activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1320, 0]
+      "position": [
+        1320,
+        0
+      ]
     },
     {
       "parameters": {
@@ -114,17 +147,90 @@
       "name": "Respond Lead Source Forecast Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, 0]
+      "position": [
+        1540,
+        0
+      ]
     }
   ],
   "connections": {
-    "Lead Source Forecasting Webhook": { "main": [[{ "node": "Normalize Forecast Request", "type": "main", "index": 0 }]] },
-    "Normalize Forecast Request": { "main": [[{ "node": "Fetch InsulaCRM Forecast Context", "type": "main", "index": 0 }]] },
-    "Fetch InsulaCRM Forecast Context": { "main": [[{ "node": "Validate Historical Source Data", "type": "main", "index": 0 }]] },
-    "Validate Historical Source Data": { "main": [[{ "node": "Project Lead Source Pipeline Volume", "type": "main", "index": 0 }]] },
-    "Project Lead Source Pipeline Volume": { "main": [[{ "node": "Persist Lead Source Forecast to InsulaCRM", "type": "main", "index": 0 }]] },
-    "Persist Lead Source Forecast to InsulaCRM": { "main": [[{ "node": "Record Forecast Analytics Activity", "type": "main", "index": 0 }]] },
-    "Record Forecast Analytics Activity": { "main": [[{ "node": "Respond Lead Source Forecast Result", "type": "main", "index": 0 }]] }
+    "Lead Source Forecasting Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Forecast Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Forecast Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch InsulaCRM Forecast Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch InsulaCRM Forecast Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Historical Source Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Historical Source Data": {
+      "main": [
+        [
+          {
+            "node": "Project Lead Source Pipeline Volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Project Lead Source Pipeline Volume": {
+      "main": [
+        [
+          {
+            "node": "Persist Lead Source Forecast to InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Lead Source Forecast to InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Record Forecast Analytics Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Forecast Analytics Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Lead Source Forecast Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -133,5 +239,6 @@
     "saveManualExecutions": true
   },
   "active": false,
-  "versionId": "wf-399-v1"
+  "versionId": "wf-399-v1",
+  "id": "d5a308c1-d49b-4fe3-8bbd-f67717eab476"
 }

@@ -6,7 +6,10 @@
       "name": "Buyer Due Diligence Document Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-buyer-due-diligence-document",
@@ -19,7 +22,10 @@
       "name": "Normalize Due Diligence Document",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [470, 300],
+      "position": [
+        470,
+        300
+      ],
       "parameters": {
         "jsCode": "var b=$input.first().json.body||$input.first().json;\nvar type=String(b.documentType||b.docType||'').toLowerCase().trim();\nvar allowed=['proof_of_funds','bank_statement','funding_letter','entity_document','assignment_document','insurance','id_verification','other'];\nif(allowed.indexOf(type)<0) type='other';\nreturn [{json:{...b,buyerId:String(b.buyerId||''),dealId:String(b.dealId||''),assignmentId:String(b.assignmentId||''),documentId:String(b.documentId||''),documentType:type,documentUrl:String(b.documentUrl||''),receivedAt:new Date().toISOString()}}];"
       }
@@ -29,7 +35,10 @@
       "name": "Fetch Document Verification Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 300],
+      "position": [
+        700,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/document-verification-context",
@@ -43,7 +52,10 @@
       "name": "Validate Due Diligence Document",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [930, 300],
+      "position": [
+        930,
+        300
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar identity=!!d.buyerId&&!!d.documentId;\nvar url=!!String(d.documentUrl||'');\nvar type=String(d.documentType||'other');\nvar supported=['proof_of_funds','bank_statement','funding_letter','entity_document','assignment_document','insurance','id_verification','other'].indexOf(type)>=0;\nvar integrity=d.documentIntegrityVerified!==false;\nvar current=d.documentCurrent!==false;\nvar readable=d.documentReadable!==false;\nvar authenticity=d.documentAuthenticityVerified===true||d.documentVerificationStatus==='verified';\nvar pofComplete=type!=='proof_of_funds'||(authenticity&&current&&readable);\nvar failed=!identity||!url||!supported||!integrity||!readable||!current||!pofComplete;\nvar status=failed?'rejected':authenticity?'verified':'pending_review';\nvar reasons=[]; if(!identity) reasons.push('missing_buyer_or_document_identity'); if(!url) reasons.push('missing_document_url'); if(!integrity) reasons.push('document_integrity_failed'); if(!readable) reasons.push('document_not_readable'); if(!current) reasons.push('document_not_current'); if(type==='proof_of_funds'&&!authenticity) reasons.push('proof_of_funds_authenticity_not_verified');\nreturn [{json:{...d,documentVerificationStatus:status,documentVerificationFailed:failed,verificationReasons:reasons}}];"
       }
@@ -53,7 +65,10 @@
       "name": "Enforce Document Verification Guardrails",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1160, 300],
+      "position": [
+        1160,
+        300
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar dealState=String(d.dealStatus||'').toLowerCase();\nvar protectedDeal=['closed','cancelled','disputed'].indexOf(dealState)>=0;\nvar buyerBlocked=d.buyerActive===false||d.buyerSuppressed===true||d.dnc===true;\nvar allowed=!d.documentVerificationFailed&&!protectedDeal&&!buyerBlocked;\nvar reason=allowed?null:protectedDeal?'deal_protected':buyerBlocked?'buyer_blocked':(d.verificationReasons||['document_verification_failed'])[0];\nreturn [{json:{...d,documentVerificationAllowed:allowed,documentVerificationBlockedReason:reason}}];"
       }
@@ -63,7 +78,10 @@
       "name": "Persist Document Verification",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 150],
+      "position": [
+        1390,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/document-verification",
@@ -77,7 +95,10 @@
       "name": "Update Buyer Qualification Evidence",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 150],
+      "position": [
+        1620,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/qualification-evidence",
@@ -91,7 +112,10 @@
       "name": "Respond Document Verification",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1850, 150],
+      "position": [
+        1850,
+        150
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -103,7 +127,10 @@
       "name": "Respond Document Verification Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1390, 500],
+      "position": [
+        1390,
+        500
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -112,22 +139,93 @@
     }
   ],
   "connections": {
-    "Buyer Due Diligence Document Webhook":{"main":[[{"node":"Normalize Due Diligence Document","type":"main","index":0}]]},
-    "Normalize Due Diligence Document":{"main":[[{"node":"Fetch Document Verification Context","type":"main","index":0}]]},
-    "Fetch Document Verification Context":{"main":[[{"node":"Validate Due Diligence Document","type":"main","index":0}]]},
-    "Validate Due Diligence Document":{"main":[[{"node":"Enforce Document Verification Guardrails","type":"main","index":0}]]},
-    "Enforce Document Verification Guardrails":{"main":[[{"node":"Persist Document Verification","type":"main","index":0}]]},
-    "Persist Document Verification":{"main":[[{"node":"Update Buyer Qualification Evidence","type":"main","index":0}]]},
-    "Update Buyer Qualification Evidence":{"main":[[{"node":"Respond Document Verification","type":"main","index":0}]]}
+    "Buyer Due Diligence Document Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Due Diligence Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Due Diligence Document": {
+      "main": [
+        [
+          {
+            "node": "Fetch Document Verification Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Document Verification Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Due Diligence Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Due Diligence Document": {
+      "main": [
+        [
+          {
+            "node": "Enforce Document Verification Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Document Verification Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Persist Document Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Document Verification": {
+      "main": [
+        [
+          {
+            "node": "Update Buyer Qualification Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Buyer Qualification Evidence": {
+      "main": [
+        [
+          {
+            "node": "Respond Document Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{
-    "executionOrder":"v1",
-    "saveDataErrorExecution":"all",
-    "saveDataSuccessExecution":"all",
-    "saveManualExecutions":true,
-    "saveExecutionProgress":true,
-    "callerPolicy":"workflowsFromSameOwner",
-    "availableInMCP":false
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "active":false
+  "active": false,
+  "id": "7114d331-0a7e-4527-86ec-a6a2ebdd2670"
 }

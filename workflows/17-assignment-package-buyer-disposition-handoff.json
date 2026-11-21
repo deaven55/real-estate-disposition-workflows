@@ -6,7 +6,10 @@
       "name": "Assignment Package Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-assignment-package",
@@ -20,7 +23,10 @@
       "name": "Fetch Assignment Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [470, 300],
+      "position": [
+        470,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/assignments/context",
@@ -34,7 +40,10 @@
       "name": "Validate Assignment Package",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 300],
+      "position": [
+        700,
+        300
+      ],
       "parameters": {
         "jsCode": "var c=$input.first().json.data||$input.first().json;\nvar state=String(c.dealStatus||'').toLowerCase();\nvar purchase=Number(c.purchasePrice||c.contractPrice);\nvar assignmentFee=Number(c.assignmentFee||0);\nvar required={dealId:!!c.dealId,assignmentId:!!c.assignmentId,propertyId:!!c.propertyId,contractDocumentPresent:c.contractDocumentPresent===true||!!c.contractDocumentId,sellerSigned:c.sellerSigned===true||c.signedBySeller===true,assignmentEligible:c.assignmentEligible!==false,purchasePrice:Number.isFinite(purchase)&&purchase>0,assignmentFee:Number.isFinite(assignmentFee)&&assignmentFee>=0};\nvar missing=Object.keys(required).filter(function(k){return required[k]!==true;});\nvar protectedState=['closed','cancelled','disputed'].indexOf(state)!==-1;\nvar ready=missing.length===0&&!protectedState;\nreturn [{json:{...c,purchasePrice:purchase,assignmentFee:assignmentFee,packageReadiness:ready?'ready':'incomplete',missingRequirements:missing,blocked:!ready,blockedReason:protectedState?'deal_state_protected':missing.length?'missing_assignment_requirements':null}}];"
       }
@@ -44,12 +53,30 @@
       "name": "IF Assignment Package Ready",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [930, 300],
+      "position": [
+        930,
+        300
+      ],
       "parameters": {
         "conditions": {
-          "options": {"version":2,"leftValue":"","caseSensitive":true,"typeValidation":"strict"},
-          "combinator":"and",
-          "conditions":[{"id":"ready","leftValue":"={{ $json.blocked }}","rightValue":false,"operator":{"type":"boolean","operation":"equals"}}]
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ $json.blocked }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
         }
       }
     },
@@ -58,7 +85,10 @@
       "name": "Build Buyer Disposition Package",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1160, 150],
+      "position": [
+        1160,
+        150
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar idem='wf379:'+String(d.assignmentId||d.dealId||'')+':'+String(d.propertyId||'');\nvar pkg={assignmentId:d.assignmentId,dealId:d.dealId,propertyId:d.propertyId,contractDocumentId:d.contractDocumentId||null,purchasePrice:d.purchasePrice,assignmentFee:d.assignmentFee,propertyAddress:d.propertyAddress||null,propertyType:d.propertyType||null,bedrooms:d.bedrooms||null,bathrooms:d.bathrooms||null,sqft:d.sqft||null,arv:d.arv||null,estimatedRepairs:d.estimatedRepairs||null,dispositionStatus:'ready_for_buyer_distribution'};\nreturn [{json:{...d,idempotencyKey:idem,buyerDispositionPackage:pkg}}];"
       }
@@ -68,7 +98,10 @@
       "name": "Persist Buyer Disposition Package",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 150],
+      "position": [
+        1390,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/assignments/disposition-package",
@@ -82,14 +115,23 @@
       "name": "Handoff to Buyer Distribution",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 150],
+      "position": [
+        1620,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/distribute-assignment",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ assignmentId:$json.assignmentId,dealId:$json.dealId,propertyId:$json.propertyId,package:$json.buyerDispositionPackage,idempotencyKey:$json.idempotencyKey }) }}",
-        "options": {"response":{"response":{"neverError":true}}}
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       }
     },
     {
@@ -97,11 +139,14 @@
       "name": "Respond Buyer Handoff",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1850, 150],
+      "position": [
+        1850,
+        150
+      ],
       "parameters": {
-        "respondWith":"json",
-        "responseCode":200,
-        "responseBody":"={{ JSON.stringify({ success:true,workflow:'WF-379',packageStatus:'ready_for_buyer_distribution',distributionStatus:$json.status||'submitted',assignmentId: $('Build Buyer Disposition Package').first().json.assignmentId,idempotencyKey:$json.idempotencyKey||$('Build Buyer Disposition Package').first().json.idempotencyKey }) }}"
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success:true,workflow:'WF-379',packageStatus:'ready_for_buyer_distribution',distributionStatus:$json.status||'submitted',assignmentId: $('Build Buyer Disposition Package').first().json.assignmentId,idempotencyKey:$json.idempotencyKey||$('Build Buyer Disposition Package').first().json.idempotencyKey }) }}"
       }
     },
     {
@@ -109,31 +154,112 @@
       "name": "Respond Assignment Package Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1160, 450],
+      "position": [
+        1160,
+        450
+      ],
       "parameters": {
-        "respondWith":"json",
-        "responseCode":200,
-        "responseBody":"={{ JSON.stringify({ success:true,workflow:'WF-379',packageStatus:'incomplete',reason:$json.blockedReason||'missing_assignment_requirements',missing:$json.missingRequirements||[],dealId:$json.dealId||null,assignmentId:$json.assignmentId||null }) }}"
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify({ success:true,workflow:'WF-379',packageStatus:'incomplete',reason:$json.blockedReason||'missing_assignment_requirements',missing:$json.missingRequirements||[],dealId:$json.dealId||null,assignmentId:$json.assignmentId||null }) }}"
       }
     }
   ],
   "connections": {
-    "Assignment Package Webhook":{"main":[[{"node":"Fetch Assignment Context","type":"main","index":0}]]},
-    "Fetch Assignment Context":{"main":[[{"node":"Validate Assignment Package","type":"main","index":0}]]},
-    "Validate Assignment Package":{"main":[[{"node":"IF Assignment Package Ready","type":"main","index":0}]]},
-    "IF Assignment Package Ready":{"main":[[{"node":"Build Buyer Disposition Package","type":"main","index":0}],[{"node":"Respond Assignment Package Blocked","type":"main","index":0}]]},
-    "Build Buyer Disposition Package":{"main":[[{"node":"Persist Buyer Disposition Package","type":"main","index":0}]]},
-    "Persist Buyer Disposition Package":{"main":[[{"node":"Handoff to Buyer Distribution","type":"main","index":0}]]},
-    "Handoff to Buyer Distribution":{"main":[[{"node":"Respond Buyer Handoff","type":"main","index":0}]]}
+    "Assignment Package Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Assignment Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Assignment Context": {
+      "main": [
+        [
+          {
+            "node": "Validate Assignment Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Assignment Package": {
+      "main": [
+        [
+          {
+            "node": "IF Assignment Package Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Assignment Package Ready": {
+      "main": [
+        [
+          {
+            "node": "Build Buyer Disposition Package",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Assignment Package Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Buyer Disposition Package": {
+      "main": [
+        [
+          {
+            "node": "Persist Buyer Disposition Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Buyer Disposition Package": {
+      "main": [
+        [
+          {
+            "node": "Handoff to Buyer Distribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff to Buyer Distribution": {
+      "main": [
+        [
+          {
+            "node": "Respond Buyer Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
-    "executionOrder":"v1",
-    "saveDataErrorExecution":"all",
-    "saveDataSuccessExecution":"all",
-    "saveManualExecutions":true,
-    "saveExecutionProgress":true,
-    "callerPolicy":"workflowsFromSameOwner",
-    "availableInMCP":false
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "active":false
+  "active": false,
+  "id": "bc66e138-8771-4485-a2a2-54df7a6506bb"
 }

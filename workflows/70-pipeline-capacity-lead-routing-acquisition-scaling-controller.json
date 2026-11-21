@@ -2,52 +2,338 @@
   "name": "WF-432 — Pipeline Capacity, Lead Routing & Acquisition Scaling Controller",
   "nodes": [
     {
-      "parameters":{"httpMethod":"POST","path":"pipeline-capacity-lead-routing-acquisition-scaling","responseMode":"lastNode","options":{}},
-      "id":"w432a","name":"Pipeline Scaling Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0]
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pipeline-capacity-lead-routing-acquisition-scaling",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w432a",
+      "name": "Pipeline Scaling Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "parameters":{"jsCode":"const b=$json.body??$json; const portfolioId=String(b.portfolioId??'default').trim(); const period=String(b.period??'current').trim(); return [{json:{...b,portfolioId,period,asOfDate:b.asOfDate??new Date().toISOString(),receivedAt:new Date().toISOString()}}];"},
-      "id":"w432b","name":"Normalize Pipeline Scaling Request","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0]
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const portfolioId=String(b.portfolioId??'default').trim(); const period=String(b.period??'current').trim(); return [{json:{...b,portfolioId,period,asOfDate:b.asOfDate??new Date().toISOString(),receivedAt:new Date().toISOString()}}];"
+      },
+      "id": "w432b",
+      "name": "Normalize Pipeline Scaling Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
     },
     {
-      "parameters":{"conditions":{"string":[{"value1":"={{$json.portfolioId}}","operation":"notEmpty"},{"value1":"={{$json.period}}","operation":"notEmpty"}]}},
-      "id":"w432c","name":"Validate Pipeline Scaling Request","type":"n8n-nodes-base.if","typeVersion":2,"position":[440,0]
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.portfolioId}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.period}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "w432c",
+      "name": "Validate Pipeline Scaling Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/pipeline-capacity-routing-context","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"asOfDate","value":"={{$json.asOfDate}}"}]},"options":{}},
-      "id":"w432d","name":"Fetch Pipeline Capacity Context","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[660,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/pipeline-capacity-routing-context",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "asOfDate",
+              "value": "={{$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w432d",
+      "name": "Fetch Pipeline Capacity Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        660,
+        -80
+      ]
     },
     {
-      "parameters":{"jsCode":"const input=$('Normalize Pipeline Scaling Request').first().json; const ctx=$json.context??$json; const leads=Array.isArray(ctx.leads)?ctx.leads:[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const active=leads.filter(l=>!['closed','cancelled','dnc','suppressed'].includes(String(l.status??'').toLowerCase())); const queues={hot:[],warm:[],standard:[],nurture:[]}; for(const l of active){const q=String(l.queue??(n(l.priorityScore)>=80?'hot':n(l.priorityScore)>=60?'warm':n(l.priorityScore)>=35?'standard':'nurture')).toLowerCase(); (queues[q]??queues.standard).push(l);} const capacity=ctx.capacity??{}; const caps={hot:n(capacity.hot??capacity.hotCapacity),warm:n(capacity.warm??capacity.warmCapacity),standard:n(capacity.standard??capacity.standardCapacity),nurture:n(capacity.nurture??capacity.nurtureCapacity)}; const queueStats=Object.fromEntries(Object.entries(queues).map(([k,v])=>{const cap=caps[k];const load=v.length;const utilization=cap?load/cap:null;return[k,{activeLeads:load,capacity:cap,utilization,overCapacity:cap>0?load>cap:false,availableCapacity:cap>0?Math.max(0,cap-load):null}]})); const totalActive=active.length; const totalCapacity=Object.values(caps).reduce((s,v)=>s+v,0); const overloaded=Object.values(queueStats).filter(x=>x.overCapacity).length; const routingNeed=overloaded? 'rebalance_and_increase_capacity':totalCapacity>0&&totalActive/totalCapacity>=0.85?'increase_capacity_proactively':'maintain_current_capacity'; const hotNeed=queueStats.hot.overCapacity||queueStats.hot.utilization>=0.85; const recommendedActions=[]; if(hotNeed)recommendedActions.push('prioritize_hot_lead_response_capacity'); if(overloaded)recommendedActions.push('rebalance_leads_from_overloaded_queues'); if(totalCapacity>0&&totalActive/totalCapacity>=0.85)recommendedActions.push('add_routing_or_follow_up_capacity'); if(!recommendedActions.length)recommendedActions.push('maintain_current_routing_capacity'); const scalingGate={minimumEvidence:ctx.minimumEvidence??'capacity utilization plus qualified-lead and SLA performance',approvalRequired:true}; const idempotencyKey='wf432:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,pipelineScalingAssessment:{status:active.length?'assessed':'blocked',routingNeed,metrics:{totalActiveLeads:totalActive,totalCapacity,overallUtilization:totalCapacity?totalActive/totalCapacity:null,overloadedQueueCount:overloaded},queueStats,recommendedActions,scalingGate,flags:active.length?[]:['no_active_leads'],nextAction:active.length?'apply_routing_rebalance_or_capacity_plan':'acquire_or_restore_active_lead_pipeline',confidenceScore:active.length&&totalCapacity?91:active.length?68:20},idempotencyKey}}];"},
-      "id":"w432e","name":"Assess Pipeline Capacity & Scaling Need","type":"n8n-nodes-base.code","typeVersion":2,"position":[880,-80]
+      "parameters": {
+        "jsCode": "const input=$('Normalize Pipeline Scaling Request').first().json; const ctx=$json.context??$json; const leads=Array.isArray(ctx.leads)?ctx.leads:[]; const n=v=>Number.isFinite(Number(v))?Number(v):0; const active=leads.filter(l=>!['closed','cancelled','dnc','suppressed'].includes(String(l.status??'').toLowerCase())); const queues={hot:[],warm:[],standard:[],nurture:[]}; for(const l of active){const q=String(l.queue??(n(l.priorityScore)>=80?'hot':n(l.priorityScore)>=60?'warm':n(l.priorityScore)>=35?'standard':'nurture')).toLowerCase(); (queues[q]??queues.standard).push(l);} const capacity=ctx.capacity??{}; const caps={hot:n(capacity.hot??capacity.hotCapacity),warm:n(capacity.warm??capacity.warmCapacity),standard:n(capacity.standard??capacity.standardCapacity),nurture:n(capacity.nurture??capacity.nurtureCapacity)}; const queueStats=Object.fromEntries(Object.entries(queues).map(([k,v])=>{const cap=caps[k];const load=v.length;const utilization=cap?load/cap:null;return[k,{activeLeads:load,capacity:cap,utilization,overCapacity:cap>0?load>cap:false,availableCapacity:cap>0?Math.max(0,cap-load):null}]})); const totalActive=active.length; const totalCapacity=Object.values(caps).reduce((s,v)=>s+v,0); const overloaded=Object.values(queueStats).filter(x=>x.overCapacity).length; const routingNeed=overloaded? 'rebalance_and_increase_capacity':totalCapacity>0&&totalActive/totalCapacity>=0.85?'increase_capacity_proactively':'maintain_current_capacity'; const hotNeed=queueStats.hot.overCapacity||queueStats.hot.utilization>=0.85; const recommendedActions=[]; if(hotNeed)recommendedActions.push('prioritize_hot_lead_response_capacity'); if(overloaded)recommendedActions.push('rebalance_leads_from_overloaded_queues'); if(totalCapacity>0&&totalActive/totalCapacity>=0.85)recommendedActions.push('add_routing_or_follow_up_capacity'); if(!recommendedActions.length)recommendedActions.push('maintain_current_routing_capacity'); const scalingGate={minimumEvidence:ctx.minimumEvidence??'capacity utilization plus qualified-lead and SLA performance',approvalRequired:true}; const idempotencyKey='wf432:'+input.portfolioId+':'+input.period+':'+input.asOfDate; return [{json:{...input,pipelineScalingAssessment:{status:active.length?'assessed':'blocked',routingNeed,metrics:{totalActiveLeads:totalActive,totalCapacity,overallUtilization:totalCapacity?totalActive/totalCapacity:null,overloadedQueueCount:overloaded},queueStats,recommendedActions,scalingGate,flags:active.length?[]:['no_active_leads'],nextAction:active.length?'apply_routing_rebalance_or_capacity_plan':'acquire_or_restore_active_lead_pipeline',confidenceScore:active.length&&totalCapacity?91:active.length?68:20},idempotencyKey}}];"
+      },
+      "id": "w432e",
+      "name": "Assess Pipeline Capacity & Scaling Need",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/pipeline-capacity-scaling-recommendation","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"pipelineScalingAssessment","value":"={{JSON.stringify($json.pipelineScalingAssessment)}}"},{"name":"idempotencyKey","value":"={{$json.idempotencyKey}}"}]},"options":{}},
-      "id":"w432f","name":"Persist Pipeline Scaling Assessment","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1100,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/pipeline-capacity-scaling-recommendation",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "pipelineScalingAssessment",
+              "value": "={{JSON.stringify($json.pipelineScalingAssessment)}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w432f",
+      "name": "Persist Pipeline Scaling Assessment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        -80
+      ]
     },
     {
-      "parameters":{"method":"POST","url":"https://YOUR_INSULACRM_API/analytics/activity","sendBody":true,"contentType":"json","bodyParameters":{"parameters":[{"name":"type","value":"pipeline_capacity_lead_routing_acquisition_scaling"},{"name":"portfolioId","value":"={{$json.portfolioId}}"},{"name":"period","value":"={{$json.period}}"},{"name":"routingNeed","value":"={{$json.pipelineScalingAssessment.routingNeed}}"},{"name":"totalActiveLeads","value":"={{$json.pipelineScalingAssessment.metrics.totalActiveLeads}}"},{"name":"overallUtilization","value":"={{$json.pipelineScalingAssessment.metrics.overallUtilization}}"},{"name":"idempotencyKey","value":"={{'wf432:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"}]},"options":{}},
-      "id":"w432g","name":"Record Pipeline Scaling Activity","type":"n8n-nodes-base.httpRequest","typeVersion":4,"position":[1320,-80]
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_INSULACRM_API/analytics/activity",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "pipeline_capacity_lead_routing_acquisition_scaling"
+            },
+            {
+              "name": "portfolioId",
+              "value": "={{$json.portfolioId}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json.period}}"
+            },
+            {
+              "name": "routingNeed",
+              "value": "={{$json.pipelineScalingAssessment.routingNeed}}"
+            },
+            {
+              "name": "totalActiveLeads",
+              "value": "={{$json.pipelineScalingAssessment.metrics.totalActiveLeads}}"
+            },
+            {
+              "name": "overallUtilization",
+              "value": "={{$json.pipelineScalingAssessment.metrics.overallUtilization}}"
+            },
+            {
+              "name": "idempotencyKey",
+              "value": "={{'wf432:activity:'+$json.portfolioId+':'+$json.period+':'+$json.asOfDate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w432g",
+      "name": "Record Pipeline Scaling Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{$json}}","options":{}},
-      "id":"w432h","name":"Respond Pipeline Scaling Assessment","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[1540,-80]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "w432h",
+      "name": "Respond Pipeline Scaling Assessment",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
-      "parameters":{"respondWith":"json","responseBody":"={{ {status:'blocked',reason:'portfolioId and period are required'} }}","options":{}},
-      "id":"w432i","name":"Respond Invalid Pipeline Scaling Request","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,140]
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status:'blocked',reason:'portfolioId and period are required'} }}",
+        "options": {}
+      },
+      "id": "w432i",
+      "name": "Respond Invalid Pipeline Scaling Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        140
+      ]
     }
   ],
-  "connections":{
-    "Pipeline Scaling Webhook":{"main":[[{"node":"Normalize Pipeline Scaling Request","type":"main","index":0}]]},
-    "Normalize Pipeline Scaling Request":{"main":[[{"node":"Validate Pipeline Scaling Request","type":"main","index":0}]]},
-    "Validate Pipeline Scaling Request":{"main":[[{"node":"Fetch Pipeline Capacity Context","type":"main","index":0}],[{"node":"Respond Invalid Pipeline Scaling Request","type":"main","index":0}]]},
-    "Fetch Pipeline Capacity Context":{"main":[[{"node":"Assess Pipeline Capacity & Scaling Need","type":"main","index":0}]]},
-    "Assess Pipeline Capacity & Scaling Need":{"main":[[{"node":"Persist Pipeline Scaling Assessment","type":"main","index":0}]]},
-    "Persist Pipeline Scaling Assessment":{"main":[[{"node":"Record Pipeline Scaling Activity","type":"main","index":0}]]},
-    "Record Pipeline Scaling Activity":{"main":[[{"node":"Respond Pipeline Scaling Assessment","type":"main","index":0}]]}
+  "connections": {
+    "Pipeline Scaling Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Pipeline Scaling Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Pipeline Scaling Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Pipeline Scaling Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Pipeline Scaling Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pipeline Capacity Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Pipeline Scaling Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pipeline Capacity Context": {
+      "main": [
+        [
+          {
+            "node": "Assess Pipeline Capacity & Scaling Need",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Pipeline Capacity & Scaling Need": {
+      "main": [
+        [
+          {
+            "node": "Persist Pipeline Scaling Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Pipeline Scaling Assessment": {
+      "main": [
+        [
+          {
+            "node": "Record Pipeline Scaling Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Pipeline Scaling Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Pipeline Scaling Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveManualExecutions":true},
-  "tags":[{"name":"WF-432"},{"name":"pipeline-capacity"},{"name":"lead-routing"},{"name":"acquisition-scaling"},{"name":"analytics"},{"name":"InsulaCRM"}],
-  "meta":{"workflowId":"WF-432","contractStatus":"scaffolded","idempotency":"wf432:{portfolioId}:{period}:{asOfDate}","notes":"Pipeline capacity and routing assessment is recommendation scaffolding pending verified InsulaCRM queue/assignee capacity schema, SLA metrics, production routing contracts, and approval controls."}
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "WF-432"
+    },
+    {
+      "name": "pipeline-capacity"
+    },
+    {
+      "name": "lead-routing"
+    },
+    {
+      "name": "acquisition-scaling"
+    },
+    {
+      "name": "analytics"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
+  "meta": {
+    "workflowId": "WF-432",
+    "contractStatus": "scaffolded",
+    "idempotency": "wf432:{portfolioId}:{period}:{asOfDate}",
+    "notes": "Pipeline capacity and routing assessment is recommendation scaffolding pending verified InsulaCRM queue/assignee capacity schema, SLA metrics, production routing contracts, and approval controls."
+  },
+  "id": "b99908ee-005c-46ff-b108-3a9dd93de368"
 }

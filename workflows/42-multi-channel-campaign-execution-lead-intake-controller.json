@@ -347,5 +347,6 @@
     "contractStatus": "scaffolded",
     "idempotency": "wf404:{leadId}:{source}:{campaignId}",
     "notes": "Placeholder InsulaCRM endpoints require final API contract mapping before production use."
-  }
+  },
+  "id": "356cade1-cb13-4f42-8f48-6e2245a3cc77"
 }

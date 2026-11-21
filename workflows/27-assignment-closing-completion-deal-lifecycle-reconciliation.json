@@ -12,7 +12,10 @@
       "name": "Closing Completion Reconciliation Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Normalize Closing Completion Outcome",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Fetch Final Closing Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -58,7 +67,10 @@
       "name": "Validate Closing Completion Evidence",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -87,7 +99,10 @@
       "name": "IF Closing Outcome Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [880, 0]
+      "position": [
+        880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -156,7 +171,10 @@
       "name": "Persist Closing Completion",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, -100]
+      "position": [
+        1100,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -205,7 +223,10 @@
       "name": "Reconcile Deal Lifecycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, -100]
+      "position": [
+        1320,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -219,7 +240,10 @@
       "name": "Respond Lifecycle Reconciled",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1540, -100]
+      "position": [
+        1540,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -233,33 +257,96 @@
       "name": "Respond Closing Outcome Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     }
   ],
   "connections": {
     "Closing Completion Reconciliation Webhook": {
-      "main": [[{"node": "Normalize Closing Completion Outcome", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Normalize Closing Completion Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Closing Completion Outcome": {
-      "main": [[{"node": "Fetch Final Closing Context", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Fetch Final Closing Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Final Closing Context": {
-      "main": [[{"node": "Validate Closing Completion Evidence", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Validate Closing Completion Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Closing Completion Evidence": {
-      "main": [[{"node": "IF Closing Outcome Valid", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "IF Closing Outcome Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF Closing Outcome Valid": {
       "main": [
-        [{"node": "Persist Closing Completion", "type": "main", "index": 0}],
-        [{"node": "Respond Closing Outcome Blocked", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Persist Closing Completion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Closing Outcome Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Persist Closing Completion": {
-      "main": [[{"node": "Reconcile Deal Lifecycle", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Reconcile Deal Lifecycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Reconcile Deal Lifecycle": {
-      "main": [[{"node": "Respond Lifecycle Reconciled", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Respond Lifecycle Reconciled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -272,5 +359,14 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["real-estate", "insula-crm", "assignment", "closing", "lifecycle", "reconciliation", "wf-389"]
+  "tags": [
+    "real-estate",
+    "insula-crm",
+    "assignment",
+    "closing",
+    "lifecycle",
+    "reconciliation",
+    "wf-389"
+  ],
+  "id": "8ef37950-9d99-4659-bd9a-8c0af6a8aedf"
 }

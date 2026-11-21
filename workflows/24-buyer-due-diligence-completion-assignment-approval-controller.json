@@ -6,7 +6,10 @@
       "name": "Assignment Approval Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "wholestack-buyer-assignment-approval",
@@ -19,7 +22,10 @@
       "name": "Normalize Assignment Approval Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [470, 300],
+      "position": [
+        470,
+        300
+      ],
       "parameters": {
         "jsCode": "var b=$input.first().json.body||$input.first().json;\nreturn [{json:{...b,buyerId:String(b.buyerId||''),dealId:String(b.dealId||''),assignmentId:String(b.assignmentId||''),receivedAt:new Date().toISOString()}}];"
       }
@@ -29,7 +35,10 @@
       "name": "Fetch Due Diligence Completion Context",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 300],
+      "position": [
+        700,
+        300
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/assignment-approval-context",
@@ -43,7 +52,10 @@
       "name": "Evaluate Due Diligence Completion",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [930, 300],
+      "position": [
+        930,
+        300
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar identity=!!d.buyerId&&!!d.dealId&&!!d.assignmentId;\nvar pof=['verified','approved','current'].indexOf(String(d.proofOfFundsStatus||'').toLowerCase())>=0;\nvar docs=d.requiredDocumentsComplete===true;\nvar qualification=d.buyerQualification==='qualified'||d.buyerQualification==='conditional';\nvar lock=d.dealLockStatus==='locked'||d.dealLockStatus==='exclusive';\nvar contract=d.contractReady!==false;\nvar buyerActive=d.buyerActive!==false;\nvar assignmentEligible=d.assignmentEligible!==false;\nvar protectedDeal=['closed','cancelled','disputed'].indexOf(String(d.dealStatus||'').toLowerCase())>=0;\nvar complete=identity&&pof&&docs&&qualification&&lock&&contract&&buyerActive&&assignmentEligible&&!protectedDeal;\nvar missing=[]; if(!pof) missing.push('verified_proof_of_funds'); if(!docs) missing.push('required_documents'); if(!qualification) missing.push('buyer_qualification'); if(!lock) missing.push('exclusive_deal_lock'); if(!contract) missing.push('contract_readiness'); if(!buyerActive) missing.push('active_buyer'); if(!assignmentEligible) missing.push('assignment_eligibility');\nvar status=complete?'approved':protectedDeal?'blocked':missing.length?'pending':'review';\nreturn [{json:{...d,dueDiligenceComplete:complete,assignmentApprovalStatus:status,approvalMissing:missing}}];"
       }
@@ -53,7 +65,10 @@
       "name": "Enforce Assignment Approval Guardrails",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1160, 300],
+      "position": [
+        1160,
+        300
+      ],
       "parameters": {
         "jsCode": "var d=$input.first().json;\nvar approved=d.assignmentApprovalStatus==='approved';\nvar identity=!!d.buyerId&&!!d.dealId&&!!d.assignmentId;\nvar allowed=approved&&identity;\nvar reason=allowed?null:!identity?'missing_identity':d.assignmentApprovalStatus==='blocked'?'deal_protected':(d.approvalMissing||['due_diligence_incomplete'])[0];\nreturn [{json:{...d,assignmentApprovalAllowed:allowed,assignmentApprovalBlockedReason:reason}}];"
       }
@@ -63,7 +78,10 @@
       "name": "Persist Assignment Approval",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1390, 150],
+      "position": [
+        1390,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/buyers/assignment-approval",
@@ -77,7 +95,10 @@
       "name": "Handoff Approved Assignment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 150],
+      "position": [
+        1620,
+        150
+      ],
       "parameters": {
         "method": "POST",
         "url": "https://YOUR_INSULACRM_API/assignments/approved-for-closing",
@@ -91,7 +112,10 @@
       "name": "Respond Assignment Approval",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1850, 150],
+      "position": [
+        1850,
+        150
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -103,7 +127,10 @@
       "name": "Respond Assignment Approval Blocked",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1390, 500],
+      "position": [
+        1390,
+        500
+      ],
       "parameters": {
         "respondWith": "json",
         "responseCode": 200,
@@ -112,22 +139,93 @@
     }
   ],
   "connections": {
-    "Assignment Approval Webhook":{"main":[[{"node":"Normalize Assignment Approval Request","type":"main","index":0}]]},
-    "Normalize Assignment Approval Request":{"main":[[{"node":"Fetch Due Diligence Completion Context","type":"main","index":0}]]},
-    "Fetch Due Diligence Completion Context":{"main":[[{"node":"Evaluate Due Diligence Completion","type":"main","index":0}]]},
-    "Evaluate Due Diligence Completion":{"main":[[{"node":"Enforce Assignment Approval Guardrails","type":"main","index":0}]]},
-    "Enforce Assignment Approval Guardrails":{"main":[[{"node":"Persist Assignment Approval","type":"main","index":0}]]},
-    "Persist Assignment Approval":{"main":[[{"node":"Handoff Approved Assignment","type":"main","index":0}]]},
-    "Handoff Approved Assignment":{"main":[[{"node":"Respond Assignment Approval","type":"main","index":0}]]}
+    "Assignment Approval Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Assignment Approval Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Assignment Approval Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Due Diligence Completion Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Due Diligence Completion Context": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Due Diligence Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Due Diligence Completion": {
+      "main": [
+        [
+          {
+            "node": "Enforce Assignment Approval Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Assignment Approval Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Persist Assignment Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Assignment Approval": {
+      "main": [
+        [
+          {
+            "node": "Handoff Approved Assignment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff Approved Assignment": {
+      "main": [
+        [
+          {
+            "node": "Respond Assignment Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{
-    "executionOrder":"v1",
-    "saveDataErrorExecution":"all",
-    "saveDataSuccessExecution":"all",
-    "saveManualExecutions":true,
-    "saveExecutionProgress":true,
-    "callerPolicy":"workflowsFromSameOwner",
-    "availableInMCP":false
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "active":false
+  "active": false,
+  "id": "761ce690-6049-40d2-9d17-b411a6583bd4"
 }

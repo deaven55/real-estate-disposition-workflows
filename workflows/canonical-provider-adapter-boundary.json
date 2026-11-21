@@ -1,0 +1,145 @@
+{
+  "name": "Canonical Provider Adapter Boundary",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "canonical-provider-adapter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "pab-a",
+      "name": "Provider Adapter Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0,0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const category=String(b.providerCategory??'').trim(); const operation=String(b.operation??'').trim(); const allowed={communications:['send_message'],esignature:['create_package','void_package'],titleClosing:['create_title_order','request_closing'],funds:['confirm_funding']}; if(!allowed[category]||!allowed[category].includes(operation)) throw new Error('Unsupported providerCategory/operation'); const cfg={communications:['COMMUNICATIONS_API_BASE_URL','COMMUNICATIONS_API_TOKEN'],esignature:['ESIGNATURE_API_BASE_URL','ESIGNATURE_API_TOKEN'],titleClosing:['TITLE_CLOSING_API_BASE_URL','TITLE_CLOSING_API_TOKEN'],funds:['FUNDS_API_BASE_URL','FUNDS_API_TOKEN']}[category]; const paths={send_message:'/messages',create_package:'/packages',void_package:'/packages/void',create_title_order:'/title-orders',request_closing:'/closings',confirm_funding:'/funding/confirm'}; const base=String($env[cfg[0]]??'').replace(/\\/$/,''); const token=String($env[cfg[1]]??''); if(!/^https:\\/\\//i.test(base)) throw new Error('Provider API base URL must use HTTPS'); if(!token) throw new Error('Provider API token is not configured'); const id=String(b.idempotencyKey??'').trim(); if(!id) throw new Error('idempotencyKey is required'); return [{json:{...b,providerCategory:category,operation,idempotencyKey:id,correlationId:String(b.correlationId??('provider:'+id)),providerBaseUrl:base,providerPath:paths[operation],providerToken:token,providerRequestBody:{schemaVersion:'1.0',operation,idempotencyKey:id,correlationId:String(b.correlationId??('provider:'+id)),entity:b.entity??{},payload:b.payload??{},metadata:b.metadata??{}}}}];"
+      },
+      "id": "pab-b",
+      "name": "Validate And Resolve Provider",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240,0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.providerBaseUrl + $json.providerPath}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name":"Authorization","value":"={{'Bearer '+$json.providerToken}}"},
+            {"name":"Content-Type","value":"application/json"},
+            {"name":"Idempotency-Key","value":"={{$json.idempotencyKey}}"},
+            {"name":"X-Correlation-ID","value":"={{$json.correlationId}}"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{$json.providerRequestBody}}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000
+      },
+      "id": "pab-c",
+      "name": "Call External Provider",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500,0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Validate And Resolve Provider').first().json; const raw=$json; const status=Number(raw.statusCode??0); const body=raw.body??raw; const accepted=status>=200&&status<300; const retryable=[408,409,425,429,500,502,503,504].includes(status); const providerResourceId=String(body.providerResourceId??body.id??body.packageId??body.orderId??body.reference??''); const providerRequestId=String(body.providerRequestId??body.requestId??raw.headers?.['x-request-id']??''); return [{json:{...input,providerToken:undefined,providerResult:{accepted,providerCategory:input.providerCategory,operation:input.operation,providerRequestId,providerResourceId,status,retryable,response:body},providerEvidence:{providerCategory:input.providerCategory,operation:input.operation,idempotencyKey:input.idempotencyKey,correlationId:input.correlationId,status,accepted,providerRequestId,providerResourceId}}}];"
+      },
+      "id": "pab-d",
+      "name": "Normalize Provider Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760,0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.INSULACRM_API_BASE_URL + '/platform/provider-result'}}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{$json.providerEvidence}}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000
+      },
+      "id": "pab-e",
+      "name": "Persist Provider Evidence To InsulaCRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1020,0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Normalize Provider Result').first().json; return [{json:{status:input.providerResult.accepted?'accepted':'rejected',providerResult:input.providerResult,insulacrmProviderEvidenceWrite:$json,canonicalFailureEvent:input.providerResult.accepted?null:{eventType:'provider.operation.failed',providerCategory:input.providerCategory,operation:input.operation,retryable:input.providerResult.retryable,idempotencyKey:input.idempotencyKey,correlationId:input.correlationId,entity:input.entity}}}];"
+      },
+      "id": "pab-f",
+      "name": "Build Canonical Provider Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280,0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": "={{$json.status==='accepted'?200:502}}",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "pab-g",
+      "name": "Respond Provider Outcome",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540,0]
+    }
+  ],
+  "connections": {
+    "Provider Adapter Webhook": {"main":[[{"node":"Validate And Resolve Provider","type":"main","index":0}]]},
+    "Validate And Resolve Provider": {"main":[[{"node":"Call External Provider","type":"main","index":0}]]},
+    "Call External Provider": {"main":[[{"node":"Normalize Provider Result","type":"main","index":0}]]},
+    "Normalize Provider Result": {"main":[[{"node":"Persist Provider Evidence To InsulaCRM","type":"main","index":0}]]},
+    "Persist Provider Evidence To InsulaCRM": {"main":[[{"node":"Build Canonical Provider Outcome","type":"main","index":0}]]},
+    "Build Canonical Provider Outcome": {"main":[[{"node":"Respond Provider Outcome","type":"main","index":0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [{"name":"provider"},{"name":"adapter"},{"name":"canonical-engine"},{"name":"InsulaCRM"}],
+  "meta": {
+    "purpose": "Vendor-neutral provider adapter boundary for communications, e-signature, title/closing and funds.",
+    "status": "deployment-configurable"
+  }
+}

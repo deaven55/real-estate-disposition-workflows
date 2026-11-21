@@ -18,8 +18,12 @@ async function post(category,operation){
  const raw=await res.text(); let response; try{response=JSON.parse(raw)}catch{response={raw:raw.slice(0,1000)}}
  return {category,operation,status:res.status,ok:res.ok,response};
 }
+async function main(){
 const results=[];
 for(const [category,operation] of cases) results.push(await post(category,operation));
 const failed=results.filter(x=>!x.ok);
 console.log(JSON.stringify({status:failed.length?'failed':'passed',results},null,2));
 process.exit(failed.length?1:0);
+
+}
+main().catch(error=>{console.error(error);process.exit(1);});

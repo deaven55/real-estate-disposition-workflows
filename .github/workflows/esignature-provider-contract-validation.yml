@@ -1,0 +1,30 @@
+name: E-signature provider contract validation
+
+on:
+  push:
+    paths:
+      - 'config/esignature-provider-contract.json'
+      - 'tests/canonical-esignature-provider-cases.json'
+      - 'scripts/validate-esignature-provider-configuration.js'
+      - 'workflows/canonical-esignature-provider-request-mapper.json'
+      - 'workflows/canonical-provider-callback-boundary.json'
+      - '.github/workflows/esignature-provider-contract-validation.yml'
+  pull_request:
+    paths:
+      - 'config/esignature-provider-contract.json'
+      - 'tests/canonical-esignature-provider-cases.json'
+      - 'scripts/validate-esignature-provider-configuration.js'
+      - 'workflows/canonical-esignature-provider-request-mapper.json'
+      - 'workflows/canonical-provider-callback-boundary.json'
+      - '.github/workflows/esignature-provider-contract-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate e-signature contract
+        run: node scripts/validate-esignature-provider-configuration.js

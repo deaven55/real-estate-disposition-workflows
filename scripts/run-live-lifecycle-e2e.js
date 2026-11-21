@@ -45,6 +45,7 @@ async function post(eventType,engine,step){
   return {step,eventType,engine,status:res.status,ok:res.ok,response:parsed};
 }
 
+async function main(){
 const results=[];
 for(let i=0;i<sequence.length;i++){
   const [eventType,engine,next]=sequence[i];
@@ -58,3 +59,6 @@ for(let i=0;i<sequence.length;i++){
 const failed=results.filter(r=>r.status<200||r.status>=300);
 console.log(JSON.stringify({status:failed.length?'failed':'passed',base,leadId,dealId,propertyId,correlationId,steps:results},null,2));
 process.exit(failed.length?1:0);
+
+}
+main().catch(error=>{console.error(error);process.exit(1);});

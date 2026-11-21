@@ -13,17 +13,23 @@
       "name": "Provider Callback Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0,0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const b=$json.body??$json; const h=$json.headers??{}; const expectedToken=String($env.PROVIDER_CALLBACK_SHARED_TOKEN??'').trim(); const suppliedToken=String(h['x-provider-callback-token']??h['x-webhook-token']??'').trim(); if(!expectedToken) throw new Error('PROVIDER_CALLBACK_SHARED_TOKEN is not configured'); if(!suppliedToken||suppliedToken!==expectedToken) throw new Error('Provider callback authentication failed'); const category=String(b.providerCategory??'').trim(); const providerEventId=String(b.providerEventId??b.eventId??b.id??'').trim(); const status=String(b.status??b.event?.status??'').trim().toLowerCase(); const entity=b.entity??{}; const providerResourceId=String(b.providerResourceId??b.resourceId??b.payload?.providerResourceId??'').trim(); const providerResourceExists=b.providerResourceExists!==false && b.payload?.providerResourceExists!==false; const resourceRequired=!['communications'].includes(category); if(!category||!providerEventId||!status) throw new Error('providerCategory, providerEventId and status are required'); if(resourceRequired&&!providerResourceId) throw new Error('providerResourceId is required for this provider callback category'); if(resourceRequired&&!providerResourceExists) throw new Error('Provider callback resource is unknown'); const statusMap={communications:{delivered:'communication.delivered',failed:'communication.failed'},esignature:{completed:'contract.signed',executed:'contract.signed',declined:'contract.signature.declined',voided:'contract.voided',expired:'contract.signature.expired'},titleClosing:{cleared:'title.cleared',exception:'title.exception',closing_ready:'closing.ready',closed:'closing.completed'},funds:{funded:'funds.confirmed',failed:'funds.failed',reconciled:'financials.reconciled'}}; const eventType=statusMap[category]?.[status]??''; if(!eventType) throw new Error('Unsupported provider callback status'); const idempotencyKey='provider-callback:'+category+':'+providerEventId; return [{json:{schemaVersion:'1.0',eventId:'provider-callback:'+providerEventId,eventType,occurredAt:String(b.occurredAt??new Date().toISOString()),source:'provider-callback',providerCategory:category,providerEventId,status,idempotencyKey,correlationId:String(b.correlationId??('provider-callback:'+providerEventId)),entity,payload:{...(b.payload??b),providerResourceId,providerResourceExists},metadata:{providerCallbackHeaders:{providerSignaturePresent:Boolean(h['x-provider-signature']||h['x-webhook-signature']),source:'provider-callback-boundary'}}}}];"
+        "jsCode": "const b=$json.body??$json; const h=$json.headers??{}; const expectedToken=String($env.PROVIDER_CALLBACK_SHARED_TOKEN??'').trim(); const suppliedToken=String(h['x-provider-callback-token']??h['x-webhook-token']??'').trim(); if(!expectedToken) throw new Error('PROVIDER_CALLBACK_SHARED_TOKEN is not configured'); if(!suppliedToken||suppliedToken!==expectedToken) throw new Error('Provider callback authentication failed'); const category=String(b.providerCategory??'').trim(); const providerEventId=String(b.providerEventId??b.eventId??b.id??'').trim(); const status=String(b.status??b.event?.status??'').trim().toLowerCase(); const entity=b.entity??{}; const providerResourceId=String(b.providerResourceId??b.resourceId??b.payload?.providerResourceId??'').trim(); const providerResourceExists=b.providerResourceExists===true || b.payload?.providerResourceExists===true; const resourceRequired=!['communications'].includes(category); if(!category||!providerEventId||!status) throw new Error('providerCategory, providerEventId and status are required'); if(resourceRequired&&!providerResourceId) throw new Error('providerResourceId is required for this provider callback category'); if(resourceRequired&&!providerResourceExists) throw new Error('Provider callback resource is unknown'); const statusMap={communications:{delivered:'communication.delivered',failed:'communication.failed'},esignature:{completed:'contract.signed',executed:'contract.signed',declined:'contract.signature.declined',voided:'contract.voided',expired:'contract.signature.expired'},titleClosing:{cleared:'title.cleared',exception:'title.exception',closing_ready:'closing.ready',closed:'closing.completed'},funds:{funded:'funds.confirmed',failed:'funds.failed',reconciled:'financials.reconciled'}}; const eventType=statusMap[category]?.[status]??''; if(!eventType) throw new Error('Unsupported provider callback status'); const idempotencyKey='provider-callback:'+category+':'+providerEventId; return [{json:{schemaVersion:'1.0',eventId:'provider-callback:'+providerEventId,eventType,occurredAt:String(b.occurredAt??new Date().toISOString()),source:'provider-callback',providerCategory:category,providerEventId,status,idempotencyKey,correlationId:String(b.correlationId??('provider-callback:'+providerEventId)),entity,payload:{...(b.payload??b),providerResourceId,providerResourceExists},metadata:{providerCallbackHeaders:{providerSignaturePresent:Boolean(h['x-provider-signature']||h['x-webhook-signature']),source:'provider-callback-boundary'}}}}];"
       },
       "id": "pcb-b",
       "name": "Normalize Provider Callback",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [260,0]
+      "position": [
+        260,
+        0
+      ]
     },
     {
       "parameters": {
@@ -49,7 +55,10 @@
       "name": "Check Callback Replay",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [520,0]
+      "position": [
+        520,
+        0
+      ]
     },
     {
       "parameters": {
@@ -59,12 +68,20 @@
       "name": "Apply Callback Replay Guard",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [780,0]
+      "position": [
+        780,
+        0
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [{"value1":"={{$json.replayGuard.dispatchAllowed}}","operation":"isTrue"}]
+          "boolean": [
+            {
+              "value1": "={{$json.replayGuard.dispatchAllowed}}",
+              "operation": "isTrue"
+            }
+          ]
         },
         "options": {}
       },
@@ -72,7 +89,10 @@
       "name": "Gate Callback Dispatch",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1040,0]
+      "position": [
+        1040,
+        0
+      ]
     },
     {
       "parameters": {
@@ -100,7 +120,10 @@
       "name": "Dispatch Callback Into Canonical Lifecycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1280,-80]
+      "position": [
+        1280,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -113,7 +136,10 @@
       "name": "Respond Callback Accepted",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540,-80]
+      "position": [
+        1540,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -126,16 +152,86 @@
       "name": "Respond Callback Replay",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1280,120]
+      "position": [
+        1280,
+        120
+      ]
     }
   ],
   "connections": {
-    "Provider Callback Webhook": {"main":[[{"node":"Normalize Provider Callback","type":"main","index":0}]]},
-    "Normalize Provider Callback": {"main":[[{"node":"Check Callback Replay","type":"main","index":0}]]},
-    "Check Callback Replay": {"main":[[{"node":"Apply Callback Replay Guard","type":"main","index":0}]]},
-    "Apply Callback Replay Guard": {"main":[[{"node":"Gate Callback Dispatch","type":"main","index":0}]]},
-    "Gate Callback Dispatch": {"main":[[{"node":"Dispatch Callback Into Canonical Lifecycle","type":"main","index":0}],[{"node":"Respond Callback Replay","type":"main","index":0}]]},
-    "Dispatch Callback Into Canonical Lifecycle": {"main":[[{"node":"Respond Callback Accepted","type":"main","index":0}]]}
+    "Provider Callback Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Provider Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Provider Callback": {
+      "main": [
+        [
+          {
+            "node": "Check Callback Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Callback Replay": {
+      "main": [
+        [
+          {
+            "node": "Apply Callback Replay Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Callback Replay Guard": {
+      "main": [
+        [
+          {
+            "node": "Gate Callback Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Callback Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Callback Into Canonical Lifecycle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Callback Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Callback Into Canonical Lifecycle": {
+      "main": [
+        [
+          {
+            "node": "Respond Callback Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -143,7 +239,20 @@
     "saveDataErrorExecution": "all",
     "saveManualExecutions": true
   },
-  "tags": [{"name":"provider"},{"name":"callback"},{"name":"idempotency"},{"name":"canonical-lifecycle"}],
+  "tags": [
+    {
+      "name": "provider"
+    },
+    {
+      "name": "callback"
+    },
+    {
+      "name": "idempotency"
+    },
+    {
+      "name": "canonical-lifecycle"
+    }
+  ],
   "meta": {
     "purpose": "Authenticated provider callback boundary that deduplicates callbacks before lifecycle state changes.",
     "status": "deployment-configurable",

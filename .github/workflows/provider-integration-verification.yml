@@ -42,6 +42,12 @@ jobs:
           PROVIDER_CONTRACT_DRY_RUN: 'false'
           PROVIDER_CALLBACK_SHARED_TOKEN: ${{ secrets.PROVIDER_CALLBACK_SHARED_TOKEN }}
         run: node scripts/run-provider-contract-tests.js
+      - name: Run provider callback contract tests
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          PROVIDER_CALLBACK_WEBHOOK_PATH: ${{ vars.PROVIDER_CALLBACK_WEBHOOK_PATH || '/webhook/canonical-provider-callback' }}
+          PROVIDER_CALLBACK_SHARED_TOKEN: ${{ secrets.PROVIDER_CALLBACK_SHARED_TOKEN }}
+        run: node scripts/run-provider-callback-contract-tests.js
       - name: Run provider adapter healthchecks
         env:
           N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}

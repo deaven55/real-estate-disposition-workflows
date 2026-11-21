@@ -42,6 +42,15 @@ jobs:
           PROVIDER_CONTRACT_DRY_RUN: 'false'
           PROVIDER_CALLBACK_SHARED_TOKEN: ${{ secrets.PROVIDER_CALLBACK_SHARED_TOKEN }}
         run: node scripts/run-provider-contract-tests.js
+      - name: Verify provider resource endpoint
+        if: ${{ secrets.PROVIDER_RESOURCE_TEST_ID != '' }}
+        env:
+          INSULACRM_API_BASE_URL: ${{ secrets.INSULACRM_API_BASE_URL }}
+          INSULACRM_API_TOKEN: ${{ secrets.INSULACRM_API_TOKEN }}
+          PROVIDER_RESOURCE_TEST_CATEGORY: ${{ vars.PROVIDER_RESOURCE_TEST_CATEGORY || 'esignature' }}
+          PROVIDER_RESOURCE_TEST_ID: ${{ secrets.PROVIDER_RESOURCE_TEST_ID }}
+          PROVIDER_RESOURCE_TEST_DEAL_ID: ${{ vars.PROVIDER_RESOURCE_TEST_DEAL_ID || 'provider-resource-verification-deal' }}
+        run: node scripts/verify-provider-resource-endpoint.js
       - name: Run provider callback contract tests
         env:
           N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}

@@ -7,12 +7,14 @@ Single configuration contract for activating the canonical lifecycle without cha
 
 ### n8n
 - `N8N_BASE_URL`: public HTTPS base URL for the n8n instance.
+- `N8N_WEBHOOK_TOKEN`: optional bearer token if deployed webhooks require authentication.
 - Canonical platform webhook: `/webhook/canonical-platform-integration-hardening`
 - Lifecycle handoff webhook: `/webhook/canonical-lifecycle-handoff`
 - Platform router webhook: `/webhook/platform-event-router`
 
 ### InsulaCRM
 - `INSULACRM_API_BASE_URL`: verified HTTPS API base URL.
+- `INSULACRM_API_TOKEN`: only required for direct verification scripts; n8n runtime authentication remains in n8n credentials.
 - API authentication must be stored in n8n credentials, not hard-coded into workflow JSON.
 
 Required endpoints:
@@ -82,3 +84,7 @@ The response must expose a deterministic acceptance field such as `accepted: tru
 The provider callback boundary now performs an authoritative InsulaCRM provider-resource check for non-communications callbacks before replay handling and lifecycle dispatch.
 
 This file is a deployment contract, not a claim that the external InsulaCRM or provider endpoints already exist. Production status requires live verification.
+
+## Deployment preflight
+
+Run `node scripts/verify-deployment-configuration.js` with the deployment environment loaded before live tests. It verifies HTTPS base URLs, required webhook paths, duplicate webhook-path collisions, and the callback shared token when live provider mode is enabled. It does not verify that external services are reachable; the live endpoint and E2E tests perform that check.

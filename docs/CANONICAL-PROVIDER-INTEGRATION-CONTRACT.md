@@ -75,7 +75,7 @@ Failure:
 9. Communication dispatch is separated from lifecycle state transitions.
 10. Provider timeouts must not be interpreted as successful mutation.
 11. A provider adapter must expose enough evidence for audit/reconciliation.
-12. Mutating callbacks must identify a provider resource; unknown-resource callbacks must be rejected before lifecycle state transition.
+12. Mutating callbacks must identify a provider resource and explicitly assert that the resource is known (`providerResourceExists=true`); missing or false resource validation must be rejected before lifecycle state transition.
 13. Retry policy must be explicit: authentication and validation failures are non-retryable; timeout, rate-limit and transient 5xx failures may be retried with the same idempotency key.
 14. Provider callback boundaries must not use blind automatic retries around idempotency checks or lifecycle dispatch; callback providers may safely retry the same event because the canonical idempotency key is the replay control.
 15. Callback replay tests must verify that the first delivery is accepted and a subsequent delivery of the same provider event is ignored without another lifecycle transition.
@@ -90,7 +90,7 @@ Failure:
 - transient 5xx
 - duplicate idempotency key
 - callback replay
-- callback with unknown resource
+- callback with unknown resource\n- callback with missing resource validation
 - callback missing provider resource ID
 - cancellation/void/expiration where supported
 

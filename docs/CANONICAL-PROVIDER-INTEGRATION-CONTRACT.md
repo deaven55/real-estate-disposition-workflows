@@ -75,6 +75,8 @@ Failure:
 9. Communication dispatch is separated from lifecycle state transitions.
 10. Provider timeouts must not be interpreted as successful mutation.
 11. A provider adapter must expose enough evidence for audit/reconciliation.
+12. Mutating callbacks must identify a provider resource; unknown-resource callbacks must be rejected before lifecycle state transition.
+13. Retry policy must be explicit: authentication and validation failures are non-retryable; timeout, rate-limit and transient 5xx failures may be retried with the same idempotency key.
 
 ## Minimum provider test matrix
 
@@ -87,6 +89,7 @@ Failure:
 - duplicate idempotency key
 - callback replay
 - callback with unknown resource
+- callback missing provider resource ID
 - cancellation/void/expiration where supported
 
 This contract is vendor-neutral. A specific provider is not considered integrated until its adapter implements this contract and passes the live verification suite.

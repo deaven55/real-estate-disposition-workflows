@@ -12,7 +12,10 @@
       "name": "Provider Adapter Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0,0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Validate And Resolve Provider",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240,0]
+      "position": [
+        240,
+        0
+      ]
     },
     {
       "parameters": {
@@ -31,10 +37,22 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name":"Authorization","value":"={{'Bearer '+$json.providerToken}}"},
-            {"name":"Content-Type","value":"application/json"},
-            {"name":"Idempotency-Key","value":"={{$json.idempotencyKey}}"},
-            {"name":"X-Correlation-ID","value":"={{$json.correlationId}}"}
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer '+$json.providerToken}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}"
+            },
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{$json.correlationId}}"
+            }
           ]
         },
         "sendBody": true,
@@ -59,7 +77,10 @@
       "name": "Call External Provider",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [500,0]
+      "position": [
+        500,
+        0
+      ]
     },
     {
       "parameters": {
@@ -69,7 +90,10 @@
       "name": "Normalize Provider Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [760,0]
+      "position": [
+        760,
+        0
+      ]
     },
     {
       "parameters": {
@@ -97,7 +121,10 @@
       "name": "Persist Provider Evidence To InsulaCRM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1020,0]
+      "position": [
+        1020,
+        0
+      ]
     },
     {
       "parameters": {
@@ -107,7 +134,10 @@
       "name": "Build Canonical Provider Outcome",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1280,0]
+      "position": [
+        1280,
+        0
+      ]
     },
     {
       "parameters": {
@@ -120,16 +150,134 @@
       "name": "Respond Provider Outcome",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540,0]
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.dryRun}}",
+              "operation": "isTrue"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "pab-dryrun",
+      "name": "Gate Provider Dry Run",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        500,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ {status:'dry_run',providerCategory:$json.providerCategory,operation:$json.operation,idempotencyKey:$json.idempotencyKey,providerPath:$json.providerPath} }}",
+        "options": {}
+      },
+      "id": "pab-dry-response",
+      "name": "Respond Provider Dry Run",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        760,
+        220
+      ]
     }
   ],
   "connections": {
-    "Provider Adapter Webhook": {"main":[[{"node":"Validate And Resolve Provider","type":"main","index":0}]]},
-    "Validate And Resolve Provider": {"main":[[{"node":"Call External Provider","type":"main","index":0}]]},
-    "Call External Provider": {"main":[[{"node":"Normalize Provider Result","type":"main","index":0}]]},
-    "Normalize Provider Result": {"main":[[{"node":"Persist Provider Evidence To InsulaCRM","type":"main","index":0}]]},
-    "Persist Provider Evidence To InsulaCRM": {"main":[[{"node":"Build Canonical Provider Outcome","type":"main","index":0}]]},
-    "Build Canonical Provider Outcome": {"main":[[{"node":"Respond Provider Outcome","type":"main","index":0}]]}
+    "Provider Adapter Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate And Resolve Provider",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate And Resolve Provider": {
+      "main": [
+        [
+          {
+            "node": "Gate Provider Dry Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call External Provider": {
+      "main": [
+        [
+          {
+            "node": "Normalize Provider Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Provider Result": {
+      "main": [
+        [
+          {
+            "node": "Persist Provider Evidence To InsulaCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Provider Evidence To InsulaCRM": {
+      "main": [
+        [
+          {
+            "node": "Build Canonical Provider Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Canonical Provider Outcome": {
+      "main": [
+        [
+          {
+            "node": "Respond Provider Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Provider Dry Run": {
+      "main": [
+        [
+          {
+            "node": "Respond Provider Dry Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call External Provider",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -137,7 +285,20 @@
     "saveDataErrorExecution": "all",
     "saveManualExecutions": true
   },
-  "tags": [{"name":"provider"},{"name":"adapter"},{"name":"canonical-engine"},{"name":"InsulaCRM"}],
+  "tags": [
+    {
+      "name": "provider"
+    },
+    {
+      "name": "adapter"
+    },
+    {
+      "name": "canonical-engine"
+    },
+    {
+      "name": "InsulaCRM"
+    }
+  ],
   "meta": {
     "purpose": "Vendor-neutral provider adapter boundary for communications, e-signature, title/closing and funds.",
     "status": "deployment-configurable"

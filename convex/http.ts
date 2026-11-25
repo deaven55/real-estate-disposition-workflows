@@ -15,4 +15,24 @@ http.route({ path: "/createDeal", method: "POST", handler: httpAction(async (ctx
     return json({ success: false, error: "Deal could not be staged" }, 400);
   }
 }) });
+http.route({
+  path: "/getDeal",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const token = process.env.DISPOSITION_STAGING_TOKEN;
+    if (!token || request.headers.get("Authorization") !== "Bearer " + token) {
+      return json({ success: false, error: "Unauthorized" }, 401);
+    }
+
+    const body: unknown = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || !("dealId" in body) ||
+        typeof body.dealId !== "string" || !body.dealId.trim()) {
+      return json({ success: false, error: "A dealId is required" }, 400);
+    }
+
+    const data = await ctx.runQuery(internal.staging.getDeal, { dealId: body.dealId });
+    if (!data) return json({ success: false, error: "Staged deal not found" }, 404);
+    return json({ success: true, data });
+  }),
+});
 export default http;

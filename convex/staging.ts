@@ -38,3 +38,58 @@ export const getDeal = internalQuery({
     };
   },
 });
+
+export const getMissedDealsByMarket = internalQuery({
+  args: { market: v.string(), strategy: v.string(), askingPrice: v.number(), currentTime: v.number() },
+  handler: async (ctx, args) => {
+    const market = args.market.trim();
+    const strategy = args.strategy.trim();
+    if (!market || !strategy || !Number.isFinite(args.askingPrice) || args.askingPrice <= 0 ||
+        !Number.isFinite(args.currentTime)) return null;
+
+    const entries = await ctx.db.query("stagingMissedDeals")
+      .withIndex("by_market_strategy_expiration", q =>
+        q.eq("market", market).eq("strategy", strategy)
+          .gt("expiresAt", Math.max(args.currentTime, Date.now())),
+      )
+      .filter(q => q.and(
+        q.lte(q.field("minAskingPrice"), args.askingPrice),
+        q.gte(q.field("maxAskingPrice"), args.askingPrice),
+      ))
+      .take(200);
+
+    return [...new Set(entries.map(entry => entry.buyerId))].map(buyerId => ({ buyerId }));
+  },
+});
+
+export const createDistribution = internalMutation({
+  args: {
+    dealId: v.string(),
+    buyerId: v.string(),
+    status: v.literal("ping_sent"),
+    round: v.number(),
+    templateId: v.string(),
+    sentAt: v.number(),
+    nextFollowUp: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const dealId = ctx.db.normalizeId("stagingDeals", args.dealId);
+    if (!dealId || !(await ctx.db.get(dealId))) return { outcome: "missing_deal" as const };
+    const buyerId = args.buyerId.trim();
+    if (!buyerId || !args.templateId.trim() || !Number.isSafeInteger(args.round) ||
+        args.round < 1 || !Number.isFinite(args.sentAt) || args.sentAt <= 0 ||
+        !Number.isFinite(args.nextFollowUp) || args.nextFollowUp < args.sentAt) {
+      return { outcome: "invalid" as const };
+    }
+
+    const existing = await ctx.db.query("stagingDistributions")
+      .withIndex("by_deal_buyer_round", q =>
+        q.eq("dealId", dealId).eq("buyerId", buyerId).eq("round", args.round),
+      )
+      .unique();
+    if (existing) return { outcome: "stored" as const, id: existing._id };
+
+    const id = await ctx.db.insert("stagingDistributions", { ...args, dealId, buyerId });
+    return { outcome: "stored" as const, id };
+  },
+});

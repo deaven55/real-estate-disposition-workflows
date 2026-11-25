@@ -32,7 +32,10 @@
         "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getDeal",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ dealId: $json.body?.dealId ?? $json.dealId }) }}"
+        "jsonBody": "={{ JSON.stringify({ dealId: $json.body?.dealId ?? $json.dealId }) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "contentType": "json"
       }
     },
     {
@@ -96,7 +99,10 @@
         "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getMissedDealsByMarket",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ market: $('Fetch Deal from Convex').first().json.data.zip, strategy: $('Fetch Deal from Convex').first().json.data.bestStrategy, askingPrice: $('Fetch Deal from Convex').first().json.data.askingPrice, currentTime: Date.now() }) }}"
+        "jsonBody": "={{ JSON.stringify({ market: $('Fetch Deal from Convex').first().json.data.zip, strategy: $('Fetch Deal from Convex').first().json.data.bestStrategy, askingPrice: $('Fetch Deal from Convex').first().json.data.askingPrice, currentTime: Date.now() }) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "contentType": "json"
       }
     },
     {
@@ -270,7 +276,10 @@
         "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/createDistribution",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ dealId: $('Prepare Buyers Array').first().json.deal._id, buyerId: $('Prepare Buyers Array').first().json.buyer.convexBuyerId, status: 'ping_sent', round: $('Prepare Buyers Array').first().json.deal.currentRound || 1, templateId: $('Prepare Buyers Array').first().json.templateId, sentAt: Date.now(), nextFollowUp: Date.now() + (48 * 60 * 60 * 1000) }) }}"
+        "jsonBody": "={{ JSON.stringify({ dealId: $('Prepare Buyers Array').first().json.deal._id, buyerId: $('Prepare Buyers Array').first().json.buyer.convexBuyerId, status: 'ping_sent', round: $('Prepare Buyers Array').first().json.deal.currentRound || 1, templateId: $('Prepare Buyers Array').first().json.templateId, sentAt: Date.now(), nextFollowUp: Date.now() + (48 * 60 * 60 * 1000) }) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "contentType": "json"
       }
     },
     {
@@ -301,6 +310,55 @@
         "responseCode": 200,
         "responseBody": "={{ JSON.stringify({ success: true, distributed: $('Prepare Buyers Array').all().length, hot: $('Prepare Buyers Array').first().json.counts.hot, warm: $('Prepare Buyers Array').first().json.counts.warm, cold: $('Prepare Buyers Array').first().json.counts.cold, disqualified: $('Prepare Buyers Array').first().json.disqualified }) }}"
       }
+    },
+    {
+      "id": "ifDealStaged",
+      "name": "IF Deal Staged",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        580,
+        130
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "dealIsStaged",
+              "leftValue": "={{ $json.data.status }}",
+              "rightValue": "staged",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "respondStagingPreview",
+      "name": "Respond Staging Preview",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        100
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, mode: 'staging_preview', dealId: $json.data._id, distributed: 0 } }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
     }
   ],
   "connections": {
@@ -319,7 +377,7 @@
       "main": [
         [
           {
-            "node": "IF Deal Active",
+            "node": "IF Deal Staged",
             "type": "main",
             "index": 0
           }
@@ -455,6 +513,24 @@
         [
           {
             "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Deal Staged": {
+      "main": [
+        [
+          {
+            "node": "Respond Staging Preview",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Deal Active",
             "type": "main",
             "index": 0
           }

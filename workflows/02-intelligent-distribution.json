@@ -32,7 +32,7 @@
         "url": "https://YOUR_CONVEX_DEPLOYMENT.convex.site/getDeal",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ dealId: $json.dealId }) }}"
+        "jsonBody": "={{ JSON.stringify({ dealId: $json.body?.dealId ?? $json.dealId }) }}"
       }
     },
     {
